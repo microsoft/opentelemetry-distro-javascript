@@ -1,33 +1,70 @@
-# Project
+# @microsoft/opentelemetry
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
+[![npm version](https://img.shields.io/npm/v/@microsoft/opentelemetry)](https://www.npmjs.com/package/@microsoft/opentelemetry)
 
-As the maintainer of this project, please make a few updates:
+JavaScript/TypeScript package for a Microsoft OpenTelemetry distribution that provides a single onboarding experience for observability across Azure Monitor, OTLP-compatible backends, and Microsoft Agent 365 style integrations.
 
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
+## Goal
+
+The target package should reduce fragmented setup across multiple observability stacks to one import and one configuration function.
+
+Intended API shape:
+
+```typescript
+import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+
+useMicrosoftOpenTelemetry({
+  azureMonitorConnectionString: "InstrumentationKey=...;IngestionEndpoint=...",
+  enableOtlpExport: true,
+  enableGenAIOpenAIInstrumentation: true,
+});
+```
+
+## Planned Scope
+
+- Azure Monitor exporter support
+- OTLP exporter support
+- Microsoft-specific agent observability extensions
+- GenAI instrumentation toggles for OpenAI, OpenAI Agents, and LangChain
+- Standard Node.js web and HTTP instrumentations
+- Environment-variable driven configuration
+- A stable package surface for downstream agent applications
+
+## Current Repository Layout
+
+- `src/` package source
+- `tests/` test suite
+- `package.json` project metadata and dependencies
+- `PLANNING.md` implementation plan and open questions
+
+## Development
+
+Install dependencies and run the test suite:
+
+```bash
+npm install
+npm run build
+npm test
+```
+
+## Reference
+
+- Planning document: [PLANNING.md](./PLANNING.md)
 
 ## Contributing
 
-This project welcomes contributions and suggestions.  Most contributions require you to agree to a
-Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit [Contributor License Agreements](https://cla.opensource.microsoft.com).
+Read our [contributing guide](./CONTRIBUTING.md) to learn about our development process, how to propose bugfixes and improvements, and how to build and test your changes to this distribution.
 
-When you submit a pull request, a CLA bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
+## Data Collection
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+As this SDK is designed to enable applications to perform data collection which is sent to the Microsoft collection endpoints the following is required to identify our privacy statement.
+
+The software may collect information about you and your use of the software and send it to Microsoft. Microsoft may use this information to provide services and improve our products and services. You may turn off the telemetry as described in the repository. There are also some features in the software that may enable you and Microsoft to collect data from users of your applications. If you use these features, you must comply with applicable law, including providing appropriate notices to users of your applications together with a copy of Microsoft's privacy statement. Our privacy statement is located at https://go.microsoft.com/fwlink/?LinkID=824704. You can learn more about data collection and use in the help documentation and our privacy statement. Your use of the software operates as your consent to these practices.
 
 ## Trademarks
 
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
-trademarks or logos is subject to and must follow
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general). Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party's policies.
+
+## License
+
+[MIT](LICENSE)
