@@ -34,7 +34,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hectorhdzg/opentelemetry-distro-javascript"
+    "url": "https://github.com/microsoft/opentelemetry-distro-javascript"
   },
   "engines": {
     "node": ">=18"
