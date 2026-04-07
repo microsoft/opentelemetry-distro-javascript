@@ -10,7 +10,7 @@ import {
   CloudPlatformValues,
   SemanticResourceAttributes,
 } from "@opentelemetry/semantic-conventions";
-import type { AzureMonitorOpenTelemetryOptions } from "../../../../src/types.js";
+import type { MicrosoftOpenTelemetryOptions } from "../../../../src/types.js";
 import type { MockInstance } from "vitest";
 import { assert, expect, afterEach, describe, it, vi, beforeEach } from "vitest";
 import { azureVmDetector } from "@opentelemetry/resource-detector-azure";
@@ -101,12 +101,7 @@ describe("Library/Config", () => {
       };
       vi.stubEnv("APPLICATIONINSIGHTS_CONFIGURATION_CONTENT", JSON.stringify(jsonOptions));
 
-      const options: AzureMonitorOpenTelemetryOptions = {
-        azureMonitorExporterOptions: {
-          connectionString: "testConnStringOther",
-          storageDirectory: "teststorageDirectoryOther",
-          disableOfflineStorage: false,
-        },
+      const options: MicrosoftOpenTelemetryOptions = {
         samplingRatio: 0.5,
         tracesPerSecond: 4,
         instrumentationOptions: {
@@ -117,6 +112,13 @@ describe("Library/Config", () => {
           postgreSql: { enabled: false },
           redis: { enabled: false },
           redis4: { enabled: false },
+        },
+        azureMonitor: {
+          azureMonitorExporterOptions: {
+            connectionString: "testConnStringOther",
+            storageDirectory: "teststorageDirectoryOther",
+            disableOfflineStorage: false,
+          },
         },
       };
 
@@ -219,12 +221,14 @@ describe("Library/Config", () => {
       env["APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"] = JSON.stringify(jsonOptions);
       process.env = env;
 
-      const options: AzureMonitorOpenTelemetryOptions = {
-        azureMonitorExporterOptions: {
-          connectionString: "testConnectionString",
-        },
+      const options: MicrosoftOpenTelemetryOptions = {
         instrumentationOptions: {
           http: { enabled: false },
+        },
+        azureMonitor: {
+          azureMonitorExporterOptions: {
+            connectionString: "testConnectionString",
+          },
         },
       };
 

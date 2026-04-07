@@ -4,8 +4,9 @@
 import type { Context, TracerProvider } from "@opentelemetry/api";
 import { metrics, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
-import type { AzureMonitorOpenTelemetryOptions } from "../../../src/index.js";
-import { useAzureMonitor, shutdownAzureMonitor, _getSdkInstance } from "../../../src/index.js";
+import type { MicrosoftOpenTelemetryOptions } from "../../../src/index.js";
+import { useAzureMonitor, shutdownAzureMonitor } from "../../../src/index.js";
+import { _getSdkInstance } from "../../../src/distro/distro.js";
 import type { MeterProvider, ViewOptions } from "@opentelemetry/sdk-metrics";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
@@ -77,9 +78,11 @@ describe("Main functions", () => {
   });
 
   it("useAzureMonitor", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -92,9 +95,11 @@ describe("Main functions", () => {
     (globalThis as Record<symbol, unknown>)[GLOBAL_OPENTELEMETRY_API_KEY] = {
       version: "1.6.0",
     };
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -116,9 +121,11 @@ describe("Main functions", () => {
     (globalThis as Record<symbol, unknown>)[GLOBAL_OPENTELEMETRY_API_KEY] = {
       version: "2.99.0",
     };
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -133,9 +140,11 @@ describe("Main functions", () => {
   it("useAzureMonitor should work when no stale global exists", () => {
     // Regression: deleting a non-existent global key should not throw or break anything.
     delete (globalThis as Record<symbol, unknown>)[GLOBAL_OPENTELEMETRY_API_KEY];
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -150,9 +159,11 @@ describe("Main functions", () => {
   it("useAzureMonitor should work on repeated calls with stale globals", () => {
     // Simulate calling useAzureMonitor twice — both should succeed even if
     // a stale global is re-injected between calls (e.g. another extension reloads).
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
 
@@ -182,9 +193,11 @@ describe("Main functions", () => {
   });
 
   it("should shutdown azureMonitor - sync", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -194,9 +207,11 @@ describe("Main functions", () => {
   });
 
   it("should shutdown azureMonitor - async", async () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -220,11 +235,13 @@ describe("Main functions", () => {
         return Promise.resolve();
       },
     };
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
-      },
+    const config: MicrosoftOpenTelemetryOptions = {
       spanProcessors: [processor],
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
+      },
     };
     useAzureMonitor(config);
     // Verify the custom processor was added to the SDK configuration
@@ -251,11 +268,13 @@ describe("Main functions", () => {
       },
     };
     const spyonEmit = vi.spyOn(processor, "onEmit");
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
-      },
+    const config: MicrosoftOpenTelemetryOptions = {
       logRecordProcessors: [processor],
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
+      },
     };
     useAzureMonitor(config);
     logs.getLogger("testLogger").emit({ body: "testLog" });
@@ -264,11 +283,13 @@ describe("Main functions", () => {
 
   it("should add custom metric views", () => {
     const customView: ViewOptions = { meterName: "custom-meter" };
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
-      },
+    const config: MicrosoftOpenTelemetryOptions = {
       views: [customView],
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
+      },
     };
     useAzureMonitor(config);
      
@@ -278,12 +299,7 @@ describe("Main functions", () => {
   });
 
   it("should set statsbeat features", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
-        disableOfflineStorage: true,
-      },
-      enableLiveMetrics: true,
+    const config: MicrosoftOpenTelemetryOptions = {
       instrumentationOptions: {
         azureSdk: {
           enabled: true,
@@ -300,6 +316,13 @@ describe("Main functions", () => {
         redis: {
           enabled: true,
         },
+      },
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+          disableOfflineStorage: true,
+        },
+        enableLiveMetrics: true,
       },
     };
     useAzureMonitor(config);
@@ -329,9 +352,11 @@ describe("Main functions", () => {
 
   it("should set shim feature in statsbeat if env var is populated", () => {
     getInstance()["initializedByShim"] = true;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -345,9 +370,11 @@ describe("Main functions", () => {
     env.CLUSTER_RESOURCE_ID =
       "/subscriptions/xxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxx/resourceGroups/test-rg/providers/Microsoft.ContainerService/managedClusters/test-cluster";
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -360,9 +387,11 @@ describe("Main functions", () => {
   });
 
   it("should not set AKS_RESOURCE_DETECTOR_POPULATION feature when not running in AKS", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -382,9 +411,11 @@ describe("Main functions", () => {
     current |= StatsbeatFeature.LIVE_METRICS;
     env.AZURE_MONITOR_STATSBEAT_FEATURES = current.toString();
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -402,9 +433,11 @@ describe("Main functions", () => {
     const env = <{ [id: string]: string }>{};
     env.WEBSITE_SITE_NAME = "test-azure-app-service";
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -416,9 +449,11 @@ describe("Main functions", () => {
     const env = <{ [id: string]: string }>{};
     env.FUNCTIONS_WORKER_RUNTIME = "test-azure-functions";
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -430,9 +465,11 @@ describe("Main functions", () => {
     const env = <{ [id: string]: string }>{};
     env.AKS_ARM_NAMESPACE_ID = "test-AKS";
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -444,9 +481,11 @@ describe("Main functions", () => {
     const env = <{ [id: string]: string }>{};
     env.KUBERNETES_SERVICE_HOST = "test-AKS";
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -458,9 +497,11 @@ describe("Main functions", () => {
     const env = <{ [id: string]: string }>{};
     env.OTEL_NODE_RESOURCE_DETECTORS = "os";
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -483,9 +524,11 @@ describe("Main functions", () => {
     const env = <{ [id: string]: string }>{};
     env.OTEL_NODE_RESOURCE_DETECTORS = "blah,host";
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -504,9 +547,11 @@ describe("Main functions", () => {
   });
 
   it("should not use process resource detector if OTEL_NODE_RESOURCE_DETECTORS not specified", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -525,10 +570,7 @@ describe("Main functions", () => {
 
    
   it("should update statsbeat env var based on reading instrumentations array", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
-      },
+    const config: MicrosoftOpenTelemetryOptions = {
       instrumentationOptions: {
         azureSdk: { enabled: false },
         http: { enabled: false },
@@ -539,6 +581,11 @@ describe("Main functions", () => {
         redis4: { enabled: false },
         bunyan: { enabled: false },
         winston: { enabled: false },
+      },
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -565,9 +612,11 @@ describe("Main functions", () => {
     const env = <{ [id: string]: string }>{};
     env[AZURE_MONITOR_STATSBEAT_FEATURES] = String(StatsbeatFeature.MULTI_IKEY);
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -583,9 +632,11 @@ describe("Main functions", () => {
     const env = <{ [id: string]: string }>{};
     env[AZURE_MONITOR_STATSBEAT_FEATURES] = String(StatsbeatFeature.DISTRO);
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -604,9 +655,11 @@ describe("Main functions", () => {
     const env = <{ [id: string]: string }>{};
     env[APPLICATIONINSIGHTS_SDKSTATS_DISABLED] = "true";
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -626,9 +679,11 @@ describe("Main functions", () => {
     const env = <{ [id: string]: string }>{};
     env[APPLICATIONINSIGHTS_SDKSTATS_DISABLED] = "false";
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -648,9 +703,11 @@ describe("Main functions", () => {
     const env = <{ [id: string]: string }>{};
     delete env[APPLICATIONINSIGHTS_SDKSTATS_DISABLED];
     process.env = env;
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -676,11 +733,13 @@ describe("Main functions", () => {
       exportIntervalMillis: 60000,
     });
 
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
-      },
+    const config: MicrosoftOpenTelemetryOptions = {
       metricReaders: [otlpMetricReader],
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
+      },
     };
 
     // Initialize the SDK

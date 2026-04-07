@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { resourceFromAttributes, emptyResource } from "@opentelemetry/resources";
-import type { AzureMonitorOpenTelemetryOptions } from "../src";
+import type { MicrosoftOpenTelemetryOptions } from "../src";
 import { useAzureMonitor } from "../src";
 import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import type { Context, Exception, ObservableResult, Span } from "@opentelemetry/api";
@@ -33,10 +33,12 @@ describe("snippets", () => {
   });
 
   it("ReadmeSampleUseAzureMonitor", () => {
-    const options: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString:
-          process.env["APPLICATIONINSIGHTS_CONNECTION_STRING"] || "<your connection string>",
+    const options: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString:
+            process.env["APPLICATIONINSIGHTS_CONNECTION_STRING"] || "<your connection string>",
+        },
       },
     };
     useAzureMonitor(options);
@@ -44,16 +46,7 @@ describe("snippets", () => {
 
   it("ReadmeSampleConfiguration", () => {
     const resource = resourceFromAttributes({ testAttribute: "testValue" });
-    const options: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        // Offline storage
-        storageDirectory: "c://azureMonitor",
-        // Automatic retries
-        disableOfflineStorage: false,
-        // Application Insights Connection String
-        connectionString:
-          process.env["APPLICATIONINSIGHTS_CONNECTION_STRING"] || "<your connection string>",
-      },
+    const options: MicrosoftOpenTelemetryOptions = {
       samplingRatio: 1,
       instrumentationOptions: {
         // Instrumentations generating traces
@@ -69,16 +62,27 @@ describe("snippets", () => {
         bunyan: { enabled: true },
         winston: { enabled: true },
       },
-      enableLiveMetrics: true,
-      enableStandardMetrics: true,
-      browserSdkLoaderOptions: {
-        enabled: false,
-        connectionString: "",
-      },
       resource: resource,
       logRecordProcessors: [],
       spanProcessors: [],
       views: [],
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          // Offline storage
+          storageDirectory: "c://azureMonitor",
+          // Automatic retries
+          disableOfflineStorage: false,
+          // Application Insights Connection String
+          connectionString:
+            process.env["APPLICATIONINSIGHTS_CONNECTION_STRING"] || "<your connection string>",
+        },
+        enableLiveMetrics: true,
+        enableStandardMetrics: true,
+        browserSdkLoaderOptions: {
+          enabled: false,
+          connectionString: "",
+        },
+      },
     };
 
     useAzureMonitor(options);
@@ -108,7 +112,7 @@ describe("snippets", () => {
     customResource.attributes[SEMRESATTRS_SERVICE_NAMESPACE] = "my-namespace";
     customResource.attributes[SEMRESATTRS_SERVICE_INSTANCE_ID] = "my-instance";
     // @ts-preserve-whitespace
-    const options: AzureMonitorOpenTelemetryOptions = { resource: customResource };
+    const options: MicrosoftOpenTelemetryOptions = { resource: customResource };
     useAzureMonitor(options);
   });
 
@@ -130,7 +134,7 @@ describe("snippets", () => {
     }
     // @ts-preserve-whitespace
     // Enable Azure Monitor integration.
-    const options: AzureMonitorOpenTelemetryOptions = {
+    const options: MicrosoftOpenTelemetryOptions = {
       // Add the SpanEnrichingProcessor
       spanProcessors: [new SpanEnrichingProcessor()],
     };
@@ -173,7 +177,7 @@ describe("snippets", () => {
     }
     // @ts-preserve-whitespace
     // Enable Azure Monitor integration.
-    const options: AzureMonitorOpenTelemetryOptions = {
+    const options: MicrosoftOpenTelemetryOptions = {
       // Add the SpanEnrichingProcessor
       spanProcessors: [new SpanEnrichingProcessor()],
       logRecordProcessors: [new LogRecordEnrichingProcessor()],
@@ -201,7 +205,7 @@ describe("snippets", () => {
       },
     };
     // @ts-preserve-whitespace
-    const options: AzureMonitorOpenTelemetryOptions = {
+    const options: MicrosoftOpenTelemetryOptions = {
       instrumentationOptions: {
         http: httpInstrumentationConfig,
       },

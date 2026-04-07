@@ -6,11 +6,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import type {
-  BrowserSdkLoaderOptions,
   AzureMonitorOpenTelemetryOptions,
+  BrowserSdkLoaderOptions,
   InstrumentationOptions,
 } from "../types.js";
 import type { AzureMonitorExporterOptions } from "@azure/monitor-opentelemetry-exporter";
+import type { MicrosoftOpenTelemetryOptions } from "../distro/types.js";
 import { Logger } from "./logging/index.js";
 import { dirName } from "./module.js";
 
@@ -38,30 +39,25 @@ const ENV_CONFIGURATION_FILE = "APPLICATIONINSIGHTS_CONFIGURATION_FILE";
 const ENV_CONTENT = "APPLICATIONINSIGHTS_CONFIGURATION_CONTENT";
 
 /**
- * Azure Monitor OpenTelemetry Client Configuration through JSON File
+ * Azure Monitor OpenTelemetry Client Configuration through JSON File.
+ *
+ * Implements {@link MicrosoftOpenTelemetryOptions}.
+ * Azure Monitor-specific fields are grouped under `azureMonitor`.
+ * The JSON file format remains flat for backward compatibility; the constructor
+ * maps the flat structure to the nested shape.
  * @internal
  */
-export class JsonConfig implements AzureMonitorOpenTelemetryOptions {
+export class JsonConfig implements MicrosoftOpenTelemetryOptions {
   /** The rate of telemetry items tracked that should be transmitted (Default 1.0) */
   public samplingRatio?: number;
   /** The maximum number of spans to sample per second. */
   public tracesPerSecond?: number;
-  /** Azure Monitor Exporter Configuration */
-  public azureMonitorExporterOptions?: AzureMonitorExporterOptions;
   /**
    * OpenTelemetry Instrumentations configuration included as part of Azure Monitor (azureSdk, http, mongoDb, mySql, postgreSql, redis, redis4)
    */
   public instrumentationOptions?: InstrumentationOptions;
-  /** Enable Live Metrics feature */
-  public enableLiveMetrics?: boolean;
-  /** Enable Standard Metrics feature */
-  public enableStandardMetrics?: boolean;
-  /** Enable log sampling based on trace (Default true) */
-  public enableTraceBasedSamplingForLogs?: boolean;
-  /** Enable Performance Counter feature */
-  public enablePerformanceCounters?: boolean;
-
-  public browserSdkLoaderOptions?: BrowserSdkLoaderOptions;
+  /** Azure Monitor scoped options */
+  public azureMonitor?: AzureMonitorOpenTelemetryOptions;
 
   private static _instance: JsonConfig;
 
@@ -106,15 +102,19 @@ export class JsonConfig implements AzureMonitorOpenTelemetryOptions {
       }
     }
     try {
-      const jsonConfig: AzureMonitorOpenTelemetryOptions = JSON.parse(jsonString);
-      this.azureMonitorExporterOptions = jsonConfig.azureMonitorExporterOptions;
-      this.samplingRatio = jsonConfig.samplingRatio;
-      this.tracesPerSecond = jsonConfig.tracesPerSecond;
-      this.instrumentationOptions = jsonConfig.instrumentationOptions;
-      this.browserSdkLoaderOptions = jsonConfig.browserSdkLoaderOptions;
-      this.enableLiveMetrics = jsonConfig.enableLiveMetrics;
-      this.enableStandardMetrics = jsonConfig.enableStandardMetrics;
-      this.enableTraceBasedSamplingForLogs = jsonConfig.enableTraceBasedSamplingForLogs;
+      const jsonConfig = JSON.parse(jsonString) as Record<string, unknown>;
+      // Global options
+      this.samplingRatio = jsonConfig.samplingRatio as number | undefined;
+      this.tracesPerSecond = jsonConfig.tracesPerSecond as number | undefined;
+      this.instrumentationOptions = jsonConfig.instrumentationOptions as InstrumentationOptions | undefined;
+      // Azure Monitor-scoped options (flat JSON → nested structure)
+      this.azureMonitor = {
+        azureMonitorExporterOptions: jsonConfig.azureMonitorExporterOptions as AzureMonitorExporterOptions | undefined,
+        browserSdkLoaderOptions: jsonConfig.browserSdkLoaderOptions as BrowserSdkLoaderOptions | undefined,
+        enableLiveMetrics: jsonConfig.enableLiveMetrics as boolean | undefined,
+        enableStandardMetrics: jsonConfig.enableStandardMetrics as boolean | undefined,
+        enableTraceBasedSamplingForLogs: jsonConfig.enableTraceBasedSamplingForLogs as boolean | undefined,
+      };
     } catch (err) {
       Logger.getInstance().info("Missing or invalid JSON config file: ", err);
     }

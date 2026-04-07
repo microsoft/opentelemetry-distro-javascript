@@ -6,7 +6,7 @@
 import type http from "node:http";
 import { BrowserSdkLoader } from "../../../../src/browserSdkLoader/browserSdkLoader.js";
 import * as BrowserSdkLoaderHelper from "../../../../src/browserSdkLoader/browserSdkLoaderHelper.js";
-import type { AzureMonitorOpenTelemetryOptions } from "../../../../src/index.js";
+import type { MicrosoftOpenTelemetryOptions } from "../../../../src/index.js";
 import { shutdownAzureMonitor, useAzureMonitor } from "../../../../src/index.js";
 import { getOsPrefix } from "../../../../src/utils/common.js";
 import { metrics, trace } from "@opentelemetry/api";
@@ -34,13 +34,15 @@ describe("#BrowserSdkLoader", () => {
   });
 
   it("should initialize the browser sdk loader", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
-      },
-      browserSdkLoaderOptions: {
-        enabled: true,
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
+        browserSdkLoaderOptions: {
+          enabled: true,
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -48,13 +50,15 @@ describe("#BrowserSdkLoader", () => {
   });
 
   it("injection should be triggered only in HTML responses", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
-      },
-      browserSdkLoaderOptions: {
-        enabled: true,
-        connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
+        browserSdkLoaderOptions: {
+          enabled: true,
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
       },
     };
     useAzureMonitor(config);
@@ -89,13 +93,15 @@ describe("#BrowserSdkLoader", () => {
   });
 
   it("should load the browser SDK loader", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
-      },
-      browserSdkLoaderOptions: {
-        enabled: true,
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
+        browserSdkLoaderOptions: {
+          enabled: true,
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
       },
     };
     useAzureMonitor(config);
@@ -133,13 +139,15 @@ describe("#BrowserSdkLoader", () => {
   });
 
   it("injection of browser SDK should overwrite content length ", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
-      },
-      browserSdkLoaderOptions: {
-        enabled: true,
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
+        browserSdkLoaderOptions: {
+          enabled: true,
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
       },
     };
     useAzureMonitor(config);
@@ -167,13 +175,15 @@ describe("#BrowserSdkLoader", () => {
   });
 
   it("browser SDK loader be constructed using the proper verison prefix ", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
-      },
-      browserSdkLoaderOptions: {
-        enabled: true,
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
+        browserSdkLoaderOptions: {
+          enabled: true,
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
       },
     };
     useAzureMonitor(config);
@@ -211,13 +221,15 @@ describe("#BrowserSdkLoader", () => {
   });
 
   it("browser SDK loader injection to buffer", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
-      },
-      browserSdkLoaderOptions: {
-        enabled: true,
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
+        browserSdkLoaderOptions: {
+          enabled: true,
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
       },
     };
     useAzureMonitor(config);
@@ -255,13 +267,15 @@ describe("#BrowserSdkLoader", () => {
   });
 
   it("injection of browser SDK should overwrite content length using buffer ", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
-      },
-      browserSdkLoaderOptions: {
-        enabled: true,
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
+        browserSdkLoaderOptions: {
+          enabled: true,
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
       },
     };
     useAzureMonitor(config);
@@ -298,13 +312,15 @@ describe("#BrowserSdkLoader", () => {
   });
 
   it("injection should use correct connection string from config", () => {
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
-      },
-      browserSdkLoaderOptions: {
-        enabled: true,
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
+        browserSdkLoaderOptions: {
+          enabled: true,
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
       },
     };
     useAzureMonitor(config);
@@ -343,14 +359,16 @@ describe("#BrowserSdkLoader", () => {
 
   it("injection should throw errors when ikey from config is not valid", () => {
     const infoStub = vi.spyOn(Logger.prototype, "info");
-    const config: AzureMonitorOpenTelemetryOptions = {
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
-      },
-      browserSdkLoaderOptions: {
-        enabled: true,
-        connectionString:
-          "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3330ffafffw;IngestionEndpoint=https://centralus-0.in.applicationinsights.azure.com/",
+    const config: MicrosoftOpenTelemetryOptions = {
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        },
+        browserSdkLoaderOptions: {
+          enabled: true,
+          connectionString:
+            "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3330ffafffw;IngestionEndpoint=https://centralus-0.in.applicationinsights.azure.com/",
+        },
       },
     };
     useAzureMonitor(config);

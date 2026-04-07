@@ -307,8 +307,10 @@ describe("MetricHandler", () => {
       // Set the environment variable to an invalid value
       process.env.OTEL_METRIC_EXPORT_INTERVAL = "invalid";
       const freshConfig = new InternalConfig({
-        azureMonitorExporterOptions: {
-          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        azureMonitor: {
+          azureMonitorExporterOptions: {
+            connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+          },
         },
       });
 
@@ -331,8 +333,10 @@ describe("MetricHandler", () => {
       // Set the environment variable to a negative value
       process.env.OTEL_METRIC_EXPORT_INTERVAL = "-1000";
       const freshConfig = new InternalConfig({
-        azureMonitorExporterOptions: {
-          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        azureMonitor: {
+          azureMonitorExporterOptions: {
+            connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+          },
         },
       });
 
@@ -355,8 +359,10 @@ describe("MetricHandler", () => {
       // Set the environment variable to zero
       process.env.OTEL_METRIC_EXPORT_INTERVAL = "0";
       const freshConfig = new InternalConfig({
-        azureMonitorExporterOptions: {
-          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        azureMonitor: {
+          azureMonitorExporterOptions: {
+            connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+          },
         },
       });
 
@@ -379,8 +385,10 @@ describe("MetricHandler", () => {
       // Ensure the environment variable is not set
       delete process.env.OTEL_METRIC_EXPORT_INTERVAL;
       const freshConfig = new InternalConfig({
-        azureMonitorExporterOptions: {
-          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+        azureMonitor: {
+          azureMonitorExporterOptions: {
+            connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+          },
         },
       });
 

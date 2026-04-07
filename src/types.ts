@@ -2,43 +2,27 @@
 // Licensed under the MIT License.
 import type { AzureMonitorExporterOptions } from "@azure/monitor-opentelemetry-exporter";
 import type { InstrumentationConfig } from "@opentelemetry/instrumentation";
-import type { Resource } from "@opentelemetry/resources";
-import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
-import type { MetricReader, ViewOptions } from "@opentelemetry/sdk-metrics";
-import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 
 /**
- * Azure Monitor OpenTelemetry Options
+ * Azure Monitor scoped options.
+ *
+ * These options control Azure Monitor-specific behavior. Global options
+ * (resource, sampling, instrumentations, processors) are defined at the
+ * distro level in {@link MicrosoftOpenTelemetryOptions}.
  */
 export interface AzureMonitorOpenTelemetryOptions {
   /** Azure Monitor Exporter Configuration */
   azureMonitorExporterOptions?: AzureMonitorExporterOptions;
-  /** OpenTelemetry Resource */
-  resource?: Resource;
-  /** The rate of telemetry items tracked that should be transmitted (Default 1.0) */
-  samplingRatio?: number;
-  /** The maximum number of traces to sample per second (Default 5). Set to 0 to use samplingRatio instead. */
-  tracesPerSecond?: number;
-  /** Enable Live Metrics feature (Default false)*/
+  /** Enable Live Metrics feature (Default false) */
   enableLiveMetrics?: boolean;
-  /** Enable Standard Metrics feature (Default true)*/
+  /** Enable Standard Metrics feature (Default true) */
   enableStandardMetrics?: boolean;
   /** Enable log sampling based on trace (Default true) */
   enableTraceBasedSamplingForLogs?: boolean;
   /** Enable Performance Counter feature */
   enablePerformanceCounters?: boolean;
-  /** OpenTelemetry Instrumentations options included as part of Azure Monitor (azureSdk, azureFunctions, http, mongoDb, mySql, postgreSql, redis, redis4) */
-  instrumentationOptions?: InstrumentationOptions;
-  /** Application Insights Web Instrumentation options (enabled, connectionString, src, config)*/
+  /** Application Insights Web Instrumentation options (enabled, connectionString, src, config) */
   browserSdkLoaderOptions?: BrowserSdkLoaderOptions;
-  /** An array of log record processors to register to the logger provider.*/
-  logRecordProcessors?: LogRecordProcessor[];
-  /** An array of span processors to register to the tracer provider.*/
-  spanProcessors?: SpanProcessor[];
-  /** An array of metric readers to register to the meter provider.*/
-  metricReaders?: MetricReader[];
-  /** An array of metric views to register to the meter provider.*/
-  views?: ViewOptions[];
 }
 
 /**

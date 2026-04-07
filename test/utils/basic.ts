@@ -42,12 +42,14 @@ export class TraceBasicScenario implements Scenario {
       "k8s.pod.name": "testPodName",
     });
     useAzureMonitor({
-      azureMonitorExporterOptions: {
-        connectionString: `instrumentationkey=${COMMON_ENVELOPE_PARAMS.instrumentationKey}`,
-        httpClient,
-      },
       resource: resource,
       tracesPerSecond: 0,
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: `instrumentationkey=${COMMON_ENVELOPE_PARAMS.instrumentationKey}`,
+          httpClient,
+        },
+      },
     });
     this._tracerProvider = (
       opentelemetry.trace.getTracerProvider() as opentelemetry.ProxyTracerProvider
@@ -204,11 +206,13 @@ export class MetricBasicScenario implements Scenario {
       [SEMRESATTRS_SERVICE_INSTANCE_ID]: "my-instance",
     });
     useAzureMonitor({
-      azureMonitorExporterOptions: {
-        connectionString: `instrumentationkey=${COMMON_ENVELOPE_PARAMS.instrumentationKey}`,
-        httpClient,
-      },
       resource: testResource,
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: `instrumentationkey=${COMMON_ENVELOPE_PARAMS.instrumentationKey}`,
+          httpClient,
+        },
+      },
     });
   }
 
@@ -391,9 +395,11 @@ export class MetricBasicScenario implements Scenario {
 export class LogBasicScenario implements Scenario {
   prepare(httpClient?: HttpClient): void {
     useAzureMonitor({
-      azureMonitorExporterOptions: {
-        connectionString: `instrumentationkey=${COMMON_ENVELOPE_PARAMS.instrumentationKey}`,
-        httpClient,
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: `instrumentationkey=${COMMON_ENVELOPE_PARAMS.instrumentationKey}`,
+          httpClient,
+        },
       },
     });
   }

@@ -19,7 +19,7 @@ import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk
 import type { ReadableSpan, TimedEvent } from "@opentelemetry/sdk-trace-base";
 import { PerformanceCounterMetricNames } from "./types.js";
 import { hrTimeToMilliseconds } from "@opentelemetry/core";
-import type { AzureMonitorOpenTelemetryOptions } from "../types.js";
+import type { InternalConfig } from "../shared/config.js";
 import { getLogData, isExceptionData } from "./quickpulse/utils.js";
 import type { ExceptionData, TraceData } from "./quickpulse/types.js";
 import { Logger } from "../shared/logging/logger.js";
@@ -30,7 +30,7 @@ import process from "node:process";
  * Azure Monitor PerformanceCounter Metrics
  */
 export class PerformanceCounterMetrics {
-  private internalConfig: AzureMonitorOpenTelemetryOptions;
+  private internalConfig: InternalConfig;
   private collectionInterval = 60000; // 60 seconds
   private meterProvider: MeterProvider;
   private azureExporter: AzureMonitorMetricExporter;
@@ -73,7 +73,7 @@ export class PerformanceCounterMetrics {
    * @param options - Distro configuration.
    * @param config - Application Insights configuration.
    */
-  constructor(config: AzureMonitorOpenTelemetryOptions, options?: { collectionInterval: number }) {
+  constructor(config: InternalConfig, options?: { collectionInterval: number }) {
     this.internalConfig = config;
     this.lastCpus = os.cpus();
     this.lastCpusProcess = os.cpus();

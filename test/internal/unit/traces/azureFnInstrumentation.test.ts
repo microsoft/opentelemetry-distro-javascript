@@ -27,16 +27,22 @@ describe("Library/AzureFunctionsInstrumentation", () => {
 
   beforeEach(() => {
     useAzureMonitor({
-      azureMonitorExporterOptions: {
-        connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333;",
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333;",
+        },
       },
     });
   });
 
   it("AzureFunctionsInstrumentation is included by default", () => {
-    const config = new InternalConfig({});
-    config.azureMonitorExporterOptions.connectionString =
-      "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333;";
+    const config = new InternalConfig({
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333;",
+        },
+      },
+    });
     metricHandler = new MetricHandler(config);
     handler = new TraceHandler(config, metricHandler);
     const instrumentations = handler.getInstrumentations();

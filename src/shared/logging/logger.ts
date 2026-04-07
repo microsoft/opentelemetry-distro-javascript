@@ -23,9 +23,9 @@ export class Logger {
   }
 
   constructor() {
-    this.azureLogger = createClientLogger("@azure/monitor-opentelemetry");
+    this.azureLogger = createClientLogger("@microsoft/opentelemetry");
     this.openTelemetryLogger = diag.createComponentLogger({
-      namespace: "@azure/monitor-opentelemetry",
+      namespace: "@microsoft/opentelemetry",
     });
     this.logToOpenTelemetry = true;
     this.logToAzureLogger = false;
