@@ -19,9 +19,6 @@ useMicrosoftOpenTelemetry({
       connectionString: "InstrumentationKey=...;IngestionEndpoint=...",
     },
   },
-  otlp: {
-    endpoint: "http://localhost:4317",
-  },
 });
 ```
 
@@ -34,6 +31,40 @@ useMicrosoftOpenTelemetry({
 - Standard Node.js web and HTTP instrumentations
 - Environment-variable driven configuration
 - A stable package surface for downstream agent applications
+
+## OTLP Export
+
+OTLP HTTP export is automatically enabled when the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable is set. No code changes are needed — the distro will export traces, metrics, and logs to the specified endpoint.
+
+When OTLP is enabled alongside Azure Monitor, telemetry is sent to both backends simultaneously.
+
+### Supported environment variables
+
+The following standard OpenTelemetry environment variables are supported. General variables apply to all signals; signal-specific variables override the general ones.
+
+| Variable | Description |
+|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Base endpoint for all signals (e.g. `http://localhost:4318`). Signal paths `/v1/traces`, `/v1/metrics`, `/v1/logs` are appended automatically. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Comma-separated `key=value` pairs sent as HTTP headers. |
+| `OTEL_EXPORTER_OTLP_COMPRESSION` | Compression algorithm: `gzip` or `none`. |
+| `OTEL_EXPORTER_OTLP_TIMEOUT` | Export timeout in milliseconds (default: `10000`). |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | Transport protocol: `http/protobuf` (default) or `http/json`. |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Full endpoint URL for traces. Overrides the base endpoint. |
+| `OTEL_EXPORTER_OTLP_TRACES_HEADERS` | Additional headers for trace exports. |
+| `OTEL_EXPORTER_OTLP_TRACES_COMPRESSION` | Compression for trace exports. |
+| `OTEL_EXPORTER_OTLP_TRACES_TIMEOUT` | Timeout for trace exports. |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | Full endpoint URL for metrics. |
+| `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | Additional headers for metric exports. |
+| `OTEL_EXPORTER_OTLP_METRICS_COMPRESSION` | Compression for metric exports. |
+| `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` | Timeout for metric exports. |
+| `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` | Aggregation temporality: `cumulative`, `delta`, or `lowmemory`. |
+| `OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION` | `explicit_bucket_histogram` or `base2_exponential_bucket_histogram`. |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | Full endpoint URL for logs. |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | Additional headers for log exports. |
+| `OTEL_EXPORTER_OTLP_LOGS_COMPRESSION` | Compression for log exports. |
+| `OTEL_EXPORTER_OTLP_LOGS_TIMEOUT` | Timeout for log exports. |
+
+For the full specification, see the [OpenTelemetry OTLP Exporter Configuration documentation](https://opentelemetry.io/docs/specs/otel/protocol/exporter/).
 
 ## Current Repository Layout
 

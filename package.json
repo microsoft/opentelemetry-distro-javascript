@@ -77,6 +77,9 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.208.0",
     "@opentelemetry/core": "^2.2.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.204.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.204.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.204.0",
     "@opentelemetry/instrumentation": "^0.208.0",
     "@opentelemetry/instrumentation-bunyan": "^0.54.0",
     "@opentelemetry/instrumentation-http": "^0.208.0",
@@ -98,8 +101,6 @@
   },
   "devDependencies": {
     "@azure/functions": "^4.9.0",
-    "@opentelemetry/exporter-metrics-otlp-http": "^0.204.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.204.0",
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",

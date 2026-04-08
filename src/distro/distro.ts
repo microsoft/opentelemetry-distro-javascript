@@ -17,6 +17,7 @@ import { AZURE_MONITOR_OPENTELEMETRY_VERSION } from "../types.js";
 import { patchOpenTelemetryInstrumentationEnable } from "../utils/opentelemetryInstrumentationPatcher.js";
 import { parseResourceDetectorsFromEnvVar } from "../utils/common.js";
 import { setupAzureMonitorComponents } from "../azureMonitorSetup.js";
+import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import type { MicrosoftOpenTelemetryOptions } from "./types.js";
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "./types.js";
 
@@ -32,7 +33,7 @@ let disposeAzureMonitor: (() => void) | undefined;
  * This is the primary entry point for the distro. It sets up OpenTelemetry
  * providers and instrumentations, then attaches the configured exporters:
  * - Azure Monitor (when `options.azureMonitor` is provided)
- * - OTLP (future)
+ * - OTLP HTTP (when `options.otlp` is provided or `OTEL_EXPORTER_OTLP_ENDPOINT` is set)
  * - A365 (future)
  *
  * @param options - Microsoft OpenTelemetry configuration options
@@ -81,6 +82,20 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     metricHandler.getMetricReader(),
     ...(options?.metricReaders || []),
   ];
+
+  // ── OTLP HTTP exporters (enabled via OTEL_EXPORTER_OTLP_ENDPOINT) ─
+  if (isOtlpEnabled()) {
+    const otlp = createOtlpComponents();
+    if (otlp.spanProcessor) {
+      spanProcessors.push(otlp.spanProcessor);
+    }
+    if (otlp.metricReader) {
+      metricReaders.push(otlp.metricReader);
+    }
+    if (otlp.logRecordProcessor) {
+      logRecordProcessors.push(otlp.logRecordProcessor);
+    }
+  }
 
   const views: ViewOptions[] = metricHandler.getViews().concat(customViews);
 
