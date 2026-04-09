@@ -8,3 +8,7 @@ export type {
   A365BaggageOptions,
   A365HostingOptions,
 } from "./configuration/index.js";
+
+export { Agent365Exporter } from "./exporter/index.js";
+export type { Agent365ExporterOptions, TokenResolver } from "./exporter/index.js";
+export { ResolvedExporterOptions } from "./exporter/index.js";
