@@ -44,10 +44,10 @@ That's it — traces, metrics, and logs are collected automatically with built-i
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `azureMonitorExporterOptions` | `AzureMonitorExporterOptions` | — | Exporter config including `connectionString`, `storageDirectory`, `disableOfflineStorage` |
-| `enableLiveMetrics` | `boolean` | `false` | Enable Live Metrics streaming |
+| `enableLiveMetrics` | `boolean` | `true` | Enable Live Metrics streaming |
 | `enableStandardMetrics` | `boolean` | `true` | Enable standard metrics collection |
-| `enableTraceBasedSamplingForLogs` | `boolean` | `true` | Enable log sampling based on trace |
-| `enablePerformanceCounters` | `boolean` | — | Enable performance counter collection |
+| `enableTraceBasedSamplingForLogs` | `boolean` | `false` | Enable log sampling based on trace |
+| `enablePerformanceCounters` | `boolean` | `true` | Enable performance counter collection |
 | `browserSdkLoaderOptions` | `BrowserSdkLoaderOptions` | — | Application Insights browser SDK loader config |
 
 ### OTLP via environment variables
