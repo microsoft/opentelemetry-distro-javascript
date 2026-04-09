@@ -5,19 +5,22 @@
  * @summary Demonstrates how to generate custom metrics that will be sent to Azure Monitor.
  */
 
-import { useAzureMonitor, shutdownAzureMonitor } from "@azure/monitor-opentelemetry";
+import {
+  useMicrosoftOpenTelemetry,
+  shutdownMicrosoftOpenTelemetry,
+} from "@microsoft/opentelemetry";
 import { metrics } from "@opentelemetry/api";
 import "dotenv/config";
 
 async function main(): Promise<void> {
-  const options = {
-    azureMonitorExporterOptions: {
-      connectionString:
-        process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || "<your connection string>",
+  useMicrosoftOpenTelemetry({
+    azureMonitor: {
+      azureMonitorExporterOptions: {
+        connectionString:
+          process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || "<your connection string>",
+      },
     },
-  };
-
-  useAzureMonitor(options);
+  });
 
   const meter = metrics.getMeter("testMeter");
   const customCounter = meter.createCounter("TestCounter");
@@ -27,7 +30,7 @@ async function main(): Promise<void> {
 
   console.log("Custom metrics sent to Azure Monitor");
 
-  await shutdownAzureMonitor();
+  await shutdownMicrosoftOpenTelemetry();
 }
 
 main().catch(console.error);
