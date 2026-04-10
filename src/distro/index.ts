@@ -5,6 +5,7 @@ export type {
   MicrosoftOpenTelemetryOptions,
   InstrumentationOptions,
   BrowserSdkLoaderOptions,
+  A365Options,
 } from "./types.js";
 export { MICROSOFT_OPENTELEMETRY_VERSION } from "./types.js";
 

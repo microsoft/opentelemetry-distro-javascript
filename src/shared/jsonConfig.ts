@@ -8,6 +8,7 @@ import type {
   BrowserSdkLoaderOptions,
   InstrumentationOptions,
 } from "../types.js";
+import type { A365Options } from "../_a365/index.js";
 import type { AzureMonitorExporterOptions } from "@azure/monitor-opentelemetry-exporter";
 import type { MicrosoftOpenTelemetryOptions } from "../distro/types.js";
 import { Logger } from "./logging/index.js";
@@ -56,6 +57,8 @@ export class JsonConfig implements MicrosoftOpenTelemetryOptions {
   public instrumentationOptions?: InstrumentationOptions;
   /** Azure Monitor scoped options */
   public azureMonitor?: AzureMonitorOpenTelemetryOptions;
+  /** A365 scoped options */
+  public a365?: A365Options;
 
   private static _instance: JsonConfig;
 
@@ -121,6 +124,10 @@ export class JsonConfig implements MicrosoftOpenTelemetryOptions {
           | boolean
           | undefined,
       };
+      // A365-scoped options
+      if (jsonConfig.a365 && typeof jsonConfig.a365 === "object") {
+        this.a365 = jsonConfig.a365 as A365Options;
+      }
     } catch (err) {
       Logger.getInstance().info("Missing or invalid JSON config file: ", err);
     }

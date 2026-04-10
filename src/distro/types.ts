@@ -10,8 +10,9 @@ import type {
   InstrumentationOptions,
   BrowserSdkLoaderOptions,
 } from "../types.js";
+import type { A365Options } from "../_a365/index.js";
 
-export type { InstrumentationOptions, BrowserSdkLoaderOptions };
+export type { InstrumentationOptions, BrowserSdkLoaderOptions, A365Options };
 
 /**
  * Microsoft OpenTelemetry distribution version.
@@ -49,4 +50,7 @@ export interface MicrosoftOpenTelemetryOptions {
 
   /** Azure Monitor configuration. When provided, Azure Monitor export is enabled. */
   azureMonitor?: AzureMonitorOpenTelemetryOptions;
+
+  /** A365 observability configuration. When provided with `enabled: true`, A365 export is enabled. */
+  a365?: A365Options;
 }
