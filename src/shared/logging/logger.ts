@@ -87,7 +87,6 @@ export class Logger {
     };
   }
 
-   
   public error(message?: any, ...args: any[]): void {
     if (this.logToAzureLogger) {
       this.azureLogger.error(message, args);
@@ -97,7 +96,6 @@ export class Logger {
     }
   }
 
-   
   public warn(message?: any, ...args: any[]): void {
     if (this.logToAzureLogger) {
       this.azureLogger.warning(message, args);
@@ -107,7 +105,6 @@ export class Logger {
     }
   }
 
-   
   public info(message?: any, ...args: any[]): void {
     if (this.logToAzureLogger) {
       this.azureLogger.info(message, args);
@@ -117,7 +114,6 @@ export class Logger {
     }
   }
 
-   
   public debug(message?: any, ...args: any[]): void {
     if (this.logToAzureLogger) {
       this.azureLogger.verbose(message, args);
@@ -127,7 +123,6 @@ export class Logger {
     }
   }
 
-   
   public verbose(message?: any, ...args: any[]): void {
     if (this.logToAzureLogger) {
       this.azureLogger.verbose(message, args);

@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
- 
-
 import { trace, context, isValidTraceId, isValidSpanId } from "@opentelemetry/api";
 import type { LogRecord as APILogRecord } from "@opentelemetry/api-logs";
 import { SeverityNumber, logs } from "@opentelemetry/api-logs";

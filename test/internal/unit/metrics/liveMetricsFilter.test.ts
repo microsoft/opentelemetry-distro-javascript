@@ -6,7 +6,6 @@ import type {
   FilterConjunctionGroupInfo,
   FilterInfo,
   RemoteDependency,
-   
   Request,
   Exception,
   Trace,

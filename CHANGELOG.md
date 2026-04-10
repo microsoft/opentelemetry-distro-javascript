@@ -8,10 +8,7 @@
 - Modular setup architecture with extension points for OTLP and A365.
 - Migrated `@azure/monitor-opentelemetry` distro code in-repo for direct iteration.
 - Microsoft OpenTelemetry distro rebranding and configuration support.
-
-### Breaking Changes
-
-### Bugs Fixed
+- Add langchain isntrumentation.([#10](https://github.com/microsoft/opentelemetry-distro-javascript/pull/10))
 
 ### Other Changes
 - Initial project scaffolding with TypeScript, ESLint, and Vitest.

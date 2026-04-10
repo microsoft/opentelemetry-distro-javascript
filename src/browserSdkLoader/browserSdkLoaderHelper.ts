@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
- 
-
 import * as zlib from "zlib";
 import { promisify } from "node:util";
 import type http from "node:http";
@@ -50,7 +48,6 @@ export const getBrotliCompressAsync = (zlibObject: any): Function | null => {
 export const getBrotliCompressSync = (zlibObject: any): Function | null => {
   const isMajorVer = isBrotliSupported();
   if (isMajorVer && typeof zlibObject.brotliCompressSync === "function") {
-     
     return zlibObject.brotliCompressSync;
   }
   return null;
@@ -69,7 +66,6 @@ export const getBrotliDecompressAsync = (zlibObject: any): Function | null => {
 export const getBrotliDecompressSync = (zlibObject: any): Function | null => {
   const isMajorVer = isBrotliSupported();
   if (isMajorVer && typeof zlibObject.brotliDecompressSync === "function") {
-     
     return zlibObject.brotliDecompressSync;
   }
   return null;

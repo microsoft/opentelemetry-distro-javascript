@@ -292,7 +292,7 @@ describe("Main functions", () => {
       },
     };
     useAzureMonitor(config);
-     
+
     const meterConfig = (_getSdkInstance() as any)?._meterProviderConfig;
     expect(meterConfig).toBeDefined();
     expect(meterConfig?.views).toContain(customView);
@@ -568,7 +568,6 @@ describe("Main functions", () => {
     });
   });
 
-   
   it("should update statsbeat env var based on reading instrumentations array", () => {
     const config: MicrosoftOpenTelemetryOptions = {
       instrumentationOptions: {
@@ -760,7 +759,7 @@ describe("Main functions", () => {
 
     if (sharedState && sharedState.metricCollectors) {
       // Extract metric readers from metricCollectors
-       
+
       metricReaders = sharedState.metricCollectors.map((collector: any) => collector._metricReader);
       foundProperty = "_sharedState.metricCollectors[].._metricReader";
     }
@@ -793,7 +792,6 @@ describe("Main functions", () => {
           // Verify the OTLP exporter has the correct URL configuration
           const delegate = exporter["_delegate"];
           if (delegate) {
-             
             const transportParams = delegate._transport._transport._parameters;
             assert.strictEqual(
               transportParams.url,
