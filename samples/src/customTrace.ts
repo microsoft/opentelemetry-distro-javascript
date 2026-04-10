@@ -5,11 +5,14 @@
  * @summary Demonstrates how to generate custom traces that will be sent to Azure Monitor.
  */
 
-const { useAzureMonitor, shutdownAzureMonitor } = require("@azure/monitor-opentelemetry");
-const { context, trace } = require("@opentelemetry/api");
-require("dotenv/config");
+import {
+  useMicrosoftOpenTelemetry,
+  shutdownMicrosoftOpenTelemetry,
+} from "@microsoft/opentelemetry";
+import { context, trace, type Span } from "@opentelemetry/api";
+import "dotenv/config";
 
-function doWork(parent) {
+function doWork(parent: Span): void {
   const ctx = trace.setSpan(context.active(), parent);
   const span = trace.getTracer("testTracer").startSpan("doWork", undefined, ctx);
 
@@ -21,15 +24,15 @@ function doWork(parent) {
   }
 }
 
-async function main() {
-  const options = {
-    azureMonitorExporterOptions: {
-      connectionString:
-        process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || "<your connection string>",
+async function main(): Promise<void> {
+  useMicrosoftOpenTelemetry({
+    azureMonitor: {
+      azureMonitorExporterOptions: {
+        connectionString:
+          process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || "<your connection string>",
+      },
     },
-  };
-
-  useAzureMonitor(options);
+  });
 
   const tracer = trace.getTracer("testTracer");
   const parentSpan = tracer.startSpan("main");
@@ -44,7 +47,7 @@ async function main() {
 
   console.log("Custom traces sent to Azure Monitor");
 
-  await shutdownAzureMonitor();
+  await shutdownMicrosoftOpenTelemetry();
 }
 
 main().catch(console.error);

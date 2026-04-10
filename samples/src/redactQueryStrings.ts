@@ -5,26 +5,26 @@
  * @summary Demonstrates how to redact URL query strings from telemetry to protect sensitive information.
  */
 
-const { useAzureMonitor } = require("@azure/monitor-opentelemetry");
-require("dotenv/config");
+import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+import "dotenv/config";
 
 /**
  * Custom span processor that removes query strings from HTTP span attributes.
  */
 class RedactQueryStringProcessor {
-  forceFlush() {
+  forceFlush(): Promise<void> {
     return Promise.resolve();
   }
 
-  onStart() {
+  onStart(): void {
     // No action needed on span start
   }
 
-  shutdown() {
+  shutdown(): Promise<void> {
     return Promise.resolve();
   }
 
-  onEnd(span) {
+  onEnd(span: { attributes: Record<string, unknown> }): void {
     const httpAttributes = ["http.route", "http.url", "http.target"];
 
     for (const attr of httpAttributes) {
@@ -39,18 +39,18 @@ class RedactQueryStringProcessor {
   }
 }
 
-async function main() {
-  const options = {
-    azureMonitorExporterOptions: {
-      connectionString:
-        process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || "<your connection string>",
+async function main(): Promise<void> {
+  useMicrosoftOpenTelemetry({
+    azureMonitor: {
+      azureMonitorExporterOptions: {
+        connectionString:
+          process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || "<your connection string>",
+      },
     },
     spanProcessors: [new RedactQueryStringProcessor()],
-  };
+  });
 
-  useAzureMonitor(options);
-
-  console.log("Azure Monitor configured with query string redaction:");
+  console.log("Microsoft OpenTelemetry configured with query string redaction:");
   console.log("  Query strings will be removed from HTTP telemetry attributes");
   console.log("  Protects sensitive information (SAS tokens, API keys, etc.)");
 }
