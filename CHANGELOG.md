@@ -3,6 +3,7 @@
 ## [0.1.0] - Unreleased
 
 ### Features Added
+- Add langchain isntrumentation.([#10](https://github.com/microsoft/opentelemetry-distro-javascript/pull/10))
 
 ### Breaking Changes
 
