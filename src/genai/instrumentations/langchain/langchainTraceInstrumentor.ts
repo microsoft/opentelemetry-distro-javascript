@@ -9,7 +9,7 @@ import {
   InstrumentationBase,
   InstrumentationConfig,
   InstrumentationModuleDefinition,
-  isWrapped
+  isWrapped,
 } from "@opentelemetry/instrumentation";
 import { LangChainTracer } from "./tracer.js";
 
@@ -28,20 +28,19 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
     }
 
     super("microsoft-otel-langchain-instrumentor", "1.0.0", {
-      enabled: true
+      enabled: true,
     });
 
-    this.otelTracer = trace.getTracer(
-      "microsoft-otel-langchain",
-      "1.0.0"
-    );
+    this.otelTracer = trace.getTracer("microsoft-otel-langchain", "1.0.0");
     this.isContentRecordingEnabled = options?.isContentRecordingEnabled ?? false;
 
     LangChainTraceInstrumentorImpl._instance = this;
     diag.info("[LangChainTraceInstrumentor] Initialized and automatically enabled");
   }
 
-  static getInstance(options?: { isContentRecordingEnabled?: boolean }): LangChainTraceInstrumentorImpl {
+  static getInstance(options?: {
+    isContentRecordingEnabled?: boolean;
+  }): LangChainTraceInstrumentorImpl {
     if (!LangChainTraceInstrumentorImpl._instance) {
       LangChainTraceInstrumentorImpl._instance = new LangChainTraceInstrumentorImpl(options);
     }
@@ -65,12 +64,13 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
       supportedVersions: [">=0.2.0"],
       files: [],
       patch: this.patch.bind(this),
-      unpatch: this.unpatch.bind(this)
+      unpatch: this.unpatch.bind(this),
     };
   }
 
   private unpatch(moduleExports: Record<string, unknown>): void {
-    const CallbackManager = moduleExports?.CallbackManager as typeof CallbackManagerModule.CallbackManager;
+    const CallbackManager =
+      moduleExports?.CallbackManager as typeof CallbackManagerModule.CallbackManager;
     if (!CallbackManager || !isWrapped(CallbackManager._configureSync)) {
       return;
     }
@@ -95,9 +95,11 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
     this._wrap(CallbackManager, "_configureSync", (original) => {
       return function (
         this: CallbackManagerModuleType,
-        ...args: Parameters<typeof CallbackManager["_configureSync"]>
+        ...args: Parameters<(typeof CallbackManager)["_configureSync"]>
       ) {
-        args[0] = addTracerToHandlers(instrumentor.otelTracer, args[0], { isContentRecordingEnabled: instrumentor.isContentRecordingEnabled });
+        args[0] = addTracerToHandlers(instrumentor.otelTracer, args[0], {
+          isContentRecordingEnabled: instrumentor.isContentRecordingEnabled,
+        });
         diag.debug("[LangChainTraceInstrumentor] _configureSync wrapped to add LangChainTracer");
         return original.apply(this, args);
       };
@@ -139,8 +141,8 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
 export class LangChainTraceInstrumentor {
   private static throwNotInitialized(): never {
     throw new Error(
-      "LangChainTraceInstrumentor must be initialized first. "
-      + "Call LangChainTraceInstrumentor.instrument() before using enable/disable."
+      "LangChainTraceInstrumentor must be initialized first. " +
+        "Call LangChainTraceInstrumentor.instrument() before using enable/disable.",
     );
   }
 
@@ -149,7 +151,10 @@ export class LangChainTraceInstrumentor {
    * @param module The CallbackManager module to instrument
    * @param options Optional configuration options
    */
-  static instrument(module: CallbackManagerModuleType, options?: { isContentRecordingEnabled?: boolean }): void {
+  static instrument(
+    module: CallbackManagerModuleType,
+    options?: { isContentRecordingEnabled?: boolean },
+  ): void {
     LangChainTraceInstrumentorImpl.getInstance(options).manuallyInstrumentImpl(module);
   }
 
@@ -184,7 +189,7 @@ export class LangChainTraceInstrumentor {
 export function addTracerToHandlers(
   tracer: Tracer,
   handlers: CallbackManagerModule.Callbacks | undefined,
-  options?: { isContentRecordingEnabled?: boolean }
+  options?: { isContentRecordingEnabled?: boolean },
 ): CallbackManagerModule.Callbacks {
   if (handlers == null) {
     return [new LangChainTracer(tracer, options)];

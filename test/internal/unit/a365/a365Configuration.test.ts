@@ -250,7 +250,10 @@ describe("A365Configuration", () => {
   describe("env var constants", () => {
     it("should have correct env var names", () => {
       assert.strictEqual(A365_ENV_VARS.EXPORTER_ENABLED, "MICROSOFT_OTEL_A365_EXPORTER_ENABLED");
-      assert.strictEqual(A365_ENV_VARS.PER_REQUEST_EXPORT, "MICROSOFT_OTEL_A365_PER_REQUEST_EXPORT");
+      assert.strictEqual(
+        A365_ENV_VARS.PER_REQUEST_EXPORT,
+        "MICROSOFT_OTEL_A365_PER_REQUEST_EXPORT",
+      );
       assert.strictEqual(A365_ENV_VARS.AUTH_SCOPES, "MICROSOFT_OTEL_A365_AUTH_SCOPES");
       assert.strictEqual(A365_ENV_VARS.DOMAIN, "MICROSOFT_OTEL_A365_DOMAIN");
       assert.strictEqual(A365_ENV_VARS.CLUSTER_CATEGORY, "MICROSOFT_OTEL_A365_CLUSTER_CATEGORY");

@@ -8,10 +8,7 @@ import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import type { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import type { MeterProvider } from "@opentelemetry/sdk-metrics";
 import type { LoggerProvider } from "@opentelemetry/sdk-logs";
-import {
-  useMicrosoftOpenTelemetry,
-  shutdownMicrosoftOpenTelemetry,
-} from "../../../src/index.js";
+import { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } from "../../../src/index.js";
 import type { HttpClient, PipelineRequest } from "@azure/core-rest-pipeline";
 import { describe, it, beforeEach, afterEach, expect, vi } from "vitest";
 

@@ -10,10 +10,7 @@
  */
 
 import { afterEach, assert, describe, it } from "vitest";
-import {
-  SpanKind,
-  SpanStatusCode,
-} from "@opentelemetry/api";
+import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
@@ -197,15 +194,23 @@ describe("LangChain Instrumentation Functional Tests", () => {
       // End in reverse order (children end before parent)
       await (langchainTracer as unknown as { _endTrace(r: Run): Promise<void> })._endTrace(llmRun);
       await (langchainTracer as unknown as { _endTrace(r: Run): Promise<void> })._endTrace(toolRun);
-      await (langchainTracer as unknown as { _endTrace(r: Run): Promise<void> })._endTrace(agentRun);
+      await (langchainTracer as unknown as { _endTrace(r: Run): Promise<void> })._endTrace(
+        agentRun,
+      );
 
       const spans = exporter.getFinishedSpans();
       assert.strictEqual(spans.length, 3, `expected 3 spans, got ${spans.length}`);
 
       // Find spans by operation
-      const agentSpan = spans.find((s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_INVOKE_AGENT);
-      const toolSpan = spans.find((s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_EXECUTE_TOOL);
-      const llmSpan = spans.find((s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_CHAT);
+      const agentSpan = spans.find(
+        (s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_INVOKE_AGENT,
+      );
+      const toolSpan = spans.find(
+        (s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_EXECUTE_TOOL,
+      );
+      const llmSpan = spans.find(
+        (s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_CHAT,
+      );
 
       assert.ok(agentSpan, "agent span should exist");
       assert.ok(toolSpan, "tool span should exist");
@@ -230,12 +235,12 @@ describe("LangChain Instrumentation Functional Tests", () => {
       assert.strictEqual(
         toolSpan!.parentSpanContext?.spanId,
         agentSpan!.spanContext().spanId,
-        "tool span should be child of agent span"
+        "tool span should be child of agent span",
       );
       assert.strictEqual(
         llmSpan!.parentSpanContext?.spanId,
         agentSpan!.spanContext().spanId,
-        "llm span should be child of agent span"
+        "llm span should be child of agent span",
       );
     });
   });
@@ -263,8 +268,16 @@ describe("LangChain Instrumentation Functional Tests", () => {
       assert.strictEqual(spans.length, 1);
 
       const span = spans[0];
-      assert.strictEqual(span.attributes[ATTR_GEN_AI_INPUT_MESSAGES], undefined, "should not record input messages");
-      assert.strictEqual(span.attributes[ATTR_GEN_AI_OUTPUT_MESSAGES], undefined, "should not record output messages");
+      assert.strictEqual(
+        span.attributes[ATTR_GEN_AI_INPUT_MESSAGES],
+        undefined,
+        "should not record input messages",
+      );
+      assert.strictEqual(
+        span.attributes[ATTR_GEN_AI_OUTPUT_MESSAGES],
+        undefined,
+        "should not record output messages",
+      );
     });
 
     it("records message content when enabled", async () => {

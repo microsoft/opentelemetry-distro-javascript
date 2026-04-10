@@ -74,8 +74,14 @@ export class LangChainTracer extends BaseTracer {
     const operation = Utils.getOperationType(run);
 
     // Skip internal runs (LangSmith hidden, Branch nodes, unknown operations)
-    if (run.tags?.includes("langsmith:hidden") || run.name?.startsWith("Branch") || operation === "unknown") {
-      diag.debug(`[LangChainTracer] Skipping internal run: ${run.name} (parent: ${run.parent_run_id})`);
+    if (
+      run.tags?.includes("langsmith:hidden") ||
+      run.name?.startsWith("Branch") ||
+      operation === "unknown"
+    ) {
+      diag.debug(
+        `[LangChainTracer] Skipping internal run: ${run.name} (parent: ${run.parent_run_id})`,
+      );
       return;
     }
 
@@ -102,11 +108,15 @@ export class LangChainTracer extends BaseTracer {
     }
 
     const startTime = run.start_time ?? Date.now();
-    const span = this.tracer.startSpan(spanName, {
-      kind: SpanKind.INTERNAL,
-      startTime,
-      attributes: { [ATTR_GEN_AI_PROVIDER_NAME]: "langchain" },
-    }, activeContext);
+    const span = this.tracer.startSpan(
+      spanName,
+      {
+        kind: SpanKind.INTERNAL,
+        startTime,
+        attributes: { [ATTR_GEN_AI_PROVIDER_NAME]: "langchain" },
+      },
+      activeContext,
+    );
 
     this.runs.set(run.id, { run, span, startTime, lastAccessTime: startTime });
   }
@@ -129,8 +139,14 @@ export class LangChainTracer extends BaseTracer {
     }
 
     const operation = Utils.getOperationType(run);
-    if (run.tags?.includes("langsmith:hidden") || run.name?.startsWith("Branch") || operation === "unknown") {
-      diag.debug(`[LangChainTracer] Skipping internal run: ${run.name} (parent: ${run.parent_run_id})`);
+    if (
+      run.tags?.includes("langsmith:hidden") ||
+      run.name?.startsWith("Branch") ||
+      operation === "unknown"
+    ) {
+      diag.debug(
+        `[LangChainTracer] Skipping internal run: ${run.name} (parent: ${run.parent_run_id})`,
+      );
       return;
     }
 
@@ -165,9 +181,10 @@ export class LangChainTracer extends BaseTracer {
         Utils.setOutputMessagesAttribute(run, span);
         Utils.setSystemInstructionsAttribute(run, span);
       }
-
     } catch (error) {
-      diag.error(`[LangChainTracer] Error setting span attributes for run ${run.name}: ${error instanceof Error ? error.message : String(error)}`);
+      diag.error(
+        `[LangChainTracer] Error setting span attributes for run ${run.name}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       span.setStatus({ code: SpanStatusCode.ERROR });
     } finally {
       span.end(run.end_time ?? undefined);

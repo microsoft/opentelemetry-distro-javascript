@@ -22,7 +22,7 @@
  */
 export const MAX_ATTRIBUTE_LENGTH = 8_192;
 
-const TRUNCATION_SUFFIX = '...[truncated]';
+const TRUNCATION_SUFFIX = "...[truncated]";
 
 /**
  * Truncate a string value to {@link MAX_ATTRIBUTE_LENGTH} characters.

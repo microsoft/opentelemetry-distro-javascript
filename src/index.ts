@@ -21,17 +21,10 @@ export type {
 
 // ── Re-exports from A365 configuration ──────────────────────────────────────
 export { A365Configuration } from "./_a365/index.js";
-export type {
-  ClusterCategory,
-  A365BaggageOptions,
-  A365HostingOptions,
-} from "./_a365/index.js";
+export type { ClusterCategory, A365BaggageOptions, A365HostingOptions } from "./_a365/index.js";
 
 // ── Re-exports from types ───────────────────────────────────────────────────
-export type {
-  OpenAIAgentsInstrumentationConfig,
-  LangChainInstrumentationConfig,
-} from "./types.js";
+export type { OpenAIAgentsInstrumentationConfig, LangChainInstrumentationConfig } from "./types.js";
 
 // ── Azure Monitor backward-compatible API ───────────────────────────────────
 

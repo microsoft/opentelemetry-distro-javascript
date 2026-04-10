@@ -138,8 +138,8 @@ describe("setOperationTypeAttribute", () => {
     setOperationTypeAttribute("chat", span);
     assert.ok(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_OPERATION_NAME && c[1] === "chat"
-      )
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_OPERATION_NAME && c[1] === "chat",
+      ),
     );
   });
 });
@@ -151,8 +151,8 @@ describe("setAgentAttributes", () => {
     setAgentAttributes(run, span);
     assert.ok(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_AGENT_NAME && c[1] === "WeatherAgent"
-      )
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_AGENT_NAME && c[1] === "WeatherAgent",
+      ),
     );
   });
 
@@ -181,7 +181,9 @@ describe("setToolAttributes", () => {
     });
     setToolAttributes(run, span);
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
-    assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_NAME && c[1] === "search_web"));
+    assert.ok(
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_NAME && c[1] === "search_web"),
+    );
     assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_CALL_ARGUMENTS));
     assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_CALL_RESULT));
     assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_TOOL_TYPE && c[1] === "extension"));
@@ -197,7 +199,10 @@ describe("setToolAttributes", () => {
 
   it("does nothing when serialized is missing", () => {
     const span = makeSpan();
-    const run = makeRun({ run_type: "tool", serialized: undefined as unknown as Record<string, unknown> });
+    const run = makeRun({
+      run_type: "tool",
+      serialized: undefined as unknown as Record<string, unknown>,
+    });
     setToolAttributes(run, span);
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
   });
@@ -232,11 +237,7 @@ describe("setInputMessagesAttribute", () => {
     const run = makeRun({
       run_type: "llm",
       inputs: {
-        messages: [
-          [
-            { lc_type: "human", lc_kwargs: { content: "What is 2+2?" } },
-          ],
-        ],
+        messages: [[{ lc_type: "human", lc_kwargs: { content: "What is 2+2?" } }]],
       },
     });
     setInputMessagesAttribute(run, span);
@@ -255,7 +256,10 @@ describe("setInputMessagesAttribute", () => {
       inputs: {
         messages: [
           [
-            { lc_kwargs: { content: "Build this" }, id: ["langchain", "schema", "messages", "HumanMessage"] },
+            {
+              lc_kwargs: { content: "Build this" },
+              id: ["langchain", "schema", "messages", "HumanMessage"],
+            },
           ],
         ],
       },
@@ -281,9 +285,7 @@ describe("setOutputMessagesAttribute", () => {
     const run = makeRun({
       run_type: "llm",
       outputs: {
-        messages: [
-          { role: "assistant", content: "Here is the answer" },
-        ],
+        messages: [{ role: "assistant", content: "Here is the answer" }],
       },
     });
     setOutputMessagesAttribute(run, span);
@@ -347,8 +349,8 @@ describe("setModelAttribute", () => {
     setModelAttribute(run, span);
     assert.ok(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o"
-      )
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o",
+      ),
     );
   });
 
@@ -360,8 +362,8 @@ describe("setModelAttribute", () => {
     setModelAttribute(run, span);
     assert.ok(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "claude-3"
-      )
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "claude-3",
+      ),
     );
   });
 
@@ -373,8 +375,8 @@ describe("setModelAttribute", () => {
     setModelAttribute(run, span);
     assert.ok(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "llama-3"
-      )
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "llama-3",
+      ),
     );
   });
 
@@ -393,8 +395,8 @@ describe("setProviderNameAttribute", () => {
     setProviderNameAttribute(run, span);
     assert.ok(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_PROVIDER_NAME && c[1] === "openai"
-      )
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_PROVIDER_NAME && c[1] === "openai",
+      ),
     );
   });
 
@@ -413,8 +415,8 @@ describe("setSessionIdAttribute", () => {
     setSessionIdAttribute(run, span);
     assert.ok(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_MICROSOFT_SESSION_ID && c[1] === "sess-123"
-      )
+        (c: unknown[]) => c[0] === ATTR_MICROSOFT_SESSION_ID && c[1] === "sess-123",
+      ),
     );
   });
 
@@ -424,8 +426,8 @@ describe("setSessionIdAttribute", () => {
     setSessionIdAttribute(run, span);
     assert.ok(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_MICROSOFT_SESSION_ID && c[1] === "conv-456"
-      )
+        (c: unknown[]) => c[0] === ATTR_MICROSOFT_SESSION_ID && c[1] === "conv-456",
+      ),
     );
   });
 
@@ -435,8 +437,8 @@ describe("setSessionIdAttribute", () => {
     setSessionIdAttribute(run, span);
     assert.ok(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_MICROSOFT_SESSION_ID && c[1] === "thread-789"
-      )
+        (c: unknown[]) => c[0] === ATTR_MICROSOFT_SESSION_ID && c[1] === "thread-789",
+      ),
     );
   });
 
@@ -466,8 +468,8 @@ describe("setSystemInstructionsAttribute", () => {
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
         (c: unknown[]) =>
           c[0] === ATTR_GEN_AI_SYSTEM_INSTRUCTIONS &&
-          (c[1] as string).includes("You are a helpful assistant.")
-      )
+          (c[1] as string).includes("You are a helpful assistant."),
+      ),
     );
   });
 
@@ -486,8 +488,8 @@ describe("setSystemInstructionsAttribute", () => {
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
         (c: unknown[]) =>
           c[0] === ATTR_GEN_AI_SYSTEM_INSTRUCTIONS &&
-          (c[1] as string).includes("System prompt here")
-      )
+          (c[1] as string).includes("System prompt here"),
+      ),
     );
   });
 
@@ -504,15 +506,17 @@ describe("setTokenAttributes", () => {
     const span = makeSpan();
     const run = makeRun({
       outputs: {
-        generations: [
-          [{ message: { usage_metadata: { input_tokens: 100, output_tokens: 50 } } }],
-        ],
+        generations: [[{ message: { usage_metadata: { input_tokens: 100, output_tokens: 50 } } }]],
       },
     });
     setTokenAttributes(run, span);
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
-    assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_USAGE_INPUT_TOKENS && c[1] === 100));
-    assert.ok(calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_USAGE_OUTPUT_TOKENS && c[1] === 50));
+    assert.ok(
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_USAGE_INPUT_TOKENS && c[1] === 100),
+    );
+    assert.ok(
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_USAGE_OUTPUT_TOKENS && c[1] === 50),
+    );
   });
 
   it("extracts from response_metadata.tokenUsage", () => {
@@ -520,7 +524,15 @@ describe("setTokenAttributes", () => {
     const run = makeRun({
       outputs: {
         generations: [
-          [{ message: { kwargs: { response_metadata: { tokenUsage: { input_tokens: 10, output_tokens: 5 } } } } }],
+          [
+            {
+              message: {
+                kwargs: {
+                  response_metadata: { tokenUsage: { input_tokens: 10, output_tokens: 5 } },
+                },
+              },
+            },
+          ],
         ],
       },
     });
