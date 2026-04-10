@@ -56,7 +56,6 @@ export class TraceBasicScenario implements Scenario {
     ).getDelegate() as NodeTracerProvider;
   }
 
-   
   async run(): Promise<void> {
     const tracer = opentelemetry.trace.getTracer("basic");
     const root = tracer.startSpan(`${this.constructor.name}.Root`, {
@@ -216,7 +215,6 @@ export class MetricBasicScenario implements Scenario {
     });
   }
 
-   
   async run(): Promise<void> {
     const meter = opentelemetry.metrics.getMeter("basic");
     const counter = meter.createCounter("testCounter");
@@ -404,7 +402,6 @@ export class LogBasicScenario implements Scenario {
     });
   }
 
-   
   async run(): Promise<void> {
     const logger = logs.getLogger("basic");
 

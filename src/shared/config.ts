@@ -8,10 +8,7 @@ import {
   emptyResource,
   envDetector,
 } from "@opentelemetry/resources";
-import type {
-  BrowserSdkLoaderOptions,
-  InstrumentationOptions,
-} from "../types.js";
+import type { BrowserSdkLoaderOptions, InstrumentationOptions } from "../types.js";
 import type { MicrosoftOpenTelemetryOptions } from "../distro/types.js";
 import type { Sampler } from "@opentelemetry/sdk-trace-base";
 import type { AzureMonitorExporterOptions } from "@azure/monitor-opentelemetry-exporter";

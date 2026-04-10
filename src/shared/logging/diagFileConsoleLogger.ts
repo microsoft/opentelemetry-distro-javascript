@@ -60,7 +60,6 @@ export class DiagFileConsoleLogger implements DiagLogger {
     if (this._logToFile) {
       if (!this._fileCleanupTimer) {
         this._fileCleanupTimer = setInterval(() => {
-           
           this._fileCleanupTask();
         }, this._cleanupTimeOut);
         this._fileCleanupTimer.unref();
@@ -68,7 +67,6 @@ export class DiagFileConsoleLogger implements DiagLogger {
     }
   }
 
-   
   public error(message?: any, ...args: any[]): void {
     if (this._shouldFilterResourceAttributeWarning(message, args)) {
       return;
@@ -76,11 +74,10 @@ export class DiagFileConsoleLogger implements DiagLogger {
     if (this._shouldFilterAzureMonitorExporterWarning(message)) {
       return;
     }
-     
+
     this.logMessage(message, args);
   }
 
-   
   public warn(message?: any, ...args: any[]): void {
     if (this._shouldFilterResourceAttributeWarning(message, args)) {
       return;
@@ -88,11 +85,10 @@ export class DiagFileConsoleLogger implements DiagLogger {
     if (this._shouldFilterAzureMonitorExporterWarning(message)) {
       return;
     }
-     
+
     this.logMessage(message, args);
   }
 
-   
   public info(message?: any, ...args: any[]): void {
     if (this._shouldFilterResourceAttributeWarning(message, args)) {
       return;
@@ -100,11 +96,10 @@ export class DiagFileConsoleLogger implements DiagLogger {
     if (this._shouldFilterAzureMonitorExporterWarning(message)) {
       return;
     }
-     
+
     this.logMessage(message, args);
   }
 
-   
   public debug(message?: any, ...args: any[]): void {
     if (this._shouldFilterResourceAttributeWarning(message, args)) {
       return;
@@ -112,11 +107,10 @@ export class DiagFileConsoleLogger implements DiagLogger {
     if (this._shouldFilterAzureMonitorExporterWarning(message)) {
       return;
     }
-     
+
     this.logMessage(message, args);
   }
 
-   
   public verbose(message?: any, ...args: any[]): void {
     if (this._shouldFilterResourceAttributeWarning(message, args)) {
       return;
@@ -124,11 +118,10 @@ export class DiagFileConsoleLogger implements DiagLogger {
     if (this._shouldFilterAzureMonitorExporterWarning(message)) {
       return;
     }
-     
+
     this.logMessage(message, args);
   }
 
-   
   public async logMessage(message?: any, ...optionalParams: any[]): Promise<void> {
     try {
       const args = message ? [message, ...optionalParams] : optionalParams;
@@ -136,11 +129,9 @@ export class DiagFileConsoleLogger implements DiagLogger {
         await this._storeToDisk(args);
       }
       if (this._logToConsole) {
-         
         console.log(...args);
       }
     } catch (err: any) {
-       
       console.log(this._TAG, `Failed to log to file: ${err && err.message}`);
     }
   }
@@ -213,7 +204,6 @@ export class DiagFileConsoleLogger implements DiagLogger {
     try {
       await confirmDirExists(this._tempDir);
     } catch (err: any) {
-       
       console.log(this._TAG, `Failed to create directory for log file: ${err && err.message}`);
       return;
     }
@@ -224,7 +214,6 @@ export class DiagFileConsoleLogger implements DiagLogger {
       try {
         await appendFileAsync(this._fileFullPath, data);
       } catch (appendError: any) {
-         
         console.log(
           this._TAG,
           `Failed to put log into file: ${appendError && appendError.message}`,
@@ -247,7 +236,6 @@ export class DiagFileConsoleLogger implements DiagLogger {
       const backupPath = path.join(this._tempDir, `${new Date().getTime()}.${this._logFileName}`);
       await writeFileAsync(backupPath, buffer);
     } catch (err: any) {
-       
       console.log("Failed to generate backup log file", err);
     } finally {
       // Store logs
@@ -277,7 +265,6 @@ export class DiagFileConsoleLogger implements DiagLogger {
         await unlinkAsync(pathToDelete);
       }
     } catch (err: any) {
-       
       console.log(this._TAG, `Failed to cleanup log files: ${err && err.message}`);
     }
   }

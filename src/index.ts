@@ -3,10 +3,7 @@
 
 import type { AzureMonitorOpenTelemetryOptions } from "./types.js";
 import type { MicrosoftOpenTelemetryOptions } from "./distro/types.js";
-import {
-  useMicrosoftOpenTelemetry,
-  shutdownMicrosoftOpenTelemetry,
-} from "./distro/distro.js";
+import { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } from "./distro/distro.js";
 
 // ── Re-exports from distro ──────────────────────────────────────────────────
 export type { AzureMonitorOpenTelemetryOptions };

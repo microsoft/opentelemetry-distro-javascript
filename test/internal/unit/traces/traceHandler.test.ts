@@ -35,7 +35,7 @@ import { RateLimitedSampler } from "@azure/monitor-opentelemetry-exporter";
 describe("Library/TraceHandler", () => {
   const connectionString = "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333";
   let http: typeof Http | null = null;
-   
+
   let _config: InternalConfig;
   let handler: TraceHandler;
   let metricHandler: MetricHandler;
@@ -181,7 +181,6 @@ describe("Library/TraceHandler", () => {
     });
   });
 
-   
   function createHandler(httpConfig: HttpInstrumentationConfig) {
     _config.instrumentationOptions.http = httpConfig;
     metricHandler = new MetricHandler(_config);
@@ -218,7 +217,6 @@ describe("Library/TraceHandler", () => {
     require("http");
   }
 
-   
   async function makeHttpRequest() {
     const options = {
       hostname: "localhost",

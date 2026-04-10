@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
- 
-
 import http from "node:http";
 import https from "node:https";
 import { webSnippet as sdkLoader } from "@microsoft/applicationinsights-web-snippet";
@@ -102,7 +100,7 @@ export class BrowserSdkLoader {
       if (originalRequestListener) {
         requestListener = (request: IncomingMessage, response: ServerResponse) => {
           // Patch response write method
-           
+
           const originalResponseWrite = response.write;
           const isGetRequest = request.method === "GET";
           // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
@@ -143,7 +141,7 @@ export class BrowserSdkLoader {
           };
 
           // Patch response end method for cases when HTML is added there
-           
+
           const originalResponseEnd = response.end;
 
           // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
@@ -255,7 +253,7 @@ export class BrowserSdkLoader {
             // eslint-disable-next-line prefer-rest-params
             return originalHttpsResponseEnd.apply(res, arguments);
           };
-           
+
           return originalHttpsRequestListener(req, res);
         };
         return originalHttpsServer(options, httpsRequestListener);
@@ -266,7 +264,7 @@ export class BrowserSdkLoader {
   /**
    * Validate response and try to inject Browser SDK Loader
    */
-   
+
   public ValidateInjection(response: any, input: string | Buffer): boolean {
     try {
       if (!response || !input || response.statusCode !== 200) return false;
@@ -289,7 +287,6 @@ export class BrowserSdkLoader {
    * Inject Browser SDK Loader
    */
   public InjectSdkLoader(
-     
     response: any,
     input: string | Buffer,
     encodeType?: browserSdkLoaderHelper.contentEncodingMethod,
