@@ -5,7 +5,10 @@
  * @summary Demonstrates how to enable the OTLP exporter alongside Azure Monitor to send telemetry to two locations.
  */
 
-import { useAzureMonitor, shutdownAzureMonitor } from "@azure/monitor-opentelemetry";
+import {
+  useMicrosoftOpenTelemetry,
+  shutdownMicrosoftOpenTelemetry,
+} from "@microsoft/opentelemetry";
 import { trace } from "@opentelemetry/api";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
@@ -16,15 +19,15 @@ async function main(): Promise<void> {
     url: "http://localhost:4318/v1/traces",
   });
 
-  const options = {
-    azureMonitorExporterOptions: {
-      connectionString:
-        process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || "<your connection string>",
+  useMicrosoftOpenTelemetry({
+    azureMonitor: {
+      azureMonitorExporterOptions: {
+        connectionString:
+          process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || "<your connection string>",
+      },
     },
     spanProcessors: [new BatchSpanProcessor(otlpExporter)],
-  };
-
-  useAzureMonitor(options);
+  });
 
   // Generate a sample span to demonstrate dual export
   const tracer = trace.getTracer("otlpSampleTracer");
@@ -32,11 +35,11 @@ async function main(): Promise<void> {
   span.setAttribute("sample.key", "sample-value");
   span.end();
 
-  console.log("Azure Monitor configured with dual export:");
+  console.log("Microsoft OpenTelemetry configured with dual export:");
   console.log("  Azure Monitor: Enabled");
   console.log("  OTLP Exporter: Enabled (http://localhost:4318/v1/traces)");
 
-  await shutdownAzureMonitor();
+  await shutdownMicrosoftOpenTelemetry();
 }
 
 main().catch(console.error);
