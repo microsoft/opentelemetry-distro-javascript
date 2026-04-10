@@ -23,7 +23,9 @@
     "@opentelemetry/resources": "^2.2.0",
     "@opentelemetry/semantic-conventions": "^1.38.0",
     "@opentelemetry/sdk-trace-base": "^2.2.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.208.0"
+    "@opentelemetry/exporter-trace-otlp-http": "^0.208.0",
+    "@langchain/openai": "^1.4.4",
+    "@langchain/core": "^1.1.39"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

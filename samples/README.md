@@ -22,6 +22,7 @@ These sample programs show how to use the `@microsoft/opentelemetry` distributio
 | [otlpExporter.ts][otlpexporter]             | Demonstrates how to enable the OTLP exporter alongside Azure Monitor to send telemetry to two locations. |
 | [redactQueryStrings.ts][redactquerystrings] | Demonstrates how to redact URL query strings from telemetry to protect sensitive information.            |
 | [sampling.ts][sampling]                     | Demonstrates how to enable sampling to reduce data ingestion volume and control costs.                   |
+| [langchainInstrumentation.ts][langchaininstrumentation] | Demonstrates how to enable LangChain instrumentation to trace GenAI operations.                     |
 
 ## Prerequisites
 
@@ -70,3 +71,4 @@ APPLICATIONINSIGHTS_CONNECTION_STRING="<your connection string>" node dist/basic
 [otlpexporter]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/otlpExporter.ts
 [redactquerystrings]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/redactQueryStrings.ts
 [sampling]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/sampling.ts
+[langchaininstrumentation]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/langchainInstrumentation.ts
