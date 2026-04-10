@@ -4,6 +4,7 @@
 
 ### Features Added
 - Add langchain isntrumentation.([#10](https://github.com/microsoft/opentelemetry-distro-javascript/pull/10))
+- Add OpenAI Agents SDK instrumentation.([#12](https://github.com/microsoft/opentelemetry-distro-javascript/pull/12))
 
 ### Breaking Changes
 
