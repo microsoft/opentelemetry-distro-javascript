@@ -8,7 +8,7 @@
   "types": "./dist/commonjs/index.d.ts",
   "type": "module",
   "scripts": {
-    "build": "npm run clean && npm run lint && tsc -p tsconfig.src.json && tsc -p tsconfig.src.cjs.json",
+    "build": "npm run clean && tsc -p tsconfig.src.json && tsc -p tsconfig.src.cjs.json",
     "clean": "rimraf dist",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
