@@ -2,11 +2,9 @@
 // Licensed under the MIT License.
 
 import { afterEach, assert, describe, it, vi } from "vitest";
-import {
-  OpenAIAgentsTraceInstrumentor,
-} from "../../../../../src/genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js";
+import { OpenAIAgentsTraceInstrumentor } from "../../../../../src/genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js";
 
-// Mock @openai/agents before import
+// vi.mock is hoisted above imports by Vitest
 vi.mock("@openai/agents", () => ({
   setTraceProcessors: vi.fn(),
   setTracingDisabled: vi.fn(),
@@ -34,17 +32,11 @@ describe("OpenAIAgentsTraceInstrumentor", () => {
 
   describe("enable / disable", () => {
     it("throws when not initialized", () => {
-      assert.throws(
-        () => OpenAIAgentsTraceInstrumentor.enable(),
-        /must be initialized first/,
-      );
+      assert.throws(() => OpenAIAgentsTraceInstrumentor.enable(), /must be initialized first/);
     });
 
     it("throws disable when not initialized", () => {
-      assert.throws(
-        () => OpenAIAgentsTraceInstrumentor.disable(),
-        /must be initialized first/,
-      );
+      assert.throws(() => OpenAIAgentsTraceInstrumentor.disable(), /must be initialized first/);
     });
 
     it("enable and disable do not throw after initialization", () => {

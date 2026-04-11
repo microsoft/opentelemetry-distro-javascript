@@ -3,8 +3,8 @@
 // Vendored from microsoft/Agent365-nodejs packages/agents-a365-observability-extensions-openai
 // Adapted: removed A365 observability imports, uses local semconv + truncateValue
 
-import { SpanStatusCode } from '@opentelemetry/api';
-import type { Span as AgentsSpan, SpanData } from '@openai/agents-core';
+import { SpanStatusCode } from "@opentelemetry/api";
+import type { Span as AgentsSpan, SpanData } from "@openai/agents-core";
 import {
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_PROVIDER_NAME,
@@ -15,8 +15,8 @@ import {
   GEN_AI_OPERATION_CHAT,
   GEN_AI_OPERATION_EXECUTE_TOOL,
   GEN_AI_OPERATION_INVOKE_AGENT,
-} from '../../index.js';
-import { truncateValue } from '../../utils.js';
+} from "../../index.js";
+import { truncateValue } from "../../utils.js";
 import {
   GEN_AI_EXECUTION_PAYLOAD_KEY,
   GEN_AI_REQUEST_CONTENT_KEY,
@@ -25,7 +25,7 @@ import {
   GEN_AI_SPAN_KIND_CHAIN,
   GEN_AI_SPAN_KIND_CHAT,
   GEN_AI_SPAN_KIND_TOOL,
-} from './semconv.js';
+} from "./semconv.js";
 
 /**
  * Safely stringify an object to JSON, truncating to the attribute limit.
@@ -45,18 +45,18 @@ export function getSpanName(span: AgentsSpan<SpanData>): string {
   const data = span.spanData;
 
   const dataWithName = data as { name?: string };
-  if (dataWithName?.name && typeof dataWithName.name === 'string') {
+  if (dataWithName?.name && typeof dataWithName.name === "string") {
     return dataWithName.name;
   }
 
-  if (data?.type === 'handoff') {
+  if (data?.type === "handoff") {
     const handoffData = data as Record<string, unknown>;
     if (handoffData.to_agent) {
       return `handoff to ${handoffData.to_agent}`;
     }
   }
 
-  return data?.type || 'unknown';
+  return data?.type || "unknown";
 }
 
 /**
@@ -68,16 +68,40 @@ export function getSpanKind(spanData: SpanData | undefined): string {
   }
 
   switch (spanData.type) {
-    case 'agent':
+    case "agent":
       return GEN_AI_SPAN_KIND_AGENT;
-    case 'function':
+    case "function":
       return GEN_AI_SPAN_KIND_TOOL;
-    case 'generation':
-    case 'response':
+    case "generation":
+    case "response":
       return GEN_AI_SPAN_KIND_CHAT;
-    case 'handoff':
-    case 'custom':
-    case 'guardrail':
+    case "handoff":
+    case "custom":
+    case "guardrail":
+    default:
+      return GEN_AI_SPAN_KIND_CHAIN;
+  }
+}
+
+/**
+ * Map OpenAI span data type to a GenAI semantic convention operation name.
+ */
+export function getOperationName(spanData: SpanData | undefined): string {
+  if (!spanData?.type) {
+    return GEN_AI_SPAN_KIND_CHAIN;
+  }
+
+  switch (spanData.type) {
+    case "agent":
+      return GEN_AI_OPERATION_INVOKE_AGENT;
+    case "function":
+      return GEN_AI_OPERATION_EXECUTE_TOOL;
+    case "generation":
+    case "response":
+      return GEN_AI_OPERATION_CHAT;
+    case "handoff":
+    case "custom":
+    case "guardrail":
     default:
       return GEN_AI_SPAN_KIND_CHAIN;
   }
@@ -86,9 +110,12 @@ export function getSpanKind(spanData: SpanData | undefined): string {
 /**
  * Derive OTel span status from an OpenAI Agents SDK span.
  */
-export function getSpanStatus(span: AgentsSpan<SpanData>): { code: SpanStatusCode; message?: string } {
+export function getSpanStatus(span: AgentsSpan<SpanData>): {
+  code: SpanStatusCode;
+  message?: string;
+} {
   if (span.error) {
-    const message = span.error.message || span.error.data || 'Unknown error';
+    const message = span.error.message || span.error.data || "Unknown error";
     return { code: SpanStatusCode.ERROR, message: String(message) };
   }
   return { code: SpanStatusCode.OK };
@@ -99,12 +126,12 @@ export function getSpanStatus(span: AgentsSpan<SpanData>): { code: SpanStatusCod
  */
 export function getAttributesFromGenerationSpanData(data: SpanData): Record<string, unknown> {
   const attributes: Record<string, unknown> = {
-    [ATTR_GEN_AI_PROVIDER_NAME]: 'openai',
+    [ATTR_GEN_AI_PROVIDER_NAME]: "openai",
   };
 
   const genData = data as Record<string, unknown>;
 
-  if (typeof genData.model === 'string') {
+  if (typeof genData.model === "string") {
     attributes[ATTR_GEN_AI_REQUEST_MODEL] = genData.model;
   }
 
@@ -151,11 +178,16 @@ export function getAttributesFromFunctionSpanData(data: SpanData): Record<string
 
   if (funcData.input) {
     attributes[GEN_AI_REQUEST_CONTENT_KEY] =
-      typeof funcData.input === 'string' ? truncateValue(funcData.input) : safeJsonDumps(funcData.input);
+      typeof funcData.input === "string"
+        ? truncateValue(funcData.input)
+        : safeJsonDumps(funcData.input);
   }
 
   if (funcData.output !== undefined && funcData.output !== null) {
-    const output = typeof funcData.output === 'object' ? safeJsonDumps(funcData.output) : truncateValue(String(funcData.output));
+    const output =
+      typeof funcData.output === "object"
+        ? safeJsonDumps(funcData.output)
+        : truncateValue(String(funcData.output));
     attributes[GEN_AI_RESPONSE_CONTENT_KEY] = output;
   }
 
@@ -202,22 +234,22 @@ export function getAttributesFromResponse(response: unknown): Record<string, unk
 
 /** Content-sensitive attribute keys that should only be recorded when content recording is enabled. */
 export const CONTENT_KEYS = new Set([
-  'gen_ai.input.messages',
-  'gen_ai.output.messages',
-  'gen_ai.tool.call.arguments',
-  'gen_ai.tool.call.result',
+  "gen_ai.input.messages",
+  "gen_ai.output.messages",
+  "gen_ai.tool.call.arguments",
+  "gen_ai.tool.call.result",
   GEN_AI_REQUEST_CONTENT_KEY,
   GEN_AI_RESPONSE_CONTENT_KEY,
 ]);
 
 /** Key remapping table: `${spanType}${originalKey}` → target semconv key */
 export const KEY_MAPPINGS = new Map<string, string>([
-  [`mcp_tools${GEN_AI_RESPONSE_CONTENT_KEY}`, 'gen_ai.tool.call.result'],
-  [`mcp_tools${GEN_AI_REQUEST_CONTENT_KEY}`, 'gen_ai.tool.call.arguments'],
-  [`function${GEN_AI_RESPONSE_CONTENT_KEY}`, 'gen_ai.tool.call.result'],
-  [`function${GEN_AI_REQUEST_CONTENT_KEY}`, 'gen_ai.tool.call.arguments'],
-  [`generation${GEN_AI_RESPONSE_CONTENT_KEY}`, 'gen_ai.output.messages'],
-  [`generation${GEN_AI_REQUEST_CONTENT_KEY}`, 'gen_ai.input.messages'],
+  [`mcp_tools${GEN_AI_RESPONSE_CONTENT_KEY}`, "gen_ai.tool.call.result"],
+  [`mcp_tools${GEN_AI_REQUEST_CONTENT_KEY}`, "gen_ai.tool.call.arguments"],
+  [`function${GEN_AI_RESPONSE_CONTENT_KEY}`, "gen_ai.tool.call.result"],
+  [`function${GEN_AI_REQUEST_CONTENT_KEY}`, "gen_ai.tool.call.arguments"],
+  [`generation${GEN_AI_RESPONSE_CONTENT_KEY}`, "gen_ai.output.messages"],
+  [`generation${GEN_AI_REQUEST_CONTENT_KEY}`, "gen_ai.input.messages"],
 ]);
 
 /**
@@ -225,7 +257,7 @@ export const KEY_MAPPINGS = new Map<string, string>([
  */
 export function buildInputMessages(arr: Array<{ role: string; content: string }>): string {
   const userTexts = arr
-    .filter((m) => m && m.role === 'user' && typeof m.content === 'string')
+    .filter((m) => m && m.role === "user" && typeof m.content === "string")
     .map((m) => m.content);
   return JSON.stringify(userTexts.length ? userTexts : arr);
 }
@@ -233,14 +265,16 @@ export function buildInputMessages(arr: Array<{ role: string; content: string }>
 /**
  * Build a JSON string of output messages, extracting output_text content.
  */
-export function buildOutputMessages(arr: Array<{ role: string; content: Array<{ type: string; text: string }> }>): string {
+export function buildOutputMessages(
+  arr: Array<{ role: string; content: Array<{ type: string; text: string }> }>,
+): string {
   const userTexts: string[] = [];
   for (const { content } of arr) {
     if (!Array.isArray(content)) {
       continue;
     }
     for (const { type, text } of content) {
-      if (type === 'output_text' && typeof text === 'string') {
+      if (type === "output_text" && typeof text === "string") {
         userTexts.push(text);
       }
     }

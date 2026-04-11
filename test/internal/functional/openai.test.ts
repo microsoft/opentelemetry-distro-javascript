@@ -11,9 +11,7 @@
  */
 
 import { afterEach, assert, describe, it } from "vitest";
-import {
-  SpanStatusCode,
-} from "@opentelemetry/api";
+import { SpanStatusCode } from "@opentelemetry/api";
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
@@ -38,7 +36,10 @@ let provider: BasicTracerProvider;
 let exporter: InMemorySpanExporter;
 let processor: OpenAIAgentsTraceProcessor;
 
-function setup(options?: { isContentRecordingEnabled?: boolean; suppressInvokeAgentInput?: boolean }) {
+function setup(options?: {
+  isContentRecordingEnabled?: boolean;
+  suppressInvokeAgentInput?: boolean;
+}) {
   exporter = new InMemorySpanExporter();
   provider = new BasicTracerProvider({
     spanProcessors: [new SimpleSpanProcessor(exporter)],
@@ -95,7 +96,10 @@ describe("OpenAI Agents Instrumentation Functional Tests", () => {
       assert.strictEqual(spans.length, 1);
 
       const otelSpan = spans[0];
-      assert.ok(otelSpan.name.includes("gpt-4o"), `span name "${otelSpan.name}" should contain model name`);
+      assert.ok(
+        otelSpan.name.includes("gpt-4o"),
+        `span name "${otelSpan.name}" should contain model name`,
+      );
       assert.strictEqual(otelSpan.status.code, SpanStatusCode.OK);
       assert.strictEqual(otelSpan.attributes[ATTR_GEN_AI_PROVIDER_NAME], "openai");
       assert.strictEqual(otelSpan.attributes[ATTR_GEN_AI_REQUEST_MODEL], "gpt-4o");
@@ -186,9 +190,15 @@ describe("OpenAI Agents Instrumentation Functional Tests", () => {
       assert.ok(spans.length >= 3, `expected at least 3 spans, got ${spans.length}`);
 
       // Find spans by operation
-      const agentOtel = spans.find((s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_INVOKE_AGENT);
-      const toolOtel = spans.find((s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_EXECUTE_TOOL);
-      const genOtel = spans.find((s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_CHAT);
+      const agentOtel = spans.find(
+        (s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_INVOKE_AGENT,
+      );
+      const toolOtel = spans.find(
+        (s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_EXECUTE_TOOL,
+      );
+      const genOtel = spans.find(
+        (s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_CHAT,
+      );
 
       assert.ok(agentOtel, "agent span should exist");
       assert.ok(toolOtel, "tool span should exist");
@@ -284,7 +294,10 @@ describe("OpenAI Agents Instrumentation Functional Tests", () => {
 
       const mcpSpan = spans.find((s) => s.attributes[ATTR_GEN_AI_TOOL_NAME] === "my-mcp-server");
       assert.ok(mcpSpan, "MCP span should exist");
-      assert.strictEqual(mcpSpan!.attributes[ATTR_GEN_AI_OPERATION_NAME], GEN_AI_OPERATION_EXECUTE_TOOL);
+      assert.strictEqual(
+        mcpSpan!.attributes[ATTR_GEN_AI_OPERATION_NAME],
+        GEN_AI_OPERATION_EXECUTE_TOOL,
+      );
       assert.strictEqual(mcpSpan!.attributes[ATTR_GEN_AI_TOOL_TYPE], "extension");
     });
   });
@@ -312,8 +325,16 @@ describe("OpenAI Agents Instrumentation Functional Tests", () => {
       assert.ok(genSpan);
 
       // Content keys should be absent
-      assert.strictEqual(genSpan!.attributes["gen_ai.input.messages"], undefined, "should not record input");
-      assert.strictEqual(genSpan!.attributes["gen_ai.output.messages"], undefined, "should not record output");
+      assert.strictEqual(
+        genSpan!.attributes["gen_ai.input.messages"],
+        undefined,
+        "should not record input",
+      );
+      assert.strictEqual(
+        genSpan!.attributes["gen_ai.output.messages"],
+        undefined,
+        "should not record output",
+      );
     });
 
     it("records content when enabled", async () => {
@@ -384,7 +405,11 @@ describe("OpenAI Agents Instrumentation Functional Tests", () => {
       const spans = exporter.getFinishedSpans();
       const respSpan = spans.find((s) => s.attributes[ATTR_GEN_AI_REQUEST_MODEL] === "gpt-4o");
       assert.ok(respSpan);
-      assert.strictEqual(respSpan!.attributes["gen_ai.input.messages"], undefined, "input should be suppressed");
+      assert.strictEqual(
+        respSpan!.attributes["gen_ai.input.messages"],
+        undefined,
+        "input should be suppressed",
+      );
     });
   });
 });

@@ -13,13 +13,17 @@ function makeMockOtelSpan(): OtelSpan & { attrs: Record<string, unknown>; _name:
   let _name = "";
   return {
     attrs,
-    get _name() { return _name; },
+    get _name() {
+      return _name;
+    },
     setAttribute: vi.fn((key: string, value: unknown) => {
       attrs[key] = value;
     }),
     setStatus: vi.fn(),
     end: vi.fn(),
-    updateName: vi.fn((name: string) => { _name = name; }),
+    updateName: vi.fn((name: string) => {
+      _name = name;
+    }),
     spanContext: vi.fn(() => ({
       traceId: "0000000000000001",
       spanId: "00000001",
@@ -33,10 +37,19 @@ function makeMockOtelSpan(): OtelSpan & { attrs: Record<string, unknown>; _name:
   } as unknown as OtelSpan & { attrs: Record<string, unknown>; _name: string };
 }
 
-function makeMockTracer(mockSpan?: OtelSpan): Tracer {
-  const span = mockSpan ?? makeMockOtelSpan();
+function makeMockTracer(mockSpan?: OtelSpan): Tracer & { spans: OtelSpan[] } {
+  const spans: OtelSpan[] = [];
+  let hasReturnedInjectedSpan = false;
   return {
-    startSpan: vi.fn(() => span),
+    spans,
+    startSpan: vi.fn(() => {
+      const span =
+        mockSpan && !hasReturnedInjectedSpan
+          ? ((hasReturnedInjectedSpan = true), mockSpan)
+          : makeMockOtelSpan();
+      spans.push(span);
+      return span;
+    }),
     startActiveSpan: vi.fn(),
   } as unknown as Tracer;
 }
@@ -61,7 +74,7 @@ function makeTrace(traceId = "trace-1"): AgentTrace {
 describe("OpenAIAgentsTraceProcessor", () => {
   let processor: OpenAIAgentsTraceProcessor;
   let mockSpan: OtelSpan & { attrs: Record<string, unknown> };
-  let tracer: Tracer;
+  let tracer: Tracer & { spans: OtelSpan[] };
 
   beforeEach(() => {
     mockSpan = makeMockOtelSpan();
@@ -225,7 +238,10 @@ describe("OpenAIAgentsTraceProcessor", () => {
       await processor.onSpanStart(agentSpan);
       await processor.onSpanEnd(agentSpan);
 
-      assert.strictEqual(mockSpan.attrs["graph_node_parent_id"], "AgentA");
+      const agentOtelSpan = tracer.spans[tracer.spans.length - 1] as OtelSpan & {
+        attrs: Record<string, unknown>;
+      };
+      assert.strictEqual(agentOtelSpan.attrs["graph_node_parent_id"], "AgentA");
     });
   });
 

@@ -3,14 +3,14 @@
 // Vendored from microsoft/Agent365-nodejs packages/agents-a365-observability-extensions-openai
 // Adapted: removed ObservabilityManager dependency, uses diag logger instead of A365 logger
 
-import { diag, trace, Tracer } from '@opentelemetry/api';
+import { diag, trace, Tracer } from "@opentelemetry/api";
 import {
   InstrumentationBase,
   InstrumentationConfig,
   InstrumentationModuleDefinition,
-} from '@opentelemetry/instrumentation';
-import { setTraceProcessors, setTracingDisabled, TracingProcessor } from '@openai/agents';
-import { OpenAIAgentsTraceProcessor } from './openAIAgentsTraceProcessor.js';
+} from "@opentelemetry/instrumentation";
+import { setTraceProcessors, setTracingDisabled, TracingProcessor } from "@openai/agents";
+import { OpenAIAgentsTraceProcessor } from "./openAIAgentsTraceProcessor.js";
 
 /**
  * Configuration options for the OpenAI Agents instrumentor.
@@ -40,24 +40,23 @@ class OpenAIAgentsTraceInstrumentorImpl extends InstrumentationBase<OpenAIAgents
 
   private constructor(config: OpenAIAgentsInstrumentationConfig = {}) {
     if (OpenAIAgentsTraceInstrumentorImpl._instance !== null) {
-      throw new Error('OpenAIAgentsTraceInstrumentor can only be instantiated once.');
+      throw new Error("OpenAIAgentsTraceInstrumentor can only be instantiated once.");
     }
 
-    super('microsoft-otel-openai-agents-instrumentor', '1.0.0', {
+    super("microsoft-otel-openai-agents-instrumentor", "1.0.0", {
       enabled: true,
       ...config,
     });
 
-    this.otelTracer = trace.getTracer(
-      'microsoft-otel-openai-agents',
-      '1.0.0',
-    );
+    this.otelTracer = trace.getTracer("microsoft-otel-openai-agents", "1.0.0");
 
     OpenAIAgentsTraceInstrumentorImpl._instance = this;
-    diag.info('[OpenAIAgentsTraceInstrumentor] Initialized');
+    diag.info("[OpenAIAgentsTraceInstrumentor] Initialized");
   }
 
-  static getInstance(config?: OpenAIAgentsInstrumentationConfig): OpenAIAgentsTraceInstrumentorImpl {
+  static getInstance(
+    config?: OpenAIAgentsInstrumentationConfig,
+  ): OpenAIAgentsTraceInstrumentorImpl {
     if (!OpenAIAgentsTraceInstrumentorImpl._instance) {
       OpenAIAgentsTraceInstrumentorImpl._instance = new OpenAIAgentsTraceInstrumentorImpl(config);
     }
@@ -71,7 +70,7 @@ class OpenAIAgentsTraceInstrumentorImpl extends InstrumentationBase<OpenAIAgents
   static resetInstance(): void {
     const inst = OpenAIAgentsTraceInstrumentorImpl._instance;
     if (inst) {
-      inst.processor?.shutdown();
+      void inst.processor?.shutdown();
       inst.processor = undefined;
     }
     OpenAIAgentsTraceInstrumentorImpl._instance = null;
@@ -79,14 +78,14 @@ class OpenAIAgentsTraceInstrumentorImpl extends InstrumentationBase<OpenAIAgents
 
   protected init(): InstrumentationModuleDefinition {
     return {
-      name: '@openai/agents',
-      supportedVersions: ['>=0.1.5'],
+      name: "@openai/agents",
+      supportedVersions: [">=0.1.5"],
       files: [],
     };
   }
 
   public instrumentationDependencies(): readonly string[] {
-    return ['@openai/agents >= 0.1.5'] as const;
+    return ["@openai/agents >= 0.1.5"] as const;
   }
 
   /**
@@ -110,10 +109,12 @@ class OpenAIAgentsTraceInstrumentorImpl extends InstrumentationBase<OpenAIAgents
     try {
       setTraceProcessors([this.processor as TracingProcessor]);
     } catch (error) {
-      diag.error(`[OpenAIAgentsTraceInstrumentor] Failed to register trace processor: ${error instanceof Error ? error.message : String(error)}`);
+      diag.error(
+        `[OpenAIAgentsTraceInstrumentor] Failed to register trace processor: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
-    diag.info('[OpenAIAgentsTraceInstrumentor] Enabled OpenAI Agents instrumentation');
+    diag.info("[OpenAIAgentsTraceInstrumentor] Enabled OpenAI Agents instrumentation");
     super.enable();
   }
 
@@ -122,7 +123,7 @@ class OpenAIAgentsTraceInstrumentorImpl extends InstrumentationBase<OpenAIAgents
    */
   public override disable(): void {
     if (this.processor) {
-      this.processor.shutdown();
+      void this.processor.shutdown();
       this.processor = undefined;
     }
 
@@ -131,10 +132,12 @@ class OpenAIAgentsTraceInstrumentorImpl extends InstrumentationBase<OpenAIAgents
     try {
       setTraceProcessors([]);
     } catch (error) {
-      diag.error(`[OpenAIAgentsTraceInstrumentor] Failed to clear trace processors: ${error instanceof Error ? error.message : String(error)}`);
+      diag.error(
+        `[OpenAIAgentsTraceInstrumentor] Failed to clear trace processors: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
-    diag.info('[OpenAIAgentsTraceInstrumentor] Disabled OpenAI Agents instrumentation');
+    diag.info("[OpenAIAgentsTraceInstrumentor] Disabled OpenAI Agents instrumentation");
     super.disable();
   }
 
@@ -154,8 +157,8 @@ class OpenAIAgentsTraceInstrumentorImpl extends InstrumentationBase<OpenAIAgents
 export class OpenAIAgentsTraceInstrumentor {
   private static throwNotInitialized(): never {
     throw new Error(
-      'OpenAIAgentsTraceInstrumentor must be initialized first. '
-      + 'Call OpenAIAgentsTraceInstrumentor.instrument() before using enable/disable.',
+      "OpenAIAgentsTraceInstrumentor must be initialized first. " +
+        "Call OpenAIAgentsTraceInstrumentor.instrument() before using enable/disable.",
     );
   }
 
