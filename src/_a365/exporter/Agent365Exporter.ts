@@ -133,8 +133,8 @@ export class Agent365Exporter implements SpanExporter {
       ? `/observabilityService/tenants/${encodeURIComponent(tenantId)}/agents/${encodeURIComponent(agentId)}/traces`
       : `/observability/tenants/${encodeURIComponent(tenantId)}/agents/${encodeURIComponent(agentId)}/traces`;
 
-    const baseUrl = this.options.domainOverride
-      ?? resolveAgent365Endpoint(this.options.clusterCategory);
+    const baseUrl =
+      this.options.domainOverride ?? resolveAgent365Endpoint(this.options.clusterCategory);
     const url = `${baseUrl}${endpointPath}?api-version=1`;
 
     const headers: Record<string, string> = {
@@ -158,10 +158,7 @@ export class Agent365Exporter implements SpanExporter {
     }
   }
 
-  private async resolveToken(
-    agentId: string,
-    tenantId: string,
-  ): Promise<string | null> {
+  private async resolveToken(agentId: string, tenantId: string): Promise<string | null> {
     if (!this.options.tokenResolver) return null;
     const result = this.options.tokenResolver(agentId, tenantId);
     return result instanceof Promise ? result : result;
@@ -280,17 +277,13 @@ export class Agent365Exporter implements SpanExporter {
         ? ev.time[0] * 1_000_000_000 + ev.time[1]
         : (ev.time as number);
       const evAttrs =
-        ev.attributes && Object.keys(ev.attributes).length > 0
-          ? { ...ev.attributes }
-          : null;
+        ev.attributes && Object.keys(ev.attributes).length > 0 ? { ...ev.attributes } : null;
       return { timeUnixNano: timeNs, name: ev.name, attributes: evAttrs };
     });
 
     const links: OTLPLink[] = (sp.links ?? []).map((ln) => {
       const lnAttrs =
-        ln.attributes && Object.keys(ln.attributes).length > 0
-          ? { ...ln.attributes }
-          : null;
+        ln.attributes && Object.keys(ln.attributes).length > 0 ? { ...ln.attributes } : null;
       return {
         traceId: hexTraceId(ln.context.traceId),
         spanId: hexSpanId(ln.context.spanId),

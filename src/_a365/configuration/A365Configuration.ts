@@ -26,8 +26,18 @@ export const A365_ENV_VARS = {
 const DEFAULT_AUTH_SCOPE = "https://api.powerplatform.com/.default";
 
 const VALID_CLUSTER_CATEGORIES: ReadonlySet<string> = new Set([
-  "local", "dev", "test", "preprod", "firstrelease",
-  "prod", "gov", "high", "dod", "mooncake", "ex", "rx",
+  "local",
+  "dev",
+  "test",
+  "preprod",
+  "firstrelease",
+  "prod",
+  "gov",
+  "high",
+  "dod",
+  "mooncake",
+  "ex",
+  "rx",
 ]);
 
 /**
@@ -106,7 +116,10 @@ export class A365Configuration {
 
     const envScopes = getEnv(A365_ENV_VARS.AUTH_SCOPES);
     if (envScopes) {
-      authScopes = envScopes.split(",").map((s) => s.trim()).filter(Boolean);
+      authScopes = envScopes
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
 
     const envDomain = getEnv(A365_ENV_VARS.DOMAIN);
@@ -128,10 +141,9 @@ export class A365Configuration {
     this.perRequestExport = perRequestExport;
 
     this.baggage = {
-      propagationEnabled: jsonA365?.baggage?.propagationEnabled
-        ?? options?.baggage?.propagationEnabled ?? true,
-      enrichSpans: jsonA365?.baggage?.enrichSpans
-        ?? options?.baggage?.enrichSpans ?? true,
+      propagationEnabled:
+        jsonA365?.baggage?.propagationEnabled ?? options?.baggage?.propagationEnabled ?? true,
+      enrichSpans: jsonA365?.baggage?.enrichSpans ?? options?.baggage?.enrichSpans ?? true,
     };
 
     this.hosting = {
@@ -156,7 +168,7 @@ export class A365Configuration {
     if (hasNonTrivialOptions) {
       Logger.getInstance().warn(
         "A365 configuration options are set but A365 is not enabled. " +
-        "Set `a365.enabled: true` or `MICROSOFT_OTEL_A365_EXPORTER_ENABLED=true` to enable.",
+          "Set `a365.enabled: true` or `MICROSOFT_OTEL_A365_EXPORTER_ENABLED=true` to enable.",
       );
     }
   }

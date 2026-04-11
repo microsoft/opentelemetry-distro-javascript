@@ -72,7 +72,6 @@ describe("Library/DiagFileConsoleLogger", () => {
       vi.spyOn(fileHelper, "confirmDirExists").mockImplementation(async () => {});
       vi.spyOn(fileHelper, "accessAsync").mockImplementation(async () => {});
       vi.spyOn(fileHelper, "getShallowFileSize").mockImplementation(
-         
         async () =>
           // Fake file size check
           123,
@@ -81,10 +80,9 @@ describe("Library/DiagFileConsoleLogger", () => {
 
       const writeStub = vi.spyOn(fileHelper, "writeFileAsync").mockImplementation(async () => {});
       const appendStub = vi.spyOn(fileHelper, "appendFileAsync").mockImplementation(async () => {});
-      const readStub = vi.spyOn(fileHelper, "readFileAsync").mockImplementation(
-         
-        async () => Buffer.from("existing content"),
-      );
+      const readStub = vi
+        .spyOn(fileHelper, "readFileAsync")
+        .mockImplementation(async () => Buffer.from("existing content"));
       logger["_logToFile"] = true;
 
       await logger["logMessage"]("backupTestMessage");
@@ -104,16 +102,14 @@ describe("Library/DiagFileConsoleLogger", () => {
       vi.spyOn(fileHelper, "confirmDirExists").mockImplementation(async () => {});
       vi.spyOn(fileHelper, "accessAsync").mockImplementation(async () => {});
       vi.spyOn(fileHelper, "getShallowFileSize").mockImplementation(
-         
         async () =>
           // Fake file size check
           123,
       );
       const writeStub = vi.spyOn(fileHelper, "writeFileAsync").mockImplementation(async () => {});
-      const readStub = vi.spyOn(fileHelper, "readFileAsync").mockImplementation(
-         
-        async () => Buffer.from("existing content"),
-      );
+      const readStub = vi
+        .spyOn(fileHelper, "readFileAsync")
+        .mockImplementation(async () => Buffer.from("existing content"));
       logger["_maxSizeBytes"] = 122;
       logger["_logToFile"] = true;
       await logger["logMessage"]("backupTestMessage");
@@ -135,7 +131,6 @@ describe("Library/DiagFileConsoleLogger", () => {
 
     it("should remove backup files", async () => {
       vi.spyOn(fileHelper, "readdirAsync").mockImplementation(
-         
         async () =>
           [
             "applicationinsights.log",
@@ -151,7 +146,6 @@ describe("Library/DiagFileConsoleLogger", () => {
 
     it("cleanup should keep configured number of backups", async () => {
       vi.spyOn(fileHelper, "readdirAsync").mockImplementation(
-         
         async () =>
           [
             "applicationinsights.log",

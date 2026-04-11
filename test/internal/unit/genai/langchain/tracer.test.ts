@@ -2,7 +2,14 @@
 // Licensed under the MIT License.
 
 import { afterEach, assert, describe, it, vi } from "vitest";
-import { Span, SpanContext, SpanKind, SpanStatusCode, Tracer, TraceFlags } from "@opentelemetry/api";
+import {
+  Span,
+  SpanContext,
+  SpanKind,
+  SpanStatusCode,
+  Tracer,
+  TraceFlags,
+} from "@opentelemetry/api";
 import type { Run } from "@langchain/core/tracers/base";
 import { LangChainTracer } from "../../../../../src/genai/instrumentations/langchain/tracer.js";
 import {
@@ -41,7 +48,12 @@ function makeLangGraphRun(overrides: Partial<Run> = {}): Run {
   });
 }
 
-function createMockSpan(): Span & { attrs: Record<string, unknown>; ended: boolean; endTime?: unknown; statusObj?: { code: SpanStatusCode } } {
+function createMockSpan(): Span & {
+  attrs: Record<string, unknown>;
+  ended: boolean;
+  endTime?: unknown;
+  statusObj?: { code: SpanStatusCode };
+} {
   const spanCtx: SpanContext = {
     traceId: "aaaa0000bbbb0000cccc0000dddd0000",
     spanId: "1111000022220000",
@@ -71,21 +83,37 @@ function createMockSpan(): Span & { attrs: Record<string, unknown>; ended: boole
     addLink: vi.fn(),
     addLinks: vi.fn(),
   };
-  return mockSpan as unknown as Span & { attrs: Record<string, unknown>; ended: boolean; endTime?: unknown; statusObj?: { code: SpanStatusCode } };
+  return mockSpan as unknown as Span & {
+    attrs: Record<string, unknown>;
+    ended: boolean;
+    endTime?: unknown;
+    statusObj?: { code: SpanStatusCode };
+  };
 }
 
-function createMockTracer(): Tracer & { lastSpan: ReturnType<typeof createMockSpan> | undefined; spans: ReturnType<typeof createMockSpan>[] } {
+function createMockTracer(): Tracer & {
+  lastSpan: ReturnType<typeof createMockSpan> | undefined;
+  spans: ReturnType<typeof createMockSpan>[];
+} {
   const mockTracer = {
     lastSpan: undefined as ReturnType<typeof createMockSpan> | undefined,
     spans: [] as ReturnType<typeof createMockSpan>[],
-    startSpan: vi.fn(function (this: typeof mockTracer, _name: string, _options?: unknown, _ctx?: unknown) {
+    startSpan: vi.fn(function (
+      this: typeof mockTracer,
+      _name: string,
+      _options?: unknown,
+      _ctx?: unknown,
+    ) {
       const span = createMockSpan();
       this.lastSpan = span;
       this.spans.push(span);
       return span;
     }),
   };
-  return mockTracer as unknown as Tracer & { lastSpan: ReturnType<typeof createMockSpan> | undefined; spans: ReturnType<typeof createMockSpan>[] };
+  return mockTracer as unknown as Tracer & {
+    lastSpan: ReturnType<typeof createMockSpan> | undefined;
+    spans: ReturnType<typeof createMockSpan>[];
+  };
 }
 
 afterEach(() => {
@@ -110,7 +138,7 @@ describe("LangChainTracer", () => {
       assert.ok(tracer.lastSpan, "should have created a span");
       assert.ok(
         (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][0].includes("chat"),
-        "span name should include operation type"
+        "span name should include operation type",
       );
     });
 
@@ -199,8 +227,8 @@ describe("LangChainTracer", () => {
       assert.strictEqual(span.statusObj?.code, SpanStatusCode.ERROR);
       assert.ok(
         (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-          (c: unknown[]) => c[0] === ATTR_ERROR_MESSAGE && c[1] === "Something went wrong"
-        )
+          (c: unknown[]) => c[0] === ATTR_ERROR_MESSAGE && c[1] === "Something went wrong",
+        ),
       );
     });
 
@@ -213,8 +241,8 @@ describe("LangChainTracer", () => {
       await (lct as unknown as { _endTrace(run: Run): Promise<void> })._endTrace(run);
       assert.ok(
         (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-          (c: unknown[]) => c[0] === ATTR_GEN_AI_OPERATION_NAME && c[1] === "chat"
-        )
+          (c: unknown[]) => c[0] === ATTR_GEN_AI_OPERATION_NAME && c[1] === "chat",
+        ),
       );
     });
 
@@ -230,7 +258,9 @@ describe("LangChainTracer", () => {
       await lct.onRunCreate(run);
       const span = tracer.lastSpan!;
       await (lct as unknown as { _endTrace(run: Run): Promise<void> })._endTrace(run);
-      const attrKeys = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.map((c: unknown[]) => c[0]);
+      const attrKeys = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.map(
+        (c: unknown[]) => c[0],
+      );
       assert.ok(!attrKeys.includes("gen_ai.tool.call.arguments"), "should not set tool arguments");
       assert.ok(!attrKeys.includes("gen_ai.input.messages"), "should not set input messages");
     });
@@ -247,7 +277,9 @@ describe("LangChainTracer", () => {
       await lct.onRunCreate(run);
       const span = tracer.lastSpan!;
       await (lct as unknown as { _endTrace(run: Run): Promise<void> })._endTrace(run);
-      const attrKeys = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.map((c: unknown[]) => c[0]);
+      const attrKeys = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.map(
+        (c: unknown[]) => c[0],
+      );
       assert.ok(attrKeys.includes("gen_ai.tool.name"), "should set tool name");
     });
 

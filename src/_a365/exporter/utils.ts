@@ -88,22 +88,32 @@ export function asStr(v: unknown): string | undefined {
 /** Get span kind name. */
 export function kindName(kind: SpanKind): string {
   switch (kind) {
-    case SpanKind.INTERNAL: return "INTERNAL";
-    case SpanKind.SERVER: return "SERVER";
-    case SpanKind.CLIENT: return "CLIENT";
-    case SpanKind.PRODUCER: return "PRODUCER";
-    case SpanKind.CONSUMER: return "CONSUMER";
-    default: return "UNSPECIFIED";
+    case SpanKind.INTERNAL:
+      return "INTERNAL";
+    case SpanKind.SERVER:
+      return "SERVER";
+    case SpanKind.CLIENT:
+      return "CLIENT";
+    case SpanKind.PRODUCER:
+      return "PRODUCER";
+    case SpanKind.CONSUMER:
+      return "CONSUMER";
+    default:
+      return "UNSPECIFIED";
   }
 }
 
 /** Get status name. */
 export function statusName(code: SpanStatusCode): string {
   switch (code) {
-    case SpanStatusCode.UNSET: return "UNSET";
-    case SpanStatusCode.OK: return "OK";
-    case SpanStatusCode.ERROR: return "ERROR";
-    default: return "UNSET";
+    case SpanStatusCode.UNSET:
+      return "UNSET";
+    case SpanStatusCode.OK:
+      return "OK";
+    case SpanStatusCode.ERROR:
+      return "ERROR";
+    default:
+      return "UNSET";
   }
 }
 
@@ -169,7 +179,10 @@ function serializeOverflowSentinel(totalMessages: number): string {
  */
 function trimString(value: string, bytesToShed: number): string {
   const currentBytes = Buffer.byteLength(value, "utf8");
-  const targetContentBytes = Math.max(0, currentBytes - Math.max(1, bytesToShed) - TRUNCATED_SUFFIX_BYTES);
+  const targetContentBytes = Math.max(
+    0,
+    currentBytes - Math.max(1, bytesToShed) - TRUNCATED_SUFFIX_BYTES,
+  );
   if (targetContentBytes <= 0) return TRUNCATED_SUFFIX;
 
   let consumedBytes = 0;
@@ -209,7 +222,10 @@ function createBlobShrinkAction(
  */
 function collectShrinkActions(
   attributes: Record<string, unknown>,
-  parsedMessages: Map<string, { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }>,
+  parsedMessages: Map<
+    string,
+    { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }
+  >,
 ): ShrinkAction[] {
   const actions: ShrinkAction[] = [];
 
@@ -244,16 +260,23 @@ function collectShrinkActions(
 
             // Tool/server JSON payload fields → sentinel
             const jsonField =
-              partType === "tool_call" ? "arguments"
-                : partType === "tool_call_response" ? "response"
-                  : partType === "server_tool_call" ? "server_tool_call"
-                    : partType === "server_tool_call_response" ? "server_tool_call_response"
+              partType === "tool_call"
+                ? "arguments"
+                : partType === "tool_call_response"
+                  ? "response"
+                  : partType === "server_tool_call"
+                    ? "server_tool_call"
+                    : partType === "server_tool_call_response"
+                      ? "server_tool_call_response"
                       : undefined;
 
             if (jsonField && part[jsonField] !== undefined && part[jsonField] !== JSON_SENTINEL) {
               let fieldSize: number;
-              try { fieldSize = Buffer.byteLength(JSON.stringify(part[jsonField]), "utf8"); }
-              catch { fieldSize = 0; }
+              try {
+                fieldSize = Buffer.byteLength(JSON.stringify(part[jsonField]), "utf8");
+              } catch {
+                fieldSize = 0;
+              }
               if (fieldSize > 0) {
                 const action: ShrinkAction = {
                   contentBytes: fieldSize,
@@ -269,7 +292,10 @@ function collectShrinkActions(
             }
 
             // Text/reasoning → trim
-            if ((partType === "text" || partType === "reasoning") && typeof part.content === "string") {
+            if (
+              (partType === "text" || partType === "reasoning") &&
+              typeof part.content === "string"
+            ) {
               const contentSize = Buffer.byteLength(part.content, "utf8");
               if (contentSize > MIN_SHRINKABLE_STRING_BYTES) {
                 const action: ShrinkAction = {
@@ -316,7 +342,10 @@ function collectShrinkActions(
 
 function flushParsedMessages(
   attributes: Record<string, unknown>,
-  parsedMessages: Map<string, { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }>,
+  parsedMessages: Map<
+    string,
+    { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }
+  >,
 ): void {
   for (const [key, wrapper] of parsedMessages) {
     try {
@@ -329,7 +358,10 @@ function flushParsedMessages(
 
 function flushParsedMessage(
   attributes: Record<string, unknown>,
-  parsedMessages: Map<string, { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }>,
+  parsedMessages: Map<
+    string,
+    { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }
+  >,
   key: string,
 ): void {
   const wrapper = parsedMessages.get(key);
@@ -345,7 +377,10 @@ function flushParsedMessage(
 function runShrinkPhase(
   span: OTLPSpanLike,
   attributes: Record<string, unknown>,
-  parsedMessages: Map<string, { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }>,
+  parsedMessages: Map<
+    string,
+    { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }
+  >,
   currentSize: number,
 ): number {
   let nextSize = currentSize;
@@ -429,7 +464,9 @@ export function truncateSpan<T extends OTLPSpanLike>(spanDict: T): T {
               if (parsed && Array.isArray(parsed.messages)) {
                 messageCount = parsed.messages.length;
               }
-            } catch { /* not valid JSON */ }
+            } catch {
+              /* not valid JSON */
+            }
           }
           attributes[key] = serializeOverflowSentinel(messageCount);
           parsedMessages.delete(key);

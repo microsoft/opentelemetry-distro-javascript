@@ -14,7 +14,6 @@ import { fileURLToPath } from "node:url";
  * @returns The directory name of the current module.
  */
 export function dirName(): string {
-   
   // @ts-ignore ESM only output
   return dirname(fileURLToPath(import.meta.url));
 }
@@ -25,7 +24,6 @@ export function dirName(): string {
  * @internal
  */
 export function getModuleParentURL(): string {
-   
   // @ts-ignore ESM only output
   return import.meta.url;
 }

@@ -137,7 +137,7 @@ export function shutdownMicrosoftOpenTelemetry(): Promise<void> {
  * Get the internal SDK instance for testing purposes
  * @internal
  */
- 
+
 export function _getSdkInstance(): NodeSDK | undefined {
   return sdk;
 }

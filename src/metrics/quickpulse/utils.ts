@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
- 
-
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
 import type { SdkLogRecord } from "@opentelemetry/sdk-logs";
 import type {
@@ -394,15 +392,13 @@ export function getLogData(log: SdkLogRecord): ExceptionData | TraceData {
   const customDims = createCustomDimsFromAttributes(log.attributes);
   if (isExceptionTelemetry(log)) {
     return {
-       
       Message: String(log.attributes[SEMATTRS_EXCEPTION_MESSAGE]),
-       
+
       StackTrace: String(log.attributes[SEMATTRS_EXCEPTION_STACKTRACE]),
       CustomDimensions: customDims,
     };
   } else {
     return {
-       
       Message: String(log.body),
       CustomDimensions: customDims,
     };
@@ -483,7 +479,6 @@ function createCustomDimsFromAttributes(
           httpSemanticValues.includes(key as any)
         )
       ) {
-         
         customDims.set(key, String(attributes[key]));
       }
     }

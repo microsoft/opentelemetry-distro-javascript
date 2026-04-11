@@ -22,7 +22,6 @@ import {
 import type { MockInstance } from "vitest";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 
- 
 describe("#LiveMetrics", () => {
   let exportStub: MockInstance<(typeof autoCollect)["quickpulseExporter"]["export"]>;
   let autoCollect: LiveMetrics;
@@ -669,4 +668,3 @@ describe("#LiveMetrics", () => {
     );
   });
 });
- 

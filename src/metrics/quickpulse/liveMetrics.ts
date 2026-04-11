@@ -184,7 +184,7 @@ export class LiveMetrics {
       credentialScopes:
         parsedConnectionString.aadaudience ||
         this.config.azureMonitorExporterOptions.credentialScopes,
-       
+
       postCallback: this.quickPulseDone.bind(this),
       getDocumentsFn: this.getDocuments.bind(this),
       getErrorsFn: this.getErrors.bind(this),
@@ -195,7 +195,7 @@ export class LiveMetrics {
     this.isCollectingData = false;
     this.pingInterval = PING_INTERVAL; // Default
     this.postInterval = POST_INTERVAL;
-     
+
     this.handle = <any>setTimeout(this.goQuickpulse.bind(this), this.pingInterval);
     this.handle.unref(); // Don't block apps from terminating
     this.lastCpuUsage = process.cpuUsage();
@@ -222,7 +222,7 @@ export class LiveMetrics {
       } catch (_error) {
         this.quickPulseDone(undefined);
       }
-       
+
       this.handle = <any>setTimeout(this.goQuickpulse.bind(this), this.pingInterval);
       this.handle.unref();
     }
@@ -231,7 +231,6 @@ export class LiveMetrics {
     }
   }
 
-   
   private async quickPulseDone(response: QuickpulseResponse | undefined): Promise<void> {
     if (!response) {
       if (!this.isCollectingData) {
@@ -259,7 +258,7 @@ export class LiveMetrics {
       if (!this.isCollectingData && this.meterProvider) {
         this.etag = "";
         this.deactivateMetrics();
-         
+
         this.handle = <any>setTimeout(this.goQuickpulse.bind(this), this.pingInterval);
         this.handle.unref();
       }

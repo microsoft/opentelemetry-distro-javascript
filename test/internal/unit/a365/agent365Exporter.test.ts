@@ -291,10 +291,7 @@ describe("Exporter utils", () => {
 
   describe("resolveAgent365Endpoint", () => {
     it("should return prod endpoint for prod category", () => {
-      assert.strictEqual(
-        resolveAgent365Endpoint("prod"),
-        "https://agent365.svc.cloud.microsoft",
-      );
+      assert.strictEqual(resolveAgent365Endpoint("prod"), "https://agent365.svc.cloud.microsoft");
     });
   });
 
@@ -334,7 +331,10 @@ describe("Exporter utils", () => {
       const span = { attributes: { key: largeValue } };
       const result = truncateSpan(span);
       const size = Buffer.byteLength(JSON.stringify(result), "utf8");
-      assert.ok(size <= MAX_SPAN_SIZE_BYTES, `Truncated span is ${size} bytes, expected <= ${MAX_SPAN_SIZE_BYTES}`);
+      assert.ok(
+        size <= MAX_SPAN_SIZE_BYTES,
+        `Truncated span is ${size} bytes, expected <= ${MAX_SPAN_SIZE_BYTES}`,
+      );
       assert.ok((result.attributes!["key"] as string).endsWith("[truncated]"));
     });
 

@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
- 
-
 import fs from "node:fs";
 import path from "node:path";
 import type {
@@ -109,14 +107,22 @@ export class JsonConfig implements MicrosoftOpenTelemetryOptions {
       // Global options
       this.samplingRatio = jsonConfig.samplingRatio as number | undefined;
       this.tracesPerSecond = jsonConfig.tracesPerSecond as number | undefined;
-      this.instrumentationOptions = jsonConfig.instrumentationOptions as InstrumentationOptions | undefined;
+      this.instrumentationOptions = jsonConfig.instrumentationOptions as
+        | InstrumentationOptions
+        | undefined;
       // Azure Monitor-scoped options (flat JSON → nested structure)
       this.azureMonitor = {
-        azureMonitorExporterOptions: jsonConfig.azureMonitorExporterOptions as AzureMonitorExporterOptions | undefined,
-        browserSdkLoaderOptions: jsonConfig.browserSdkLoaderOptions as BrowserSdkLoaderOptions | undefined,
+        azureMonitorExporterOptions: jsonConfig.azureMonitorExporterOptions as
+          | AzureMonitorExporterOptions
+          | undefined,
+        browserSdkLoaderOptions: jsonConfig.browserSdkLoaderOptions as
+          | BrowserSdkLoaderOptions
+          | undefined,
         enableLiveMetrics: jsonConfig.enableLiveMetrics as boolean | undefined,
         enableStandardMetrics: jsonConfig.enableStandardMetrics as boolean | undefined,
-        enableTraceBasedSamplingForLogs: jsonConfig.enableTraceBasedSamplingForLogs as boolean | undefined,
+        enableTraceBasedSamplingForLogs: jsonConfig.enableTraceBasedSamplingForLogs as
+          | boolean
+          | undefined,
       };
       // A365-scoped options
       if (jsonConfig.a365 && typeof jsonConfig.a365 === "object") {

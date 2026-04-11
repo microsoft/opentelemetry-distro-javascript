@@ -71,9 +71,16 @@ export function setToolAttributes(run: Run, span: Span) {
   if (isString(run.name)) {
     span.setAttribute(ATTR_GEN_AI_TOOL_NAME, run.name);
   }
-  if (run.inputs) span.setAttribute(ATTR_GEN_AI_TOOL_CALL_ARGUMENTS, JSON.stringify(run.inputs?.input ?? run.inputs));
+  if (run.inputs)
+    span.setAttribute(
+      ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
+      JSON.stringify(run.inputs?.input ?? run.inputs),
+    );
   if (run.outputs?.output?.kwargs?.content)
-    span.setAttribute(ATTR_GEN_AI_TOOL_CALL_RESULT, JSON.stringify(run.outputs?.output?.kwargs?.content));
+    span.setAttribute(
+      ATTR_GEN_AI_TOOL_CALL_RESULT,
+      JSON.stringify(run.outputs?.output?.kwargs?.content),
+    );
   span.setAttribute(ATTR_GEN_AI_TOOL_TYPE, "extension");
 
   if (run.outputs?.output?.tool_call_id)
@@ -86,17 +93,19 @@ export function setInputMessagesAttribute(run: Run, span: Span) {
     return;
   }
 
-  const preprocess = getScopeType(run) === "inference" && messages.length > 0 ? messages[0] : messages;
-  const processed = preprocess?.map((msg: Record<string, unknown>) => {
-    const content = extractMessageContent(msg);
-    if (!content) return null;
+  const preprocess =
+    getScopeType(run) === "inference" && messages.length > 0 ? messages[0] : messages;
+  const processed = preprocess
+    ?.map((msg: Record<string, unknown>) => {
+      const content = extractMessageContent(msg);
+      if (!content) return null;
 
-    const msgType = getMessageType(msg);
-    if (shouldIncludeInputMessage(msgType)) {
-      return content;
-    }
-    return null;
-  })
+      const msgType = getMessageType(msg);
+      if (shouldIncludeInputMessage(msgType)) {
+        return content;
+      }
+      return null;
+    })
     .filter(Boolean);
 
   if (processed.length > 0) {
@@ -118,7 +127,13 @@ function extractMessageContent(msg: Record<string, unknown>): string | null {
   }
 
   // New LangChain format: {lc: 1, type: "constructor", kwargs: {content}}
-  if (msg.lc === 1 && msg.type === "constructor" && msg.kwargs && typeof msg.kwargs === "object" && !Array.isArray(msg.kwargs)) {
+  if (
+    msg.lc === 1 &&
+    msg.type === "constructor" &&
+    msg.kwargs &&
+    typeof msg.kwargs === "object" &&
+    !Array.isArray(msg.kwargs)
+  ) {
     const kwargs = msg.kwargs as Record<string, unknown>;
     if (isString(kwargs.content)) return kwargs.content;
   }
@@ -243,10 +258,12 @@ export function setOutputMessagesAttribute(run: Run, span: Span) {
 
 // Model - Helper to extract model name from run
 export function getModel(run: Run): string | undefined {
-  return [run.outputs?.generations?.[0]?.[0]?.message?.kwargs?.response_metadata?.model_name,
+  return [
+    run.outputs?.generations?.[0]?.[0]?.message?.kwargs?.response_metadata?.model_name,
     run.extra?.metadata?.ls_model_name,
     run.extra?.invocation_params?.model,
-    run.extra?.invocation_params?.model_name]
+    run.extra?.invocation_params?.model_name,
+  ]
     .map((v) => (v != null ? String(v).trim() : ""))
     .find((v) => v.length > 0);
 }
@@ -260,18 +277,14 @@ export function setModelAttribute(run: Run, span: Span) {
 // Provider
 export function setProviderNameAttribute(run: Run, span: Span) {
   const provider = (run.extra?.metadata as Record<string, unknown> | undefined)?.ls_provider;
-  if (isString(provider))
-    span.setAttribute(ATTR_GEN_AI_PROVIDER_NAME, provider.toLowerCase());
+  if (isString(provider)) span.setAttribute(ATTR_GEN_AI_PROVIDER_NAME, provider.toLowerCase());
 }
 
 export function setSessionIdAttribute(run: Run, span: Span): void {
   const metadata = run.extra?.metadata as Record<string, unknown> | undefined;
   if (!metadata) return;
 
-  const sessionId =
-    metadata.session_id ??
-    metadata.conversation_id ??
-    metadata.thread_id;
+  const sessionId = metadata.session_id ?? metadata.conversation_id ?? metadata.thread_id;
 
   if (typeof sessionId === "string" && sessionId.length > 0) {
     span.setAttribute(ATTR_MICROSOFT_SESSION_ID, sessionId);
@@ -285,18 +298,23 @@ export function setSystemInstructionsAttribute(run: Run, span: Span) {
     return;
   }
 
-  const prompts = Array.isArray(inputs.prompts) ? inputs.prompts.map(p => String(p ?? "").trim()).filter(Boolean).join("\n") : "";
-  if (prompts)
-    return span.setAttribute(ATTR_GEN_AI_SYSTEM_INSTRUCTIONS, prompts);
+  const prompts = Array.isArray(inputs.prompts)
+    ? inputs.prompts
+        .map((p) => String(p ?? "").trim())
+        .filter(Boolean)
+        .join("\n")
+    : "";
+  if (prompts) return span.setAttribute(ATTR_GEN_AI_SYSTEM_INSTRUCTIONS, prompts);
 
   const messages = Array.isArray(inputs.messages) ? inputs.messages : [];
   const systemText = messages
     .filter((m: Record<string, unknown>) => m.lc_type === "system")
-    .map((m: Record<string, unknown>) => String((m.lc_kwargs as Record<string, unknown> | undefined)?.content ?? "").trim())
+    .map((m: Record<string, unknown>) =>
+      String((m.lc_kwargs as Record<string, unknown> | undefined)?.content ?? "").trim(),
+    )
     .filter(Boolean)
     .join("\n");
-  if (systemText)
-    span.setAttribute(ATTR_GEN_AI_SYSTEM_INSTRUCTIONS, systemText);
+  if (systemText) span.setAttribute(ATTR_GEN_AI_SYSTEM_INSTRUCTIONS, systemText);
 }
 
 // Tokens (input and output)
@@ -310,7 +328,10 @@ export function setTokenAttributes(run: Run, span: Span) {
     run.outputs?.message?.response_metadata?.usage ||
     run.outputs?.message?.response_metadata?.tokenUsage ||
     run.outputs?.messages
-      ?.map((msg: Record<string, unknown>) => (msg.response_metadata as Record<string, unknown> | undefined)?.tokenUsage)
+      ?.map(
+        (msg: Record<string, unknown>) =>
+          (msg.response_metadata as Record<string, unknown> | undefined)?.tokenUsage,
+      )
       .filter(Boolean)[0];
 
   if (!usage || typeof usage !== "object") {

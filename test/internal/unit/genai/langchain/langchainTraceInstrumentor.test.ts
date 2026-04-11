@@ -36,7 +36,7 @@ describe("LangChainTraceInstrumentor", () => {
       assert.notStrictEqual(
         mockModule.CallbackManager._configureSync,
         configureSyncOriginal,
-        "_configureSync should be wrapped"
+        "_configureSync should be wrapped",
       );
     });
 
@@ -49,17 +49,11 @@ describe("LangChainTraceInstrumentor", () => {
 
   describe("enable / disable", () => {
     it("throws when not initialized", () => {
-      assert.throws(
-        () => LangChainTraceInstrumentor.enable(),
-        /must be initialized first/
-      );
+      assert.throws(() => LangChainTraceInstrumentor.enable(), /must be initialized first/);
     });
 
     it("throws disable when not initialized", () => {
-      assert.throws(
-        () => LangChainTraceInstrumentor.disable(),
-        /must be initialized first/
-      );
+      assert.throws(() => LangChainTraceInstrumentor.disable(), /must be initialized first/);
     });
 
     it("enable and disable do not throw after initialization", () => {

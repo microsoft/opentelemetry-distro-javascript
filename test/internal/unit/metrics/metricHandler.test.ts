@@ -292,7 +292,7 @@ describe("MetricHandler", () => {
       const metricReader = metricHandler.getMetricReader();
 
       // Access the private _exportInterval property to verify it was set correctly
-       
+
       const exportInterval = (metricReader as any)._exportInterval;
       assert.strictEqual(
         exportInterval,
@@ -318,7 +318,7 @@ describe("MetricHandler", () => {
       const metricReader = metricHandler.getMetricReader();
 
       // Should use default interval when env var is invalid
-       
+
       const exportInterval = (metricReader as any)._exportInterval;
       assert.strictEqual(
         exportInterval,
@@ -344,7 +344,7 @@ describe("MetricHandler", () => {
       const metricReader = metricHandler.getMetricReader();
 
       // Should use default since negative values are invalid
-       
+
       const exportInterval = (metricReader as any)._exportInterval;
       assert.strictEqual(
         exportInterval,
@@ -370,7 +370,7 @@ describe("MetricHandler", () => {
       const metricReader = metricHandler.getMetricReader();
 
       // Should use default since zero is invalid
-       
+
       const exportInterval = (metricReader as any)._exportInterval;
       assert.strictEqual(
         exportInterval,
@@ -396,7 +396,7 @@ describe("MetricHandler", () => {
       const metricReader = metricHandler.getMetricReader();
 
       // Should use default when env var is not set
-       
+
       const exportInterval = (metricReader as any)._exportInterval;
       assert.strictEqual(
         exportInterval,
@@ -415,7 +415,7 @@ describe("MetricHandler", () => {
       const metricReader = metricHandler.getMetricReader();
 
       // Should use the default _collectionInterval (60000ms)
-       
+
       const exportInterval = (metricReader as any)._exportInterval;
       assert.strictEqual(
         exportInterval,
@@ -441,7 +441,7 @@ describe("MetricHandler", () => {
       const metricReader = metricHandler.getMetricReader();
 
       // Should use environment variable over default
-       
+
       const exportInterval = (metricReader as any)._exportInterval;
       assert.strictEqual(
         exportInterval,
@@ -467,7 +467,7 @@ describe("MetricHandler", () => {
       const metricReader = metricHandler.getMetricReader();
 
       // parseInt should handle whitespace correctly
-       
+
       const exportInterval = (metricReader as any)._exportInterval;
       assert.strictEqual(
         exportInterval,
@@ -493,7 +493,7 @@ describe("MetricHandler", () => {
       const metricReader = metricHandler.getMetricReader();
 
       // parseInt should truncate decimal values
-       
+
       const exportInterval = (metricReader as any)._exportInterval;
       assert.strictEqual(
         exportInterval,
