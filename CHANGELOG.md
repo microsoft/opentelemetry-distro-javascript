@@ -3,7 +3,7 @@
 ## [0.1.0-alpha.2] - Unreleased
 
 ### Features Added
-- Add A365 Exporter.([#15](https://github.com/microsoft/opentelemetry-distro-javascript/pull/15))
+- Add A365 Exporter. ([#15](https://github.com/microsoft/opentelemetry-distro-javascript/pull/15))
 
 ## [0.1.0-alpha.1] - 2026-04-10
 
@@ -13,7 +13,7 @@
 - Modular setup architecture with extension points for OTLP and A365.
 - Migrated `@azure/monitor-opentelemetry` distro code in-repo for direct iteration.
 - Microsoft OpenTelemetry distro rebranding and configuration support.
-- Add langchain isntrumentation.([#10](https://github.com/microsoft/opentelemetry-distro-javascript/pull/10))
+- Add langchain instrumentation. ([#10](https://github.com/microsoft/opentelemetry-distro-javascript/pull/10))
 
 ### Other Changes
 - Initial project scaffolding with TypeScript, ESLint, and Vitest.

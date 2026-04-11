@@ -14,7 +14,10 @@ import {
 } from "../../genai/semconv.js";
 
 // Message attribute keys that receive special truncation handling
-const MESSAGE_ATTR_KEYS: Set<string> = new Set([ATTR_GEN_AI_INPUT_MESSAGES, ATTR_GEN_AI_OUTPUT_MESSAGES]);
+const MESSAGE_ATTR_KEYS: Set<string> = new Set([
+  ATTR_GEN_AI_INPUT_MESSAGES,
+  ATTR_GEN_AI_OUTPUT_MESSAGES,
+]);
 
 // A365 message schema version used in overflow sentinels
 const A365_MESSAGE_SCHEMA_VERSION = "1.0";
