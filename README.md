@@ -101,9 +101,7 @@ The software may collect information about you and your use of the software and 
 
 ### Internal Telemetry
 
-Internal telemetry can be disabled by setting the environment variable `APPLICATION_INSIGHTS_NO_STATSBEAT` to `true`.
-
-<!-- TODO: Confirm the variable name: is it the same as Node.js describe at https://docs.azure.cn/en-us/azure-monitor/app/statsbeat?tabs=node#disable-statsbeat -->
+Internal telemetry can be disabled by setting the environment variable `APPLICATIONINSIGHTS_STATSBEAT_DISABLED` to `true`.
 
 ## Trademarks
 
@@ -111,7 +109,7 @@ This project may contain trademarks or logos for projects, products, or services
 
 ## Reporting Security Issues
 
-[SECURITY.md]
+See [SECURITY.md](./SECURITY.md) for information on reporting vulnerabilities.
 
 ## License
 
