@@ -39,7 +39,7 @@ let disposeAzureMonitor: (() => void) | undefined;
  * providers and instrumentations, then attaches the configured exporters:
  * - Azure Monitor (when `options.azureMonitor` is provided)
  * - OTLP HTTP (when `OTEL_EXPORTER_OTLP_ENDPOINT` is set)
- * - A365 (when `options.a365.enabled` is true or `MICROSOFT_OTEL_A365_EXPORTER_ENABLED=true`)
+ * - A365 (when `options.a365.enabled` is true or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`)
  *
  * @param options - Microsoft OpenTelemetry configuration options
  */

@@ -7,20 +7,30 @@ import type {
   A365BaggageOptions,
   A365HostingOptions,
 } from "./A365ConfigurationOptions.js";
-import { getEnv } from "../utils/utils.js";
 import { Logger } from "../../shared/logging/index.js";
 import { JsonConfig } from "../../shared/jsonConfig.js";
 
 /**
+ * Parse an environment variable as a boolean.
+ * Recognizes 'true', '1', 'yes', 'on' (case-insensitive) as true; all other values as false.
+ * Matches the upstream Agent365-nodejs RuntimeConfiguration.parseEnvBoolean.
+ */
+function parseEnvBoolean(envValue: string | undefined): boolean {
+  if (!envValue) return false;
+  return ["true", "1", "yes", "on"].includes(envValue.toLowerCase());
+}
+
+/**
  * Environment variable names for A365 configuration.
- * These follow the MICROSOFT_OTEL_A365_* convention defined in PLANNING.md.
+ * These match the upstream Agent365-nodejs conventions.
  */
 export const A365_ENV_VARS = {
-  EXPORTER_ENABLED: "MICROSOFT_OTEL_A365_EXPORTER_ENABLED",
-  PER_REQUEST_EXPORT: "MICROSOFT_OTEL_A365_PER_REQUEST_EXPORT",
-  AUTH_SCOPES: "MICROSOFT_OTEL_A365_AUTH_SCOPES",
-  DOMAIN: "MICROSOFT_OTEL_A365_DOMAIN",
-  CLUSTER_CATEGORY: "MICROSOFT_OTEL_A365_CLUSTER_CATEGORY",
+  EXPORTER_ENABLED: "ENABLE_A365_OBSERVABILITY_EXPORTER",
+  PER_REQUEST_EXPORT: "ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT",
+  AUTH_SCOPES: "A365_OBSERVABILITY_SCOPES_OVERRIDE",
+  DOMAIN: "A365_OBSERVABILITY_DOMAIN_OVERRIDE",
+  CLUSTER_CATEGORY: "CLUSTER_CATEGORY",
+  LOG_LEVEL: "A365_OBSERVABILITY_LOG_LEVEL",
 } as const;
 
 const DEFAULT_AUTH_SCOPE = "https://api.powerplatform.com/.default";
@@ -47,7 +57,7 @@ const VALID_CLUSTER_CATEGORIES: ReadonlySet<string> = new Set([
  *   1. Defaults
  *   2. Programmatic options (`A365Options`)
  *   3. JSON config (`applicationinsights.json` → `a365` key)
- *   4. Environment variables (`MICROSOFT_OTEL_A365_*`)
+ *   4. Environment variables (see `A365_ENV_VARS`)
  */
 export class A365Configuration {
   /** Whether A365 observability is enabled. */
@@ -102,32 +112,27 @@ export class A365Configuration {
     }
 
     // 4. Apply environment variable overrides (highest precedence)
-    if (getEnv(A365_ENV_VARS.EXPORTER_ENABLED) === "true") {
-      enabled = true;
-    } else if (getEnv(A365_ENV_VARS.EXPORTER_ENABLED) === "false") {
-      enabled = false;
+    const envEnabled = process.env[A365_ENV_VARS.EXPORTER_ENABLED];
+    if (envEnabled !== undefined) {
+      enabled = parseEnvBoolean(envEnabled);
     }
 
-    if (getEnv(A365_ENV_VARS.PER_REQUEST_EXPORT) === "true") {
-      perRequestExport = true;
-    } else if (getEnv(A365_ENV_VARS.PER_REQUEST_EXPORT) === "false") {
-      perRequestExport = false;
+    const envPerRequest = process.env[A365_ENV_VARS.PER_REQUEST_EXPORT];
+    if (envPerRequest !== undefined) {
+      perRequestExport = parseEnvBoolean(envPerRequest);
     }
 
-    const envScopes = getEnv(A365_ENV_VARS.AUTH_SCOPES);
+    const envScopes = process.env[A365_ENV_VARS.AUTH_SCOPES]?.trim();
     if (envScopes) {
-      authScopes = envScopes
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+      authScopes = envScopes.split(/\s+/).filter(Boolean);
     }
 
-    const envDomain = getEnv(A365_ENV_VARS.DOMAIN);
+    const envDomain = process.env[A365_ENV_VARS.DOMAIN]?.trim();
     if (envDomain) {
-      domainOverride = envDomain;
+      domainOverride = envDomain.replace(/\/+$/, "");
     }
 
-    const envCluster = getEnv(A365_ENV_VARS.CLUSTER_CATEGORY);
+    const envCluster = process.env[A365_ENV_VARS.CLUSTER_CATEGORY]?.toLowerCase();
     if (envCluster && VALID_CLUSTER_CATEGORIES.has(envCluster)) {
       clusterCategory = envCluster as ClusterCategory;
     }
@@ -168,7 +173,7 @@ export class A365Configuration {
     if (hasNonTrivialOptions) {
       Logger.getInstance().warn(
         "A365 configuration options are set but A365 is not enabled. " +
-          "Set `a365.enabled: true` or `MICROSOFT_OTEL_A365_EXPORTER_ENABLED=true` to enable.",
+          "Set `a365.enabled: true` or `ENABLE_A365_OBSERVABILITY_EXPORTER=true` to enable.",
       );
     }
   }
