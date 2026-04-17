@@ -1,5 +1,11 @@
 # Release History
 
+## [0.1.0-alpha.2] - Unreleased
+
+### Features Added
+- Add OpenAI Agents SDK instrumentation. ([#14](https://github.com/microsoft/opentelemetry-distro-javascript/pull/14))
+
+
 ## [0.1.0-alpha.1] - 2026-04-10
 
 ### Features Added
