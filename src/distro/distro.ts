@@ -6,8 +6,11 @@ import { logs } from "@opentelemetry/api-logs";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { MetricReader, ViewOptions } from "@opentelemetry/sdk-metrics";
-import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import {
+  type SpanProcessor,
+  BatchSpanProcessor,
+  SimpleSpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 
 import { InternalConfig } from "../shared/config.js";
@@ -108,7 +111,10 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       domainOverride: a365Config.domainOverride,
       tokenResolver: a365Config.tokenResolver,
     });
-    spanProcessors.push(new BatchSpanProcessor(a365Exporter));
+    const a365Processor = a365Config.perRequestExport
+      ? new SimpleSpanProcessor(a365Exporter)
+      : new BatchSpanProcessor(a365Exporter);
+    spanProcessors.push(a365Processor);
   }
 
   const views: ViewOptions[] = metricHandler.getViews().concat(customViews);

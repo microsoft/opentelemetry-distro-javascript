@@ -367,4 +367,3 @@ export interface StatsbeatEnvironmentConfig {
   instrumentation: StatsbeatInstrumentation;
   feature: StatsbeatFeature;
 }
-

@@ -49,8 +49,8 @@ async function main(): Promise<void> {
   const tracer = trace.getTracer("a365-sample");
   const span = tracer.startSpan("sample-operation", {
     attributes: {
-      "microsoft.a365.tenant.id": "sample-tenant-id",
-      "microsoft.a365.agent.id": "sample-agent-id",
+      "microsoft.tenant.id": "sample-tenant-id",
+      "gen_ai.agent.id": "sample-agent-id",
     },
   });
 
@@ -62,8 +62,6 @@ async function main(): Promise<void> {
 
   span.end();
 
-  // Give the batch processor time to flush
-  await new Promise((resolve) => setTimeout(resolve, 6000));
   console.log("Done.");
 }
 
