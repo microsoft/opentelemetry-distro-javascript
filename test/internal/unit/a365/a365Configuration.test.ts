@@ -111,8 +111,8 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.perRequestExport, true);
     });
 
-    it("should override auth scopes from env (comma-separated)", () => {
-      process.env[A365_ENV_VARS.AUTH_SCOPES] = "scope1, scope2, scope3";
+    it("should override auth scopes from env (space-separated)", () => {
+      process.env[A365_ENV_VARS.AUTH_SCOPES] = "scope1 scope2 scope3";
       const config = new A365Configuration();
       assert.deepStrictEqual(config.authScopes, ["scope1", "scope2", "scope3"]);
     });
@@ -249,14 +249,14 @@ describe("A365Configuration", () => {
 
   describe("env var constants", () => {
     it("should have correct env var names", () => {
-      assert.strictEqual(A365_ENV_VARS.EXPORTER_ENABLED, "MICROSOFT_OTEL_A365_EXPORTER_ENABLED");
+      assert.strictEqual(A365_ENV_VARS.EXPORTER_ENABLED, "ENABLE_A365_OBSERVABILITY_EXPORTER");
       assert.strictEqual(
         A365_ENV_VARS.PER_REQUEST_EXPORT,
-        "MICROSOFT_OTEL_A365_PER_REQUEST_EXPORT",
+        "ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT",
       );
-      assert.strictEqual(A365_ENV_VARS.AUTH_SCOPES, "MICROSOFT_OTEL_A365_AUTH_SCOPES");
-      assert.strictEqual(A365_ENV_VARS.DOMAIN, "MICROSOFT_OTEL_A365_DOMAIN");
-      assert.strictEqual(A365_ENV_VARS.CLUSTER_CATEGORY, "MICROSOFT_OTEL_A365_CLUSTER_CATEGORY");
+      assert.strictEqual(A365_ENV_VARS.AUTH_SCOPES, "A365_OBSERVABILITY_SCOPES_OVERRIDE");
+      assert.strictEqual(A365_ENV_VARS.DOMAIN, "A365_OBSERVABILITY_DOMAIN_OVERRIDE");
+      assert.strictEqual(A365_ENV_VARS.CLUSTER_CATEGORY, "CLUSTER_CATEGORY");
     });
   });
 });

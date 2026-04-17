@@ -8,9 +8,9 @@
  * provide a `tokenResolver` that returns a bearer token for the given agent/tenant pair.
  *
  * Configuration can also be set via environment variables (highest precedence):
- *   - MICROSOFT_OTEL_A365_EXPORTER_ENABLED=true
- *   - MICROSOFT_OTEL_A365_CLUSTER_CATEGORY=dev
- *   - MICROSOFT_OTEL_A365_DOMAIN=https://custom.domain.com
+ *   - ENABLE_A365_OBSERVABILITY_EXPORTER=true
+ *   - CLUSTER_CATEGORY=dev
+ *   - A365_OBSERVABILITY_DOMAIN_OVERRIDE=https://custom.domain.com
  */
 
 import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";

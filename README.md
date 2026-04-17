@@ -71,11 +71,12 @@ A365 options can also be set via environment variables (highest precedence):
 
 | Environment Variable | Description |
 |---|---|
-| `MICROSOFT_OTEL_A365_EXPORTER_ENABLED` | `"true"` / `"false"` — override `enabled` |
-| `MICROSOFT_OTEL_A365_PER_REQUEST_EXPORT` | `"true"` / `"false"` — override `perRequestExport` |
-| `MICROSOFT_OTEL_A365_AUTH_SCOPES` | Comma-separated list of OAuth scopes |
-| `MICROSOFT_OTEL_A365_DOMAIN` | Override service domain |
-| `MICROSOFT_OTEL_A365_CLUSTER_CATEGORY` | Override cluster category |
+| `ENABLE_A365_OBSERVABILITY_EXPORTER` | `"true"` / `"false"` — override `enabled` |
+| `ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT` | `"true"` / `"false"` — override `perRequestExport` |
+| `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated list of OAuth scopes |
+| `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override service domain |
+| `CLUSTER_CATEGORY` | Override cluster category |
+| `A365_OBSERVABILITY_LOG_LEVEL` | SDK log level (`none`, `info`, `warn`, `error`) |
 
 ### Example
 
