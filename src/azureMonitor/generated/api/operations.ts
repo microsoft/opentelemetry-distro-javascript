@@ -33,25 +33,23 @@ export function _publishSend(
       allowReserved: options?.requestOptions?.skipUrlEncoding,
     },
   );
-  return context
-    .path(path)
-    .post({
-      ...operationOptionsToRequestParameters(options),
-      contentType: "application/json",
-      headers: {
-        ...(options?.configurationEtag !== undefined
-          ? { "x-ms-qps-configuration-etag": options?.configurationEtag }
-          : {}),
-        ...(options?.transmissionTime !== undefined
-          ? { "x-ms-qps-transmission-time": options?.transmissionTime }
-          : {}),
-        accept: "application/json",
-        ...options.requestOptions?.headers,
-      },
-      body: !options["monitoringDataPoints"]
-        ? options["monitoringDataPoints"]
-        : monitoringDataPointArraySerializer(options["monitoringDataPoints"]),
-    });
+  return context.path(path).post({
+    ...operationOptionsToRequestParameters(options),
+    contentType: "application/json",
+    headers: {
+      ...(options?.configurationEtag !== undefined
+        ? { "x-ms-qps-configuration-etag": options?.configurationEtag }
+        : {}),
+      ...(options?.transmissionTime !== undefined
+        ? { "x-ms-qps-transmission-time": options?.transmissionTime }
+        : {}),
+      accept: "application/json",
+      ...options.requestOptions?.headers,
+    },
+    body: !options["monitoringDataPoints"]
+      ? options["monitoringDataPoints"]
+      : monitoringDataPointArraySerializer(options["monitoringDataPoints"]),
+  });
 }
 
 export async function _publishDeserialize(
@@ -92,36 +90,34 @@ export function _isSubscribedSend(
       allowReserved: options?.requestOptions?.skipUrlEncoding,
     },
   );
-  return context
-    .path(path)
-    .post({
-      ...operationOptionsToRequestParameters(options),
-      contentType: "application/json",
-      headers: {
-        ...(options?.transmissionTime !== undefined
-          ? { "x-ms-qps-transmission-time": options?.transmissionTime }
-          : {}),
-        ...(options?.machineName !== undefined
-          ? { "x-ms-qps-machine-name": options?.machineName }
-          : {}),
-        ...(options?.instanceName !== undefined
-          ? { "x-ms-qps-instance-name": options?.instanceName }
-          : {}),
-        ...(options?.streamId !== undefined ? { "x-ms-qps-stream-id": options?.streamId } : {}),
-        ...(options?.roleName !== undefined ? { "x-ms-qps-role-name": options?.roleName } : {}),
-        ...(options?.invariantVersion !== undefined
-          ? { "x-ms-qps-invariant-version": options?.invariantVersion }
-          : {}),
-        ...(options?.configurationEtag !== undefined
-          ? { "x-ms-qps-configuration-etag": options?.configurationEtag }
-          : {}),
-        accept: "application/json",
-        ...options.requestOptions?.headers,
-      },
-      body: !options["monitoringDataPoint"]
-        ? options["monitoringDataPoint"]
-        : monitoringDataPointSerializer(options["monitoringDataPoint"]),
-    });
+  return context.path(path).post({
+    ...operationOptionsToRequestParameters(options),
+    contentType: "application/json",
+    headers: {
+      ...(options?.transmissionTime !== undefined
+        ? { "x-ms-qps-transmission-time": options?.transmissionTime }
+        : {}),
+      ...(options?.machineName !== undefined
+        ? { "x-ms-qps-machine-name": options?.machineName }
+        : {}),
+      ...(options?.instanceName !== undefined
+        ? { "x-ms-qps-instance-name": options?.instanceName }
+        : {}),
+      ...(options?.streamId !== undefined ? { "x-ms-qps-stream-id": options?.streamId } : {}),
+      ...(options?.roleName !== undefined ? { "x-ms-qps-role-name": options?.roleName } : {}),
+      ...(options?.invariantVersion !== undefined
+        ? { "x-ms-qps-invariant-version": options?.invariantVersion }
+        : {}),
+      ...(options?.configurationEtag !== undefined
+        ? { "x-ms-qps-configuration-etag": options?.configurationEtag }
+        : {}),
+      accept: "application/json",
+      ...options.requestOptions?.headers,
+    },
+    body: !options["monitoringDataPoint"]
+      ? options["monitoringDataPoint"]
+      : monitoringDataPointSerializer(options["monitoringDataPoint"]),
+  });
 }
 
 export async function _isSubscribedDeserialize(
