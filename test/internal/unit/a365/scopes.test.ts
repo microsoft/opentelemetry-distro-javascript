@@ -1178,9 +1178,9 @@ describe("Request content and message serialization (span attributes)", () => {
 
     it("should require tenantId on agentDetails", () => {
       const response: OutputResponse = { messages: "test" };
-      expect(() =>
-        OutputScope.start(testRequest, response, { agentId: "a1" }),
-      ).toThrow("tenantId is required");
+      expect(() => OutputScope.start(testRequest, response, { agentId: "a1" })).toThrow(
+        "tenantId is required",
+      );
     });
 
     it("should record output messages from response", () => {
@@ -1235,7 +1235,10 @@ describe("Request content and message serialization (span attributes)", () => {
       expect(calls).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ key: OpenTelemetryConstants.USER_ID_KEY, val: "user-1" }),
-          expect.objectContaining({ key: OpenTelemetryConstants.USER_EMAIL_KEY, val: "u@test.com" }),
+          expect.objectContaining({
+            key: OpenTelemetryConstants.USER_EMAIL_KEY,
+            val: "u@test.com",
+          }),
         ]),
       );
       scope.dispose();

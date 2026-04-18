@@ -6,10 +6,7 @@ import { logs } from "@opentelemetry/api-logs";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { MetricReader, ViewOptions } from "@opentelemetry/sdk-metrics";
-import {
-  type SpanProcessor,
-  BatchSpanProcessor,
-} from "@opentelemetry/sdk-trace-base";
+import { type SpanProcessor, BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 
 import { InternalConfig } from "../shared/config.js";
@@ -116,7 +113,9 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       tokenResolver: a365Config.tokenResolver,
     });
     // A365SpanProcessor copies baggage (tenant, agent, session, etc.) to span attributes
-    spanProcessors.push(new A365SpanProcessor());
+    if (a365Config.baggage.enrichSpans) {
+      spanProcessors.push(new A365SpanProcessor());
+    }
     // PerRequestSpanProcessor buffers spans per trace and exports on root completion
     // with the request's auth token; BatchSpanProcessor for standard batch export
     const a365ExportProcessor = a365Config.perRequestExport

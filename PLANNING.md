@@ -179,3 +179,82 @@ Provide runnable sample apps covering the main scenarios:
 - Map external instrumentation span attributes and naming to OpenTelemetry GenAI semantic conventions
 - Provide adapters or processors that normalize non-standard telemetry without taking a direct dependency on external instrumentation packages
 - Document which external instrumentations are supported for normalization and any known gaps
+
+## TODO: A365 Gap Analysis (agent365-nodejs parity)
+
+Comparison of our in-repo A365 code against the full `agent365-nodejs` SDK. Items marked ✅ are implemented; ❌ items need to be built.
+
+### agents-a365-observability (core) — Gaps
+
+| File | Description | Status |
+|------|-------------|--------|
+| `PerRequestSpanProcessorConfiguration.ts` | Dedicated config for per-request processor | ❌ Missing |
+| `PerRequestSpanProcessorConfigurationOptions.ts` | Options interface for above | ❌ Missing |
+| `PerRequestProcessorInternalOverrides.ts` | Internal overrides for per-request processor | ❌ Missing |
+| `trace-context-propagation.ts` | Distributed tracing context propagation | ❌ Missing |
+| `ObservabilityBuilder.ts` | Builder pattern for observability setup | ❌ Missing |
+| `ObservabilityManager.ts` | Lifecycle manager for observability | ❌ Missing |
+| `utils/logging.ts` | ILogger event helpers | ❌ Missing |
+| `util.ts` (root tracing) | May differ from our `exporter/utils.ts` / `processors/util.ts` | ⚠️ Review |
+
+### agents-a365-observability-hosting (entire package missing)
+
+| File | Description | Status |
+|------|-------------|--------|
+| `middleware/ObservabilityHostingManager.ts` | Hosting lifecycle manager | ❌ Missing |
+| `middleware/BaggageMiddleware.ts` | HTTP baggage middleware | ❌ Missing |
+| `middleware/OutputLoggingMiddleware.ts` | Output logging middleware | ❌ Missing |
+| `utils/BaggageBuilderUtils.ts` | Baggage builder utilities | ❌ Missing |
+| `utils/ScopeUtils.ts` | Scope utility helpers | ❌ Missing |
+| `utils/TurnContextUtils.ts` | Turn context utilities | ❌ Missing |
+| `caching/AgenticTokenCache.ts` | Agentic token cache | ❌ Missing |
+
+### agents-a365-runtime (entire package missing)
+
+| File | Description | Status |
+|------|-------------|--------|
+| `environment-utils.ts` | Environment utilities | ❌ Missing |
+| `power-platform-api-discovery.ts` | Power Platform API discovery | ❌ Missing |
+| `agentic-authorization-service.ts` | Agentic authorization service | ❌ Missing |
+| `operation-error.ts` | Operation error types | ❌ Missing |
+| `operation-result.ts` | Operation result types | ❌ Missing |
+| `utility.ts` | General utilities | ❌ Missing |
+| `configuration/` | Config provider | ❌ Missing |
+
+### agents-a365-tooling (entire package missing)
+
+| File | Description | Status |
+|------|-------------|--------|
+| `McpToolServerConfigurationService.ts` | MCP tool server configuration | ❌ Missing |
+| `contracts.ts` | Tooling contracts | ❌ Missing |
+| `Utility.ts` | Tooling utilities | ❌ Missing |
+| `configuration/` | Tooling configuration | ❌ Missing |
+| `models/` | Tooling models | ❌ Missing |
+
+### agents-a365-notifications (entire package missing)
+
+| File | Description | Status |
+|------|-------------|--------|
+| `agent-notification.ts` | Agent notification handler | ❌ Missing |
+| `constants.ts` | Notification constants | ❌ Missing |
+| `extensions/` | Notification extensions | ❌ Missing |
+| `models/` | Notification models | ❌ Missing |
+
+### Extension packages (all missing)
+
+| Package | Status |
+|---------|--------|
+| `agents-a365-observability-extensions-langchain` | ❌ Missing |
+| `agents-a365-observability-extensions-openai` | ❌ Missing |
+| `agents-a365-tooling-extensions-claude` | ❌ Missing |
+| `agents-a365-tooling-extensions-langchain` | ❌ Missing |
+| `agents-a365-tooling-extensions-openai` | ❌ Missing |
+
+### Priority Order
+
+1. **Core observability gaps** — `trace-context-propagation`, `PerRequestSpanProcessorConfiguration*`, `ObservabilityBuilder/Manager`, `utils/logging`
+2. **Hosting middleware** — `ObservabilityHostingManager`, baggage/output middleware, scope utils
+3. **Runtime** — env utils, API discovery, auth service
+4. **Tooling** — MCP tool server config
+5. **Notifications** — agent notifications
+6. **Extension packages** — langchain/openai/claude integrations

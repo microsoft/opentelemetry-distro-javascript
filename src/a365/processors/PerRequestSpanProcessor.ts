@@ -143,7 +143,7 @@ export class PerRequestSpanProcessor implements SpanProcessor {
 
     const root = isRootSpanFromContext(ctx);
     logger.info(
-      `[PerRequestSpanProcessor] Span start name=${span.name} traceId=${traceId} spanId=${span.spanContext().spanId}` +
+      `[PerRequestSpanProcessor] Span start traceId=${traceId} spanId=${span.spanContext().spanId}` +
         ` root=${root} openCount=${buf.openCount}`,
     );
 
