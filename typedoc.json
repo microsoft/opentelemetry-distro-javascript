@@ -1,0 +1,10 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "out": "docs",
+  "tsconfig": "tsconfig.json",
+  "name": "@microsoft/opentelemetry",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "excludeExternals": true
+}

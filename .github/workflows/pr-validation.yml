@@ -33,6 +33,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Generate docs
+        run: npm run docs
+
   tests:
     name: Tests (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest

@@ -20,6 +20,9 @@ dist-*/
 .DS_Store
 Thumbs.db
 
+# Generated docs
+docs/
+
 # Test coverage
 coverage/
 
