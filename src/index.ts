@@ -18,37 +18,46 @@ export type {
   A365Options,
 } from "./distro/index.js";
 
-// ── Re-exports from A365 configuration ──────────────────────────────────────
-export { A365Configuration } from "./a365/index.js";
-export type { ClusterCategory, A365BaggageOptions, A365HostingOptions } from "./a365/index.js";
-
-// ── Re-exports from A365 scopes (manual telemetry API) ──────────────────────
+// ── Re-exports from @microsoft/agents-a365-observability ────────────────────
 export {
+  // Scopes (manual telemetry API)
   OpenTelemetryScope,
   InvokeAgentScope,
   ExecuteToolScope,
   InferenceScope,
   OutputScope,
+  // Constants
   OpenTelemetryConstants,
+  // Enums
   MessageRole,
   FinishReason,
   InferenceOperationType,
-  isParentSpanRef,
-  createContextWithParentSpanRef,
+  // Context propagation
   runWithParentSpanRef,
+  createContextWithParentSpanRef,
   injectContextToHeaders,
   extractContextFromHeaders,
   runWithExtractedTraceContext,
+  // Baggage
   BaggageBuilder,
   BaggageScope,
-  A365SpanProcessor,
-  PerRequestSpanProcessor,
-  GENERIC_ATTRIBUTES,
-  INVOKE_AGENT_ATTRIBUTES,
+  // Token context
   runWithExportToken,
   updateExportToken,
   getExportToken,
-} from "./a365/index.js";
+  // Message utilities
+  serializeMessages,
+  normalizeInputMessages,
+  normalizeOutputMessages,
+  safeSerializeToJson,
+  // Exporter utilities
+  isPerRequestExportEnabled,
+  MAX_SPAN_SIZE_BYTES,
+  // Builder / Manager
+  ObservabilityManager,
+} from "@microsoft/agents-a365-observability";
+export { Builder as ObservabilityBuilder } from "@microsoft/agents-a365-observability";
+export type { BuilderOptions as ObservabilityBuilderOptions } from "@microsoft/agents-a365-observability";
 export type {
   AgentDetails,
   UserDetails,
@@ -73,8 +82,12 @@ export type {
   ResponseMessagesParam,
   MessagePart,
   HeadersCarrier,
-} from "./a365/index.js";
-export type { PerRequestSpanProcessorOptions } from "./a365/index.js";
+  Agent365ExporterOptions,
+} from "@microsoft/agents-a365-observability";
+export type { ILogger as A365Logger } from "@microsoft/agents-a365-observability";
+
+// ── Re-exports from @microsoft/agents-a365-runtime ──────────────────────────
+export { ClusterCategory } from "@microsoft/agents-a365-runtime";
 
 // ── Re-exports from types ───────────────────────────────────────────────────
 export type { OpenAIAgentsInstrumentationConfig, LangChainInstrumentationConfig } from "./types.js";
