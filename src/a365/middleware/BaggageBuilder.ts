@@ -240,7 +240,7 @@ export class BaggageBuilder {
  * Manages the lifecycle of baggage values, setting them in the OTel context
  * and restoring the previous context when the scope ends.
  */
-export class BaggageScope implements Disposable {
+export class BaggageScope {
   /** @internal Exposed for testing. */
   readonly contextWithBaggage: Context;
 

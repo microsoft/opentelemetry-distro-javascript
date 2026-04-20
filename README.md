@@ -76,7 +76,6 @@ A365 options can also be set via environment variables (highest precedence):
 | `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated list of OAuth scopes |
 | `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override service domain |
 | `CLUSTER_CATEGORY` | Override cluster category |
-| `A365_OBSERVABILITY_LOG_LEVEL` | SDK log level (`none`, `info`, `warn`, `error`) |
 
 ### Example
 

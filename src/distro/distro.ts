@@ -6,11 +6,7 @@ import { logs } from "@opentelemetry/api-logs";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { MetricReader, ViewOptions } from "@opentelemetry/sdk-metrics";
-import {
-  type SpanProcessor,
-  BatchSpanProcessor,
-  SimpleSpanProcessor,
-} from "@opentelemetry/sdk-trace-base";
+import { type SpanProcessor, BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 
 import { InternalConfig } from "../shared/config.js";
@@ -22,7 +18,12 @@ import { patchOpenTelemetryInstrumentationEnable } from "../azureMonitor/utils/o
 import { parseResourceDetectorsFromEnvVar } from "../utils/common.js";
 import { setupAzureMonitorComponents } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
-import { A365Configuration, Agent365Exporter } from "../a365/index.js";
+import {
+  A365Configuration,
+  Agent365Exporter,
+  A365SpanProcessor,
+  PerRequestSpanProcessor,
+} from "../a365/index.js";
 import type { MicrosoftOpenTelemetryOptions } from "../types.js";
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
 
@@ -111,10 +112,16 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       domainOverride: a365Config.domainOverride,
       tokenResolver: a365Config.tokenResolver,
     });
-    const a365Processor = a365Config.perRequestExport
-      ? new SimpleSpanProcessor(a365Exporter)
+    // A365SpanProcessor copies baggage (tenant, agent, session, etc.) to span attributes
+    if (a365Config.baggage.enrichSpans) {
+      spanProcessors.push(new A365SpanProcessor());
+    }
+    // PerRequestSpanProcessor buffers spans per trace and exports on root completion
+    // with the request's auth token; BatchSpanProcessor for standard batch export
+    const a365ExportProcessor = a365Config.perRequestExport
+      ? new PerRequestSpanProcessor(a365Exporter)
       : new BatchSpanProcessor(a365Exporter);
-    spanProcessors.push(a365Processor);
+    spanProcessors.push(a365ExportProcessor);
   }
 
   const views: ViewOptions[] = metricHandler.getViews().concat(customViews);

@@ -15,6 +15,7 @@ import {
   ExecuteToolScope,
   InvokeAgentScope,
   InferenceScope,
+  OutputScope,
   OpenTelemetryScope,
   OpenTelemetryConstants,
 } from "../../../../src/a365/index.js";
@@ -25,6 +26,7 @@ import type {
   InferenceDetails,
   UserDetails,
   InputMessages,
+  OutputResponse,
 } from "../../../../src/a365/index.js";
 import {
   InferenceOperationType,
@@ -1145,6 +1147,102 @@ describe("Request content and message serialization (span attributes)", () => {
       expect(parsed.messages).toHaveLength(1);
       expect(parsed.messages[0].role).toBe("assistant");
       expect(parsed.messages[0].parts[0].content).toBe("single output");
+    });
+  });
+
+  describe("OutputScope", () => {
+    it("should create scope with agent and request details", () => {
+      const spy = vi.spyOn(OpenTelemetryScope.prototype as any, "setTagMaybe");
+      const response: OutputResponse = {
+        messages: "Hello from agent",
+      };
+      const scope = OutputScope.start(testRequest, response, testAgentDetails);
+
+      expect(scope).toBeInstanceOf(OutputScope);
+      const calls = spy.mock.calls.map((args) => ({ key: args[0], val: args[1] }));
+      expect(calls).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            key: OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY,
+            val: testRequest.conversationId,
+          }),
+          expect.objectContaining({
+            key: OpenTelemetryConstants.CHANNEL_NAME_KEY,
+            val: testRequest.channel?.name,
+          }),
+        ]),
+      );
+      scope.dispose();
+      spy.mockRestore();
+    });
+
+    it("should require tenantId on agentDetails", () => {
+      const response: OutputResponse = { messages: "test" };
+      expect(() => OutputScope.start(testRequest, response, { agentId: "a1" })).toThrow(
+        "tenantId is required",
+      );
+    });
+
+    it("should record output messages from response", () => {
+      const response: OutputResponse = { messages: "Hello user" };
+      const scope = OutputScope.start(testRequest, response, testAgentDetails);
+      scope.dispose();
+
+      const attributes = getLastSpan().attributes;
+      const parsed = JSON.parse(
+        attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY] as string,
+      );
+      expect(parsed.version).toBe(A365_MESSAGE_SCHEMA_VERSION);
+      expect(parsed.messages).toHaveLength(1);
+      expect(parsed.messages[0].role).toBe("assistant");
+      expect(parsed.messages[0].parts[0].content).toBe("Hello user");
+    });
+
+    it("should allow overwriting output messages via recordOutputMessages", () => {
+      const response: OutputResponse = { messages: "initial" };
+      const scope = OutputScope.start(testRequest, response, testAgentDetails);
+      scope.recordOutputMessages("updated output");
+      scope.dispose();
+
+      const attributes = getLastSpan().attributes;
+      const parsed = JSON.parse(
+        attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY] as string,
+      );
+      expect(parsed.messages[0].parts[0].content).toBe("updated output");
+    });
+
+    it("should handle raw dict as output messages", () => {
+      const response: OutputResponse = {
+        messages: { result: "tool output", score: 0.95 } as any,
+      };
+      const scope = OutputScope.start(testRequest, response, testAgentDetails);
+      scope.dispose();
+
+      const attributes = getLastSpan().attributes;
+      const raw = attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY] as string;
+      const parsed = JSON.parse(raw);
+      expect(parsed.result).toBe("tool output");
+      expect(parsed.score).toBe(0.95);
+    });
+
+    it("should include user details when provided", () => {
+      const spy = vi.spyOn(OpenTelemetryScope.prototype as any, "setTagMaybe");
+      const user: UserDetails = { userId: "user-1", userEmail: "u@test.com" };
+      const response: OutputResponse = { messages: "test" };
+      const scope = OutputScope.start(testRequest, response, testAgentDetails, user);
+
+      const calls = spy.mock.calls.map((args) => ({ key: args[0], val: args[1] }));
+      expect(calls).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: OpenTelemetryConstants.USER_ID_KEY, val: "user-1" }),
+          expect.objectContaining({
+            key: OpenTelemetryConstants.USER_EMAIL_KEY,
+            val: "u@test.com",
+          }),
+        ]),
+      );
+      scope.dispose();
+      spy.mockRestore();
     });
   });
 

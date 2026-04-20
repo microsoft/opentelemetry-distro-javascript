@@ -30,7 +30,7 @@ import { Logger } from "../../shared/logging/index.js";
  *
  * Subclasses: `InvokeAgentScope`, `ExecuteToolScope`, `InferenceScope`, `OutputScope`.
  */
-export abstract class OpenTelemetryScope implements Disposable {
+export abstract class OpenTelemetryScope {
   private static readonly tracer = trace.getTracer(OpenTelemetryConstants.SOURCE_NAME);
 
   protected readonly span: Span;

@@ -17,7 +17,7 @@ import { JsonConfig } from "../../shared/jsonConfig.js";
  */
 function parseEnvBoolean(envValue: string | undefined): boolean {
   if (!envValue) return false;
-  return ["true", "1", "yes", "on"].includes(envValue.toLowerCase());
+  return ["true", "1", "yes", "on"].includes(envValue.trim().toLowerCase());
 }
 
 /**
@@ -30,7 +30,6 @@ export const A365_ENV_VARS = {
   AUTH_SCOPES: "A365_OBSERVABILITY_SCOPES_OVERRIDE",
   DOMAIN: "A365_OBSERVABILITY_DOMAIN_OVERRIDE",
   CLUSTER_CATEGORY: "CLUSTER_CATEGORY",
-  LOG_LEVEL: "A365_OBSERVABILITY_LOG_LEVEL",
 } as const;
 
 const DEFAULT_AUTH_SCOPE = "https://api.powerplatform.com/.default";

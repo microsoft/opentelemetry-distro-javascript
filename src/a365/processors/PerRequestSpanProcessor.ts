@@ -9,8 +9,8 @@
  * Adapted from microsoft/Agent365-nodejs agents-a365-observability/src/tracing/PerRequestSpanProcessor.ts
  */
 
-import { context } from "@opentelemetry/api";
-import type { Context } from "@opentelemetry/api";
+import { context, trace } from "@opentelemetry/api";
+import type { Context, Span } from "@opentelemetry/api";
 import type { ReadableSpan, SpanProcessor, SpanExporter } from "@opentelemetry/sdk-trace-base";
 import { Logger } from "../../shared/logging/index.js";
 
@@ -18,6 +18,16 @@ const logger = Logger.getInstance();
 
 function isRootSpan(span: ReadableSpan): boolean {
   return !span.parentSpanContext;
+}
+
+/**
+ * Check whether this span is a root span by examining the parent context.
+ * In onStart, the SDK passes a live Span (not ReadableSpan), so we check
+ * whether the parent context already contains a span.
+ */
+function isRootSpanFromContext(ctx: Context): boolean {
+  const parentSpan = trace.getSpan(ctx);
+  return !parentSpan;
 }
 
 type TraceBuffer = {
@@ -103,7 +113,7 @@ export class PerRequestSpanProcessor implements SpanProcessor {
     );
   }
 
-  onStart(span: ReadableSpan, ctx: Context): void {
+  onStart(span: Span, ctx: Context): void {
     const traceId = span.spanContext().traceId;
     let buf = this.traces.get(traceId);
     if (!buf) {
@@ -131,13 +141,14 @@ export class PerRequestSpanProcessor implements SpanProcessor {
     }
     buf.openCount += 1;
 
+    const root = isRootSpanFromContext(ctx);
     logger.info(
-      `[PerRequestSpanProcessor] Span start name=${span.name} traceId=${traceId} spanId=${span.spanContext().spanId}` +
-        ` root=${isRootSpan(span)} openCount=${buf.openCount}`,
+      `[PerRequestSpanProcessor] Span start traceId=${traceId} spanId=${span.spanContext().spanId}` +
+        ` root=${root} openCount=${buf.openCount}`,
     );
 
     // Capture a context to export under.
-    if (isRootSpan(span)) {
+    if (root) {
       buf.rootCtx = ctx;
     } else {
       buf.rootCtx ??= ctx;

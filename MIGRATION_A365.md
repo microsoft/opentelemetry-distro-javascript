@@ -140,7 +140,6 @@ Environment variable names are **unchanged** from Agent365-nodejs:
 | `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated list of OAuth scopes |
 | `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override service domain |
 | `CLUSTER_CATEGORY` | Cluster category (`prod`, `dev`, `test`, etc.) |
-| `A365_OBSERVABILITY_LOG_LEVEL` | SDK log level (`none`, `info`, `warn`, `error`) |
 | `A365_PER_REQUEST_MAX_TRACES` | Max buffered traces (default: `1000`) |
 | `A365_PER_REQUEST_MAX_SPANS_PER_TRACE` | Max spans per trace (default: `5000`) |
 | `A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS` | Max concurrent exports (default: `20`) |

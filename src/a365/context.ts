@@ -16,7 +16,7 @@
 import { context, trace, propagation } from "@opentelemetry/api";
 import type { Context, SpanContext } from "@opentelemetry/api";
 import { TraceFlags } from "@opentelemetry/api";
-import type { ParentSpanRef, ParentContext } from "./contracts.js";
+import type { ParentSpanRef } from "./contracts.js";
 import { Logger } from "../shared/logging/index.js";
 
 // ---------------------------------------------------------------------------
@@ -36,10 +36,10 @@ function isValidSpanId(spanId: string): boolean {
 // ---------------------------------------------------------------------------
 
 /** Type guard to distinguish a ParentSpanRef from an OTel Context. */
-export function isParentSpanRef(value: ParentContext): value is ParentSpanRef {
+export function isParentSpanRef(value: unknown): value is ParentSpanRef {
   if (typeof value !== "object" || value === null) return false;
 
-  const maybeCtx = value as Context;
+  const maybeCtx = value as Record<string, unknown>;
   if (
     typeof maybeCtx.getValue === "function" &&
     typeof maybeCtx.setValue === "function" &&
