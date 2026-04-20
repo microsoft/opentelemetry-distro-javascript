@@ -1,8 +1,10 @@
 # Release History
 
-## [0.1.0-alpha.2] - Unreleased
+## [0.1.0-alpha.2] - 2026-04-20
 
 ### Features Added
+- Replace vendored a365 with npm packages direct dependencies ([#25](https://github.com/microsoft/opentelemetry-distro-javascript/pull/25))
+- Move Azure Monitor files into src/azureMonitor/ subdirectory ([#23](https://github.com/microsoft/opentelemetry-distro-javascript/pull/23))
 - Add A365 Exporter. ([#20](https://github.com/microsoft/opentelemetry-distro-javascript/pull/20))
 - Add OpenAI Agents SDK instrumentation. ([#14](https://github.com/microsoft/opentelemetry-distro-javascript/pull/14))
 
