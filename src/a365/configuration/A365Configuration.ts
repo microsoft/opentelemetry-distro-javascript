@@ -12,22 +12,12 @@ import { JsonConfig } from "../../shared/jsonConfig.js";
 
 /**
  * Parse an environment variable as a boolean.
- * Recognizes 'true', '1', 'yes', 'on' (case-insensitive) as true and
- * 'false', '0', 'no', 'off' as false. Unset, empty, or unrecognized values
- * are ignored and return undefined so they do not override an existing
- * configuration value.
+ * Recognizes 'true', '1', 'yes', 'on' (case-insensitive) as true; all other values as false.
+ * Matches the upstream Agent365-nodejs RuntimeConfiguration.parseEnvBoolean.
  */
-function parseEnvBoolean(envValue: string | undefined): boolean | undefined {
-  if (!envValue) return undefined;
-  const normalized = envValue.trim().toLowerCase();
-  if (!normalized) return undefined;
-  if (["true", "1", "yes", "on"].includes(normalized)) {
-    return true;
-  }
-  if (["false", "0", "no", "off"].includes(normalized)) {
-    return false;
-  }
-  return undefined;
+function parseEnvBoolean(envValue: string | undefined): boolean {
+  if (!envValue) return false;
+  return ["true", "1", "yes", "on"].includes(envValue.trim().toLowerCase());
 }
 
 /**
@@ -121,14 +111,14 @@ export class A365Configuration {
     }
 
     // 4. Apply environment variable overrides (highest precedence)
-    const envEnabled = parseEnvBoolean(process.env[A365_ENV_VARS.EXPORTER_ENABLED]);
+    const envEnabled = process.env[A365_ENV_VARS.EXPORTER_ENABLED];
     if (envEnabled !== undefined) {
-      enabled = envEnabled;
+      enabled = parseEnvBoolean(envEnabled);
     }
 
-    const envPerRequest = parseEnvBoolean(process.env[A365_ENV_VARS.PER_REQUEST_EXPORT]);
+    const envPerRequest = process.env[A365_ENV_VARS.PER_REQUEST_EXPORT];
     if (envPerRequest !== undefined) {
-      perRequestExport = envPerRequest;
+      perRequestExport = parseEnvBoolean(envPerRequest);
     }
 
     const envScopes = process.env[A365_ENV_VARS.AUTH_SCOPES]?.trim();
@@ -144,10 +134,6 @@ export class A365Configuration {
     const envCluster = process.env[A365_ENV_VARS.CLUSTER_CATEGORY]?.toLowerCase();
     if (envCluster && VALID_CLUSTER_CATEGORIES.has(envCluster)) {
       clusterCategory = envCluster as ClusterCategory;
-    } else if (envCluster) {
-      Logger.getInstance().warn(
-        `Invalid ${A365_ENV_VARS.CLUSTER_CATEGORY} value '${envCluster}'. Using default cluster category.`,
-      );
     }
 
     // Assign resolved values

@@ -135,14 +135,14 @@ export class PerRequestSpanProcessor implements SpanProcessor {
       this.traces.set(traceId, buf);
       this.ensureSweepTimer();
 
-      logger.debug(
+      logger.info(
         `[PerRequestSpanProcessor] Trace started traceId=${traceId} maxTraceAgeMs=${this.maxTraceAgeMs}`,
       );
     }
     buf.openCount += 1;
 
     const root = isRootSpanFromContext(ctx);
-    logger.debug(
+    logger.info(
       `[PerRequestSpanProcessor] Span start traceId=${traceId} spanId=${span.spanContext().spanId}` +
         ` root=${root} openCount=${buf.openCount}`,
     );
@@ -179,7 +179,7 @@ export class PerRequestSpanProcessor implements SpanProcessor {
       buf.openCount = 0;
     }
 
-    logger.debug(
+    logger.info(
       `[PerRequestSpanProcessor] Span end name=${span.name} traceId=${traceId} spanId=${span.spanContext().spanId}` +
         ` root=${isRootSpan(span)} openCount=${buf.openCount} rootEnded=${buf.rootEnded}`,
     );
@@ -269,7 +269,7 @@ export class PerRequestSpanProcessor implements SpanProcessor {
     const spans = trace.spans;
     if (spans.length === 0) return;
 
-    logger.debug(
+    logger.info(
       `[PerRequestSpanProcessor] Flushing trace traceId=${traceId} reason=${reason} spans=${spans.length} rootEnded=${trace.rootEnded}`,
     );
 
@@ -294,7 +294,7 @@ export class PerRequestSpanProcessor implements SpanProcessor {
                     result.error,
                   );
                 } else {
-                  logger.debug(
+                  logger.info(
                     `[PerRequestSpanProcessor] Export succeeded traceId=${traceId} reason=${reason} spans=${spans.length}`,
                   );
                 }
