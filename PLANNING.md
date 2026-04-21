@@ -125,44 +125,25 @@ Design guidelines:
 
 ## Phase 6: A365 Convergence
 
-A365 observability is consumed as **npm package dependencies**, not vendored code. The distro depends on:
+The A365 observability runtime will be **migrated as code into this repository**, not consumed as an npm dependency. This includes the A365 exporter, custom processors, and all relevant observability extensions.
 
-- `@microsoft/agents-a365-observability` — scopes, constants, contracts, baggage, context propagation, `ObservabilityManager`/`Builder`, exporter, and span processors
-- `@microsoft/agents-a365-runtime` — `ClusterCategory` enum, configuration infrastructure, `IConfigurationProvider`
+### A365 Code to Migrate In-Repo
 
-### Integration Approach
+- **A365 exporter** — integrate into the distro configuration surface as an in-repo module
+- **Microsoft Agent Framework instrumentation** — instrumentation for Microsoft's internal agent framework, brought in as source code
+- **Baggage extensions** — A365 baggage propagation and enrichment extensions
+- **Custom span processors** — processors required by A365 agent observability scenarios
+- **Other internal observability extensions** — any remaining A365 runtime components needed for agent workloads
 
-The distro's `useMicrosoftOpenTelemetry()` function creates the OpenTelemetry `NodeSDK` first, then calls `ObservabilityManager.start()` which detects the existing global `TracerProvider` and adds A365's baggage-enricher + exporter processors without creating a second SDK instance. This is the same approach used by `agents-a365-observability-hosting`.
+### Migration and Convergence Plan
 
-Key integration points:
-
-- **`A365Options` interface** — defined in `src/types.ts` as the distro's own public configuration surface. Maps to the npm package's `BuilderOptions` internally.
-- **Environment variable bridge** — the distro sets `ENABLE_A365_OBSERVABILITY_EXPORTER`, `ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT`, and `A365_OBSERVABILITY_DOMAIN_OVERRIDE` programmatically from `A365Options` before calling `ObservabilityManager.start()`.
-- **Config provider** — when `domainOverride` or `authScopes` are specified, the distro creates a custom `IConfigurationProvider<ObservabilityConfiguration>` and passes it to the builder.
-- **Re-exports** — `src/index.ts` re-exports the public API surface from the npm packages (scopes, constants, enums, context propagation, baggage, message utilities, types) so consumers import from `@microsoft/opentelemetry`.
-
-### What is NOT in scope
-
-The following `agent365-nodejs` packages are **not included** because they are not telemetry/observability concerns:
-
-- `agents-a365-runtime` — consumed only for `ClusterCategory` and `IConfigurationProvider`; the full runtime (auth service, API discovery, operation types) is out of scope
-- `agents-a365-tooling` — MCP tool server configuration, not telemetry
-- `agents-a365-notifications` — agent notification handling, not telemetry
-
-### Hosting Integration (agents-a365-observability-hosting)
-
-The `agents-a365-observability-hosting` package provides middleware and utilities for integrating A365 observability into Microsoft Bot Framework / Agents hosting environments. This is an **optional add-on** that will be consumed as an npm dependency when needed:
-
-- `@microsoft/agents-a365-observability-hosting` — `BaggageMiddleware`, `OutputLoggingMiddleware`, `ObservabilityHostingManager`, `BaggageBuilderUtils`, `ScopeUtils`
-
-This package requires `@microsoft/agents-hosting` as a peer dependency. The distro will re-export hosting utilities when the hosting package is available, but will not hard-depend on it to avoid pulling in the full agents-hosting stack for non-hosting scenarios.
-
-### Extension Packages
-
-GenAI-specific extension packages from the A365 ecosystem are handled in Phase 5 (GenAI instrumentation), not here:
-
-- `agents-a365-observability-extensions-langchain` — LangChain instrumentation extensions
-- `agents-a365-observability-extensions-openai` — OpenAI instrumentation extensions
+- Migrate A365 observability runtime code under a clearly defined internal module boundary (e.g., `_a365/`)
+- A365 GenAI instrumentations (OpenAI, OpenAI Agents, LangChain) are migrated in Phase 5 — coordinate with the A365 team to keep them aligned
+- Audit migrated A365 instrumentations and determine which can be contributed to upstream OpenTelemetry contrib
+- For instrumentations that have OpenTelemetry equivalents, plan migration path and deprecation timeline
+- For instrumentations with no upstream equivalent (e.g., Microsoft Agent Framework), keep as Microsoft-specific extensions in this repo and evaluate contributing them to OpenTelemetry
+- Validate that existing A365 telemetry pipelines continue to work under the new distro setup with the in-repo code
+- Coordinate with the A365 team on dual maintenance during the transition period (similar to the Azure Monitor Distro approach)
 
 ## Phase 7: Testing
 
@@ -199,66 +180,81 @@ Provide runnable sample apps covering the main scenarios:
 - Provide adapters or processors that normalize non-standard telemetry without taking a direct dependency on external instrumentation packages
 - Document which external instrumentations are supported for normalization and any known gaps
 
-## A365 Integration Status
+## TODO: A365 Gap Analysis (agent365-nodejs parity)
 
-A365 observability is consumed via npm packages. The gap analysis below reflects what is integrated vs. what remains.
+Comparison of our in-repo A365 code against the full `agent365-nodejs` SDK. Items marked ✅ are implemented; ❌ items need to be built.
 
-### agents-a365-observability (core) — ✅ Integrated
+### agents-a365-observability (core) — Gaps
 
-Consumed as `@microsoft/agents-a365-observability` npm dependency. All core observability features are available:
+| File | Description | Status |
+|------|-------------|--------|
+| `PerRequestSpanProcessorConfiguration.ts` | Dedicated config for per-request processor | ❌ Missing |
+| `PerRequestSpanProcessorConfigurationOptions.ts` | Options interface for above | ❌ Missing |
+| `PerRequestProcessorInternalOverrides.ts` | Internal overrides for per-request processor | ❌ Missing |
+| `trace-context-propagation.ts` | Distributed tracing context propagation | ❌ Missing |
+| `ObservabilityBuilder.ts` | Builder pattern for observability setup | ❌ Missing |
+| `ObservabilityManager.ts` | Lifecycle manager for observability | ❌ Missing |
+| `utils/logging.ts` | ILogger event helpers | ❌ Missing |
+| `util.ts` (root tracing) | May differ from our `exporter/utils.ts` / `processors/util.ts` | ⚠️ Review |
 
-| Feature | Status |
-|---------|--------|
-| Scopes (OpenTelemetryScope, InvokeAgentScope, etc.) | ✅ Re-exported |
-| Constants (OpenTelemetryConstants) | ✅ Re-exported |
-| Enums (MessageRole, FinishReason, InferenceOperationType) | ✅ Re-exported |
-| Context propagation (runWithParentSpanRef, etc.) | ✅ Re-exported |
-| Baggage (BaggageBuilder, BaggageScope) | ✅ Re-exported |
-| Token context (runWithExportToken, etc.) | ✅ Re-exported |
-| Message utilities (serializeMessages, etc.) | ✅ Re-exported |
-| ObservabilityManager / Builder | ✅ Integrated in distro.ts |
-| Agent365Exporter | ✅ Internal to npm package |
-| A365SpanProcessor | ✅ Internal to npm package |
-| PerRequestSpanProcessor | ✅ Internal to npm package |
-| ObservabilityConfiguration | ✅ Used for domainOverride/authScopes |
+### agents-a365-observability-hosting (entire package missing)
 
-### agents-a365-runtime — ✅ Partially Integrated
+| File | Description | Status |
+|------|-------------|--------|
+| `middleware/ObservabilityHostingManager.ts` | Hosting lifecycle manager | ❌ Missing |
+| `middleware/BaggageMiddleware.ts` | HTTP baggage middleware | ❌ Missing |
+| `middleware/OutputLoggingMiddleware.ts` | Output logging middleware | ❌ Missing |
+| `utils/BaggageBuilderUtils.ts` | Baggage builder utilities | ❌ Missing |
+| `utils/ScopeUtils.ts` | Scope utility helpers | ❌ Missing |
+| `utils/TurnContextUtils.ts` | Turn context utilities | ❌ Missing |
+| `caching/AgenticTokenCache.ts` | Agentic token cache | ❌ Missing |
 
-Consumed as `@microsoft/agents-a365-runtime` npm dependency. Only telemetry-relevant exports are used:
+### agents-a365-runtime (entire package missing)
 
-| Feature | Status |
-|---------|--------|
-| ClusterCategory enum | ✅ Re-exported |
-| IConfigurationProvider | ✅ Used internally |
-| PowerPlatformApiDiscovery | ⬜ Not needed (not telemetry) |
-| AgenticAuthenticationService | ⬜ Not needed (not telemetry) |
-| RuntimeConfiguration | ⬜ Not needed (not telemetry) |
+| File | Description | Status |
+|------|-------------|--------|
+| `environment-utils.ts` | Environment utilities | ❌ Missing |
+| `power-platform-api-discovery.ts` | Power Platform API discovery | ❌ Missing |
+| `agentic-authorization-service.ts` | Agentic authorization service | ❌ Missing |
+| `operation-error.ts` | Operation error types | ❌ Missing |
+| `operation-result.ts` | Operation result types | ❌ Missing |
+| `utility.ts` | General utilities | ❌ Missing |
+| `configuration/` | Config provider | ❌ Missing |
 
-### agents-a365-observability-hosting — ⬜ Not yet integrated
+### agents-a365-tooling (entire package missing)
 
-Will be consumed as `@microsoft/agents-a365-observability-hosting` npm dependency. Requires `@microsoft/agents-hosting` peer dependency.
+| File | Description | Status |
+|------|-------------|--------|
+| `McpToolServerConfigurationService.ts` | MCP tool server configuration | ❌ Missing |
+| `contracts.ts` | Tooling contracts | ❌ Missing |
+| `Utility.ts` | Tooling utilities | ❌ Missing |
+| `configuration/` | Tooling configuration | ❌ Missing |
+| `models/` | Tooling models | ❌ Missing |
 
-| Feature | Status |
-|---------|--------|
-| ObservabilityHostingManager | ⬜ Pending |
-| BaggageMiddleware | ⬜ Pending |
-| OutputLoggingMiddleware | ⬜ Pending |
-| BaggageBuilderUtils | ⬜ Pending |
-| ScopeUtils | ⬜ Pending |
+### agents-a365-notifications (entire package missing)
 
-### Out of Scope Packages
+| File | Description | Status |
+|------|-------------|--------|
+| `agent-notification.ts` | Agent notification handler | ❌ Missing |
+| `constants.ts` | Notification constants | ❌ Missing |
+| `extensions/` | Notification extensions | ❌ Missing |
+| `models/` | Notification models | ❌ Missing |
 
-These packages are **not telemetry** and will not be integrated:
-
-| Package | Reason |
-|---------|--------|
-| `agents-a365-tooling` | MCP tool server configuration |
-| `agents-a365-notifications` | Agent notification handling |
-| `agents-a365-tooling-extensions-*` | Tooling extensions (Claude, LangChain, OpenAI) |
-
-### Extension Packages — Handled in Phase 5
+### Extension packages (all missing)
 
 | Package | Status |
 |---------|--------|
-| `agents-a365-observability-extensions-langchain` | Handled via in-repo GenAI instrumentation |
-| `agents-a365-observability-extensions-openai` | Handled via in-repo GenAI instrumentation |
+| `agents-a365-observability-extensions-langchain` | ❌ Missing |
+| `agents-a365-observability-extensions-openai` | ❌ Missing |
+| `agents-a365-tooling-extensions-claude` | ❌ Missing |
+| `agents-a365-tooling-extensions-langchain` | ❌ Missing |
+| `agents-a365-tooling-extensions-openai` | ❌ Missing |
+
+### Priority Order
+
+1. **Core observability gaps** — `trace-context-propagation`, `PerRequestSpanProcessorConfiguration*`, `ObservabilityBuilder/Manager`, `utils/logging`
+2. **Hosting middleware** — `ObservabilityHostingManager`, baggage/output middleware, scope utils
+3. **Runtime** — env utils, API discovery, auth service
+4. **Tooling** — MCP tool server config
+5. **Notifications** — agent notifications
+6. **Extension packages** — langchain/openai/claude integrations

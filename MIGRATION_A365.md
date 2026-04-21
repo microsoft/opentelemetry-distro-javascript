@@ -34,39 +34,61 @@ useMicrosoftOpenTelemetry({
 | Before | After |
 |---|---|
 | `npm install @microsoft/agents-a365-observability` | `npm install @microsoft/opentelemetry` |
-| `import { Builder } from "@microsoft/agents-a365-observability"` | `import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry"` |
-
-The `@microsoft/opentelemetry` distro handles A365 setup via `useMicrosoftOpenTelemetry()`. For manual telemetry APIs (scopes, baggage, context propagation, etc.), import them directly from `@microsoft/agents-a365-observability` — they are **not** re-exported by the distro.
+| `import { ... } from "@microsoft/agents-a365-observability"` | `import { ... } from "@microsoft/opentelemetry"` |
 
 ## Import Mapping
 
-### Initialization (import from `@microsoft/opentelemetry`)
+All public APIs are re-exported from the root `@microsoft/opentelemetry` package:
 
-| Before | After |
+| `@microsoft/agents-a365-observability` | `@microsoft/opentelemetry` |
 |---|---|
-| `Builder` / `ObservabilityManager` | `useMicrosoftOpenTelemetry({ a365: { ... } })` |
+| `OpenTelemetryConstants` | `OpenTelemetryConstants` |
+| `OpenTelemetryScope` | `OpenTelemetryScope` |
+| `InvokeAgentScope` | `InvokeAgentScope` |
+| `ExecuteToolScope` | `ExecuteToolScope` |
+| `InferenceScope` | `InferenceScope` |
+| `OutputScope` | `OutputScope` |
+| `BaggageBuilder` | `BaggageBuilder` |
+| `BaggageScope` | `BaggageScope` |
+| `runWithExportToken` | `runWithExportToken` |
+| `updateExportToken` | `updateExportToken` |
+| `getExportToken` | `getExportToken` |
+| `runWithParentSpanRef` | `runWithParentSpanRef` |
+| `createContextWithParentSpanRef` | `createContextWithParentSpanRef` |
+| `injectContextToHeaders` | `injectContextToHeaders` |
+| `extractContextFromHeaders` | `extractContextFromHeaders` |
+| `runWithExtractedTraceContext` | `runWithExtractedTraceContext` |
+| `MessageRole` | `MessageRole` |
+| `FinishReason` | `FinishReason` |
+| `InferenceOperationType` | `InferenceOperationType` |
 
-### Manual APIs (keep importing from `@microsoft/agents-a365-observability`)
+### Types
 
-Scopes, constants, enums, context propagation, baggage, message utilities, and types are all imported directly from `@microsoft/agents-a365-observability`. The distro does not re-export these.
+| `@microsoft/agents-a365-observability` | `@microsoft/opentelemetry` |
+|---|---|
+| `Request` | `A365Request` (renamed to avoid collision with global `Request`) |
+| `SpanDetails` | `A365SpanDetails` (renamed for clarity) |
+| `AgentDetails` | `AgentDetails` |
+| `UserDetails` | `UserDetails` |
+| `CallerDetails` | `CallerDetails` |
+| `Channel` | `Channel` |
+| `ServiceEndpoint` | `ServiceEndpoint` |
+| `InvokeAgentScopeDetails` | `InvokeAgentScopeDetails` |
+| `ToolCallDetails` | `ToolCallDetails` |
+| `InferenceDetails` | `InferenceDetails` |
+| `InferenceResponse` | `InferenceResponse` |
+| `OutputResponse` | `OutputResponse` |
+| `ParentSpanRef` | `ParentSpanRef` |
+| `ParentContext` | `ParentContext` |
+| `ChatMessage` | `ChatMessage` |
+| `HeadersCarrier` | `HeadersCarrier` |
 
-```typescript
-// Initialization — from the distro
-import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+### Processor Classes
 
-// Manual telemetry APIs — from the A365 observability package directly
-import {
-  InvokeAgentScope,
-  InferenceScope,
-  ExecuteToolScope,
-  OutputScope,
-  BaggageBuilder,
-  MessageRole,
-  injectContextToHeaders,
-  runWithExtractedTraceContext,
-} from "@microsoft/agents-a365-observability";
-import type { AgentDetails, Request, InferenceDetails } from "@microsoft/agents-a365-observability";
-```
+| `@microsoft/agents-a365-observability` | `@microsoft/opentelemetry` | Notes |
+|---|---|---|
+| `SpanProcessor` (from `processors/`) | `A365SpanProcessor` | Renamed to avoid collision with OTel `SpanProcessor` |
+| `PerRequestSpanProcessor` | `PerRequestSpanProcessor` | Same name |
 
 ## Initialization
 
@@ -126,7 +148,7 @@ Environment variable names are **unchanged** from Agent365-nodejs:
 
 ## Scopes
 
-Scope usage is identical. Import path stays the same — scopes come directly from `@microsoft/agents-a365-observability`, not re-exported by the distro:
+Scope usage is identical. Just update the import path:
 
 ### Before
 
@@ -150,8 +172,9 @@ try {
 ### After
 
 ```typescript
-// Same import — no change needed for scopes
-import { InvokeAgentScope } from "@microsoft/agents-a365-observability";
+import { InvokeAgentScope } from "@microsoft/opentelemetry";
+
+// Same API — just a different import path
 const scope = new InvokeAgentScope({
   agent: { id: "agent-123", name: "MyAgent" },
   request: { tenantId: "tenant-456" },
@@ -171,7 +194,7 @@ try {
 The `BaggageBuilder` fluent API is identical:
 
 ```typescript
-import { BaggageBuilder } from "@microsoft/agents-a365-observability";
+import { BaggageBuilder } from "@microsoft/opentelemetry";
 
 const scope = new BaggageBuilder()
   .tenantId("tenant-123")
@@ -190,7 +213,7 @@ scope.run(() => {
 Per-request token management is identical:
 
 ```typescript
-import { runWithExportToken, updateExportToken } from "@microsoft/agents-a365-observability";
+import { runWithExportToken, updateExportToken } from "@microsoft/opentelemetry";
 
 runWithExportToken(initialToken, async () => {
   // Start spans...
@@ -202,21 +225,25 @@ runWithExportToken(initialToken, async () => {
 });
 ```
 
-## What Changes
+## What's Not Migrated
 
-| Component | Change |
+The following Agent365-nodejs components are **not** included in `@microsoft/opentelemetry` because they are runtime/hosting concerns rather than observability:
+
+| Component | Reason |
 |---|---|
-| `ObservabilityManager` / `ObservabilityBuilder` | No longer called directly — `useMicrosoftOpenTelemetry()` calls `ObservabilityManager.start()` internally |
-| `@microsoft/agents-a365-observability` | Still used directly for manual APIs (scopes, baggage, context propagation) |
-| `@microsoft/agents-a365-runtime` | Transitive dependency — no direct import needed by consumers |
-| `@microsoft/agents-hosting` | HTTP hosting middleware — separate concern, not part of the distro |
+| `ObservabilityManager` / `ObservabilityBuilder` | Replaced by `useMicrosoftOpenTelemetry()` |
+| `@microsoft/agents-a365-runtime` | Runtime configuration framework — not needed |
+| `@microsoft/agents-hosting` | HTTP hosting middleware — separate concern |
+| `IConfigurationProvider` | Replaced by direct options + env vars |
 | `AgenticTokenCache` | Token caching is the caller's responsibility |
 
 ## Checklist
 
-- [ ] Add `@microsoft/opentelemetry` dependency
-- [ ] Keep `@microsoft/agents-a365-observability` for manual telemetry APIs (scopes, baggage, etc.)
+- [ ] Replace `@microsoft/agents-a365-observability` dependency with `@microsoft/opentelemetry`
+- [ ] Update all imports to use `@microsoft/opentelemetry`
 - [ ] Replace `Builder().build()` with `useMicrosoftOpenTelemetry({ a365: { ... } })`
-- [ ] Verify scope/baggage imports still come from `@microsoft/agents-a365-observability`
+- [ ] Rename `Request` type references to `A365Request`
+- [ ] Rename `SpanDetails` type references to `A365SpanDetails`
+- [ ] Rename `SpanProcessor` references to `A365SpanProcessor`
 - [ ] Verify environment variables work (names are unchanged)
-- [ ] Remove direct `@microsoft/agents-a365-runtime` dependency if no longer needed (it's a transitive dep)
+- [ ] Remove `@microsoft/agents-a365-runtime` dependency if no longer needed

@@ -17,7 +17,6 @@
   "author": "Microsoft Corporation",
   "license": "MIT",
   "dependencies": {
-    "@microsoft/agents-a365-observability": "^0.2.0-preview.3",
     "@microsoft/opentelemetry": "latest",
     "dotenv": "latest",
     "@opentelemetry/api": "^1.9.0",

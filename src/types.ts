@@ -6,41 +6,7 @@ import type { Resource } from "@opentelemetry/resources";
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 import type { MetricReader, ViewOptions } from "@opentelemetry/sdk-metrics";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
-import type { ClusterCategory } from "@microsoft/agents-a365-runtime";
-
-/**
- * A365 observability configuration options.
- *
- * These are the public-facing options passed via the `a365` scope
- * of {@link MicrosoftOpenTelemetryOptions}.
- */
-export interface A365Options {
-  /** Enable A365 observability. When false, no A365 components are created. */
-  enabled?: boolean;
-
-  /**
-   * Token resolver for authenticating with the A365 observability service.
-   * Called with (agentId, tenantId) extracted from span attributes.
-   * Must return a bearer token string or a promise resolving to one.
-   */
-  tokenResolver?: (agentId: string, tenantId: string) => string | Promise<string>;
-
-  /** Cluster category for the A365 service endpoint. */
-  clusterCategory?: ClusterCategory;
-
-  /** Override the A365 observability service domain. */
-  domainOverride?: string;
-
-  /** OAuth scopes for A365 service authentication. */
-  authScopes?: string[];
-
-  /**
-   * Use per-request export mode (buffer spans per trace, export on root completion).
-   * When false, uses standard batch export.
-   * @default false
-   */
-  perRequestExport?: boolean;
-}
+import type { A365Options } from "./a365/index.js";
 
 /**
  * Microsoft OpenTelemetry distribution version.

@@ -6,11 +6,10 @@ import { logs } from "@opentelemetry/api-logs";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { MetricReader, ViewOptions } from "@opentelemetry/sdk-metrics";
-import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { type SpanProcessor, BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 
 import { InternalConfig } from "../shared/config.js";
-import { JsonConfig } from "../shared/jsonConfig.js";
 import { MetricHandler } from "../azureMonitor/metrics/index.js";
 import { TraceHandler } from "../azureMonitor/traces/handler.js";
 import { LogHandler } from "../azureMonitor/logs/index.js";
@@ -20,10 +19,11 @@ import { parseResourceDetectorsFromEnvVar } from "../utils/common.js";
 import { setupAzureMonitorComponents } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import {
-  ObservabilityManager,
-  ObservabilityConfiguration,
-} from "@microsoft/agents-a365-observability";
-import type { IConfigurationProvider } from "@microsoft/agents-a365-runtime";
+  A365Configuration,
+  Agent365Exporter,
+  A365SpanProcessor,
+  PerRequestSpanProcessor,
+} from "../a365/index.js";
 import type { MicrosoftOpenTelemetryOptions } from "../types.js";
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
 
@@ -104,46 +104,24 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     }
   }
 
-  // ── A365 observability (enabled via env var, JSON config, or options) ──
-  // Precedence: env vars > JSON config > programmatic options.
-  const envExporterFlag = (process.env.ENABLE_A365_OBSERVABILITY_EXPORTER ?? "")
-    .trim()
-    .toLowerCase();
-  const jsonA365 = JsonConfig.getInstance().a365;
-
-  // Merge A365 options: programmatic < JSON config < env vars
-  const mergedA365 = {
-    enabled: options?.a365?.enabled,
-    tokenResolver: options?.a365?.tokenResolver,
-    clusterCategory: options?.a365?.clusterCategory,
-    domainOverride: options?.a365?.domainOverride,
-    authScopes: options?.a365?.authScopes,
-    perRequestExport: options?.a365?.perRequestExport,
-    // JSON config overrides programmatic options
-    ...(jsonA365
-      ? {
-          ...(jsonA365.enabled !== undefined ? { enabled: jsonA365.enabled } : {}),
-          ...(jsonA365.clusterCategory !== undefined
-            ? { clusterCategory: jsonA365.clusterCategory }
-            : {}),
-          ...(jsonA365.domainOverride !== undefined
-            ? { domainOverride: jsonA365.domainOverride }
-            : {}),
-          ...(jsonA365.authScopes !== undefined ? { authScopes: jsonA365.authScopes } : {}),
-          ...(jsonA365.perRequestExport !== undefined
-            ? { perRequestExport: jsonA365.perRequestExport }
-            : {}),
-          // tokenResolver cannot come from JSON — it's a function
-        }
-      : {}),
-  };
-
-  // Env var has highest precedence for enabled (tri-state: unset → fall through, true/false → override)
-  let a365Enabled: boolean;
-  if (envExporterFlag) {
-    a365Enabled = ["true", "1", "yes", "on"].includes(envExporterFlag);
-  } else {
-    a365Enabled = mergedA365.enabled ?? false;
+  // ── A365 exporter (enabled via options.a365 or env vars) ──────────
+  const a365Config = new A365Configuration(options?.a365);
+  if (a365Config.enabled) {
+    const a365Exporter = new Agent365Exporter({
+      clusterCategory: a365Config.clusterCategory,
+      domainOverride: a365Config.domainOverride,
+      tokenResolver: a365Config.tokenResolver,
+    });
+    // A365SpanProcessor copies baggage (tenant, agent, session, etc.) to span attributes
+    if (a365Config.baggage.enrichSpans) {
+      spanProcessors.push(new A365SpanProcessor());
+    }
+    // PerRequestSpanProcessor buffers spans per trace and exports on root completion
+    // with the request's auth token; BatchSpanProcessor for standard batch export
+    const a365ExportProcessor = a365Config.perRequestExport
+      ? new PerRequestSpanProcessor(a365Exporter)
+      : new BatchSpanProcessor(a365Exporter);
+    spanProcessors.push(a365ExportProcessor);
   }
 
   const views: ViewOptions[] = metricHandler.getViews().concat(customViews);
@@ -171,44 +149,6 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   sdk = new NodeSDK(sdkConfig);
   // TODO: Enable auto-attach warning — see autoAttach.ts
   sdk.start();
-
-  // ── A365: attach processors to the now-active global provider ─────
-  // ObservabilityManager.start() detects the existing global TracerProvider
-  // and adds its baggage-enricher + exporter processors without creating
-  // a second NodeSDK instance.
-  if (a365Enabled) {
-    // Ensure the env var is set so the npm package's internal exporter check passes
-    if (!process.env.ENABLE_A365_OBSERVABILITY_EXPORTER) {
-      process.env.ENABLE_A365_OBSERVABILITY_EXPORTER = "true";
-    }
-    if (mergedA365.perRequestExport && !process.env.ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT) {
-      process.env.ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT = "true";
-    }
-    if (mergedA365.domainOverride && !process.env.A365_OBSERVABILITY_DOMAIN_OVERRIDE) {
-      process.env.A365_OBSERVABILITY_DOMAIN_OVERRIDE = mergedA365.domainOverride;
-    }
-
-    // Build a config provider if the caller specified domain override or auth scopes
-    let configProvider: IConfigurationProvider<ObservabilityConfiguration> | undefined;
-    if (mergedA365.domainOverride || mergedA365.authScopes) {
-      const domainOverride = mergedA365.domainOverride ?? null;
-      const authScopes = mergedA365.authScopes;
-      configProvider = {
-        getConfiguration: () =>
-          new ObservabilityConfiguration({
-            isObservabilityExporterEnabled: () => true,
-            observabilityDomainOverride: () => domainOverride,
-            ...(authScopes ? { observabilityAuthenticationScopes: () => authScopes } : {}),
-          }),
-      };
-    }
-
-    ObservabilityManager.start({
-      tokenResolver: mergedA365.tokenResolver,
-      clusterCategory: mergedA365.clusterCategory,
-      configProvider,
-    });
-  }
 }
 
 /**

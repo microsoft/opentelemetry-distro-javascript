@@ -18,6 +18,64 @@ export type {
   A365Options,
 } from "./distro/index.js";
 
+// ── Re-exports from A365 configuration ──────────────────────────────────────
+export { A365Configuration } from "./a365/index.js";
+export type { ClusterCategory, A365BaggageOptions, A365HostingOptions } from "./a365/index.js";
+
+// ── Re-exports from A365 scopes (manual telemetry API) ──────────────────────
+export {
+  OpenTelemetryScope,
+  InvokeAgentScope,
+  ExecuteToolScope,
+  InferenceScope,
+  OutputScope,
+  OpenTelemetryConstants,
+  MessageRole,
+  FinishReason,
+  InferenceOperationType,
+  isParentSpanRef,
+  createContextWithParentSpanRef,
+  runWithParentSpanRef,
+  injectContextToHeaders,
+  extractContextFromHeaders,
+  runWithExtractedTraceContext,
+  BaggageBuilder,
+  BaggageScope,
+  A365SpanProcessor,
+  PerRequestSpanProcessor,
+  GENERIC_ATTRIBUTES,
+  INVOKE_AGENT_ATTRIBUTES,
+  runWithExportToken,
+  updateExportToken,
+  getExportToken,
+} from "./a365/index.js";
+export type {
+  AgentDetails,
+  UserDetails,
+  CallerDetails,
+  Request as A365Request,
+  Channel,
+  ServiceEndpoint,
+  InvokeAgentScopeDetails,
+  ToolCallDetails,
+  InferenceDetails,
+  InferenceResponse,
+  OutputResponse,
+  SpanDetails as A365SpanDetails,
+  ParentSpanRef,
+  ParentContext,
+  ChatMessage,
+  InputMessages,
+  OutputMessage,
+  OutputMessages,
+  InputMessagesParam,
+  OutputMessagesParam,
+  ResponseMessagesParam,
+  MessagePart,
+  HeadersCarrier,
+} from "./a365/index.js";
+export type { PerRequestSpanProcessorOptions } from "./a365/index.js";
+
 // ── Re-exports from types ───────────────────────────────────────────────────
 export type { OpenAIAgentsInstrumentationConfig, LangChainInstrumentationConfig } from "./types.js";
 

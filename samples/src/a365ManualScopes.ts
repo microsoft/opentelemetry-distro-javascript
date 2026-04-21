@@ -15,8 +15,8 @@
  * conventions and A365-specific attributes.
  */
 
-import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
 import {
+  useMicrosoftOpenTelemetry,
   InvokeAgentScope,
   InferenceScope,
   ExecuteToolScope,
@@ -25,13 +25,13 @@ import {
   MessageRole,
   injectContextToHeaders,
   runWithExtractedTraceContext,
-} from "@microsoft/agents-a365-observability";
+} from "@microsoft/opentelemetry";
 import type {
   AgentDetails,
-  Request as A365Request,
+  A365Request,
   InferenceDetails,
   ToolCallDetails,
-} from "@microsoft/agents-a365-observability";
+} from "@microsoft/opentelemetry";
 import "dotenv/config";
 
 // ────────────────────────────────────────────────────────────────────────────
