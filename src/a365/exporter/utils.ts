@@ -12,6 +12,7 @@ import {
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_MICROSOFT_TENANT_ID,
 } from "../../genai/semconv.js";
+import { A365_MESSAGE_SCHEMA_VERSION } from "../contracts.js";
 
 // Message attribute keys that receive special truncation handling
 const MESSAGE_ATTR_KEYS: Set<string> = new Set([
@@ -19,8 +20,6 @@ const MESSAGE_ATTR_KEYS: Set<string> = new Set([
   ATTR_GEN_AI_OUTPUT_MESSAGES,
 ]);
 
-// A365 message schema version used in overflow sentinels
-const A365_MESSAGE_SCHEMA_VERSION = "1.0";
 const MESSAGE_ROLE_SYSTEM = "system";
 
 /**
@@ -126,8 +125,12 @@ export function statusName(code: SpanStatusCode): string {
 export function resolveAgent365Endpoint(clusterCategory: ClusterCategory): string {
   switch (clusterCategory) {
     case "prod":
-    default:
       return "https://agent365.svc.cloud.microsoft";
+    default:
+      throw new Error(
+        `Unsupported Agent365 cluster category "${clusterCategory}". ` +
+          "Configure an explicit domain override or add a mapped endpoint for this cluster category.",
+      );
   }
 }
 
