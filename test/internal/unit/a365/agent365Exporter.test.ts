@@ -743,10 +743,10 @@ describe("Exporter utils", () => {
       assert.strictEqual(resolveAgent365Endpoint("prod"), "https://agent365.svc.cloud.microsoft");
     });
 
-    it("should default to prod endpoint for unknown categories", () => {
-      assert.strictEqual(
-        resolveAgent365Endpoint("preprod"),
-        "https://agent365.svc.cloud.microsoft",
+    it("should throw for unsupported cluster categories", () => {
+      assert.throws(
+        () => resolveAgent365Endpoint("preprod"),
+        /Unsupported Agent365 cluster category "preprod"/,
       );
     });
   });
@@ -1302,7 +1302,7 @@ describe("Exporter utils", () => {
       const result = truncateSpan(span);
       const sentinelValue = result.attributes!["gen_ai.input.messages"] as string;
       const parsed = JSON.parse(sentinelValue);
-      assert.strictEqual(parsed.version, "1.0");
+      assert.strictEqual(parsed.version, "0.1.0");
       assert.strictEqual(parsed.messages.length, 1);
       assert.strictEqual(parsed.messages[0].role, "system");
       assert.strictEqual(parsed.messages[0].parts[0].type, "text");
