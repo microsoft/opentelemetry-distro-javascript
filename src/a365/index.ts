@@ -88,3 +88,27 @@ export type { PerRequestSpanProcessorOptions } from "./processors/index.js";
 
 // ── Token context ───────────────────────────────────────────────────────────
 export { runWithExportToken, updateExportToken, getExportToken } from "./context/tokenContext.js";
+
+// ── Hosting utilities ───────────────────────────────────────────────────────
+export {
+  BaggageBuilderUtils,
+  ScopeUtils,
+  getCallerBaggagePairs,
+  getTargetAgentBaggagePairs,
+  getTenantIdPair,
+  getChannelBaggagePairs,
+  getConversationIdAndItemLinkPairs,
+  resolveEmbodiedAgentIds,
+  BaggageMiddleware,
+  OutputLoggingMiddleware,
+  A365_PARENT_SPAN_KEY,
+  A365_AUTH_TOKEN_KEY,
+  ObservabilityHostingManager,
+} from "./hosting/index.js";
+export type {
+  ObservabilityHostingOptions,
+  TurnContextLike,
+  ActivityLike,
+  MiddlewareLike,
+  SendActivitiesHandler,
+} from "./hosting/index.js";

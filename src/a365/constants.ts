@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
+
 /**
  * OpenTelemetry constants for A365 observability.
  *
@@ -23,9 +25,21 @@ export class OpenTelemetryConstants {
   public static readonly AZ_NAMESPACE_KEY = "az.namespace";
   public static readonly SERVER_ADDRESS_KEY = "server.address";
   public static readonly SERVER_PORT_KEY = "server.port";
+  public static readonly AZURE_RP_NAMESPACE_VALUE = "Microsoft.CognitiveServices";
 
   // ── Source / SDK identity ─────────────────────────────────────────
   public static readonly SOURCE_NAME = "Agent365Sdk";
+
+  // ── Feature flags / env var names ─────────────────────────────────
+  public static readonly ENABLE_OPENTELEMETRY_SWITCH = "Azure.Experimental.EnableActivitySource";
+  public static readonly TRACE_CONTENTS_SWITCH = "Azure.Experimental.TraceGenAIMessageContent";
+  public static readonly TRACE_CONTENTS_ENVIRONMENT_VARIABLE =
+    "AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED";
+  public static readonly ENABLE_OBSERVABILITY = "ENABLE_OBSERVABILITY";
+  public static readonly ENABLE_A365_OBSERVABILITY_EXPORTER = "ENABLE_A365_OBSERVABILITY_EXPORTER";
+  public static readonly ENABLE_A365_OBSERVABILITY = "ENABLE_A365_OBSERVABILITY";
+  public static readonly ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT =
+    "ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT";
 
   // ── GenAI core attributes ────────────────────────────────────────
   public static readonly GEN_AI_OPERATION_NAME_KEY = "gen_ai.operation.name";
@@ -33,6 +47,15 @@ export class OpenTelemetryConstants {
   public static readonly GEN_AI_RESPONSE_MODEL_KEY = "gen_ai.response.model";
   public static readonly GEN_AI_RESPONSE_FINISH_REASONS_KEY = "gen_ai.response.finish_reasons";
   public static readonly GEN_AI_PROVIDER_NAME_KEY = "gen_ai.provider.name";
+  public static readonly GEN_AI_REQUEST_MAX_TOKENS_KEY = "gen_ai.request.max_tokens";
+  public static readonly GEN_AI_REQUEST_TEMPERATURE_KEY = "gen_ai.request.temperature";
+  public static readonly GEN_AI_REQUEST_TOP_P_KEY = "gen_ai.request.top_p";
+  public static readonly GEN_AI_CHOICE = "gen_ai.choice";
+
+  // ── GenAI metrics ────────────────────────────────────────────────
+  public static readonly GEN_AI_CLIENT_OPERATION_DURATION_METRIC_NAME =
+    "gen_ai.client.operation.duration";
+  public static readonly GEN_AI_CLIENT_TOKEN_USAGE_METRIC_NAME = "gen_ai.client.token.usage";
 
   // ── GenAI usage ──────────────────────────────────────────────────
   public static readonly GEN_AI_USAGE_INPUT_TOKENS_KEY = "gen_ai.usage.input_tokens";
@@ -53,6 +76,7 @@ export class OpenTelemetryConstants {
   public static readonly GEN_AI_AGENT_PLATFORM_ID_KEY = "microsoft.a365.agent.platform.id";
   public static readonly GEN_AI_AGENT_THOUGHT_PROCESS_KEY = "microsoft.a365.agent.thought.process";
   public static readonly GEN_AI_ICON_URI_KEY = "gen_ai.agent365.icon_uri";
+  public static readonly AGENT_ID_KEY = "gen_ai.agent.id";
 
   // ── GenAI conversation / session ─────────────────────────────────
   public static readonly GEN_AI_CONVERSATION_ID_KEY = "gen_ai.conversation.id";
@@ -93,6 +117,10 @@ export class OpenTelemetryConstants {
   public static readonly GEN_AI_AGENT_EMAIL_KEY = "microsoft.agent.user.email";
   public static readonly GEN_AI_AGENT_BLUEPRINT_ID_KEY = "microsoft.a365.agent.blueprint.id";
 
+  // ── Execution context ────────────────────────────────────────────
+  public static readonly GEN_AI_TASK_ID_KEY = "gen_ai.task.id";
+  public static readonly GEN_AI_EXECUTION_PAYLOAD_KEY = "gen_ai.execution.payload";
+
   // ── Channel dimensions ───────────────────────────────────────────
   public static readonly CHANNEL_NAME_KEY = "microsoft.channel.name";
   public static readonly CHANNEL_LINK_KEY = "microsoft.channel.link";
@@ -110,5 +138,5 @@ export class OpenTelemetryConstants {
   public static readonly TELEMETRY_SDK_VERSION_KEY = "telemetry.sdk.version";
   public static readonly TELEMETRY_SDK_NAME_VALUE = "A365ObservabilitySDK";
   public static readonly TELEMETRY_SDK_LANGUAGE_VALUE = "nodejs";
-  public static readonly TELEMETRY_SDK_VERSION_VALUE = "0.1.0";
+  public static readonly TELEMETRY_SDK_VERSION_VALUE = MICROSOFT_OPENTELEMETRY_VERSION;
 }

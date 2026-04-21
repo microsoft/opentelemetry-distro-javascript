@@ -124,7 +124,7 @@ describe("Agent365Exporter", () => {
       assert.strictEqual(fetchSpy.mock.calls.length, 1);
 
       const [url, options] = fetchSpy.mock.calls[0];
-      assert.ok(url.includes(`/observability/tenants/${TENANT_ID}/agents/${AGENT_ID}/traces`));
+      assert.ok(url.includes(`/observability/tenants/${TENANT_ID}/otlp/agents/${AGENT_ID}/traces`));
       assert.strictEqual(options.method, "POST");
       assert.strictEqual(options.headers["authorization"], "Bearer test-token");
       assert.strictEqual(options.headers["x-ms-tenant-id"], TENANT_ID);
@@ -186,6 +186,7 @@ describe("Agent365Exporter", () => {
 
       const [url] = fetchSpy.mock.calls[0];
       assert.ok(url.startsWith("https://agent365.svc.cloud.microsoft/observability/tenants/"));
+      assert.ok(url.includes("/otlp/agents/"));
     });
 
     it("should use S2S endpoint when configured", async () => {
@@ -200,7 +201,7 @@ describe("Agent365Exporter", () => {
 
       const [url] = fetchSpy.mock.calls[0];
       assert.ok(url.includes("/observabilityService/tenants/"));
-      assert.ok(url.includes(`/agents/${AGENT_ID}/traces`));
+      assert.ok(url.includes(`/otlp/agents/${AGENT_ID}/traces`));
     });
 
     it("should use S2S endpoint with domain override", async () => {
@@ -216,6 +217,7 @@ describe("Agent365Exporter", () => {
 
       const [url, options] = fetchSpy.mock.calls[0];
       assert.ok(url.startsWith("https://custom.domain/observabilityService/tenants/"));
+      assert.ok(url.includes("/otlp/agents/"));
       assert.strictEqual(options.headers["authorization"], "Bearer tok-s2s-custom");
       assert.strictEqual(options.headers["x-ms-tenant-id"], TENANT_ID);
     });
