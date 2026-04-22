@@ -141,6 +141,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
 
   // ── A365 exporter (enabled via options.a365 or env vars) ──────────
   const a365Config = new A365Configuration(options?.a365);
+  const a365ConsoleExportFallback = !a365Config.enabled && !!options?.a365;
   if (a365Config.enabled) {
     const a365Exporter = new Agent365Exporter({
       clusterCategory: a365Config.clusterCategory,
@@ -157,6 +158,11 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       ? new PerRequestSpanProcessor(a365Exporter)
       : new BatchSpanProcessor(a365Exporter);
     spanProcessors.push(a365ExportProcessor);
+  } else if (a365ConsoleExportFallback) {
+    // A365 options provided but exporter disabled — fall back to console export
+    // so developers can validate spans locally (matches upstream A365 SDK behavior
+    // when ENABLE_A365_OBSERVABILITY_EXPORTER=false).
+    spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
   }
 
   // Merge views: use Azure Monitor views when available (they cover the same
@@ -174,7 +180,10 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     options?.enableConsoleExporters ??
     (!azureMonitorEnabled && !isOtlpEnabled() && !a365Config.enabled && !hasCustomProcessors);
   if (consoleEnabled) {
-    spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
+    // Skip span console exporter when A365 fallback already added one
+    if (!a365ConsoleExportFallback) {
+      spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
+    }
     metricReaders.push(
       new PeriodicExportingMetricReader({
         exporter: new ConsoleMetricExporter(),

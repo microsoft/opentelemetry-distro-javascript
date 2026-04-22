@@ -31,7 +31,19 @@ import { Logger } from "../../shared/logging/index.js";
  * Subclasses: `InvokeAgentScope`, `ExecuteToolScope`, `InferenceScope`, `OutputScope`.
  */
 export abstract class OpenTelemetryScope {
-  private static readonly tracer = trace.getTracer(OpenTelemetryConstants.SOURCE_NAME);
+  /**
+   * Returns a tracer from the current global TracerProvider.
+   *
+   * This **must not** be stored in a static field because the distro's
+   * `useMicrosoftOpenTelemetry()` resets the global API state
+   * (`trace.disable()` + global-object deletion) before starting the
+   * NodeSDK. A static field would capture a `ProxyTracer` bound to the
+   * old `ProxyTracerProvider` whose delegate is never set, producing
+   * `NoopSpan` instances with zeroed trace/span IDs.
+   */
+  private static getTracer() {
+    return trace.getTracer(OpenTelemetryConstants.SOURCE_NAME);
+  }
 
   protected readonly span: Span;
   private readonly wallClockStartMs: number;
@@ -70,7 +82,7 @@ export abstract class OpenTelemetryScope {
       }
     }
 
-    this.span = OpenTelemetryScope.tracer.startSpan(
+    this.span = OpenTelemetryScope.getTracer().startSpan(
       spanName,
       {
         kind,
