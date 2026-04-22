@@ -64,11 +64,11 @@ export interface AzureMonitorOpenTelemetryOptions {
   enabled?: boolean;
   /** Azure Monitor Exporter Configuration */
   azureMonitorExporterOptions?: AzureMonitorExporterOptions;
-  /** Enable Live Metrics feature (Default false) */
+  /** Enable Live Metrics feature (Default true) */
   enableLiveMetrics?: boolean;
   /** Enable Standard Metrics feature (Default true) */
   enableStandardMetrics?: boolean;
-  /** Enable log sampling based on trace (Default true) */
+  /** Enable log sampling based on trace (Default false) */
   enableTraceBasedSamplingForLogs?: boolean;
   /** Enable Performance Counter feature */
   enablePerformanceCounters?: boolean;

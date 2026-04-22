@@ -6,7 +6,11 @@ import { metrics, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import type { MicrosoftOpenTelemetryOptions } from "../../../src/index.js";
 import { useAzureMonitor, shutdownAzureMonitor } from "../../../src/index.js";
-import { _getSdkInstance } from "../../../src/distro/distro.js";
+import {
+  useMicrosoftOpenTelemetry,
+  shutdownMicrosoftOpenTelemetry,
+  _getSdkInstance,
+} from "../../../src/distro/distro.js";
 import type { MeterProvider, ViewOptions } from "@opentelemetry/sdk-metrics";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
@@ -854,6 +858,52 @@ describe("Main functions", () => {
     );
 
     await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("should initialize providers without Azure Monitor when only OTLP is configured", () => {
+    const env = <{ [id: string]: string }>{};
+    env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318";
+    process.env = env;
+
+    // Call without azureMonitor options — only OTLP backend
+    useMicrosoftOpenTelemetry();
+
+    // Global providers should be registered (not noop)
+    const tracer = trace.getTracerProvider().getTracer("test-otlp-only");
+    const span = tracer.startSpan("otlp-only-span");
+    const { traceId } = span.spanContext();
+    span.end();
+    expect(traceId).toMatch(/^[a-f0-9]{32}$/);
+    expect(traceId).not.toBe("00000000000000000000000000000000");
+
+    // SDK should be initialized
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk, "Internal SDK should be available");
+
+    // Meter provider should not have Azure Monitor readers
+    const meterProvider = internalSdk!["_meterProvider"];
+    assert.isDefined(meterProvider, "MeterProvider should be available");
+    const sharedState = meterProvider["_sharedState"];
+    if (sharedState?.metricCollectors) {
+      const readers = sharedState.metricCollectors.map((collector: any) => collector._metricReader);
+      for (const reader of readers) {
+        const exporter = reader["_exporter"];
+        if (exporter) {
+          // None of the exporters should be AzureMonitorMetricExporter
+          expect(exporter.constructor.name).not.toContain("AzureMonitor");
+        }
+      }
+    }
+
+    // Azure Monitor statsbeat env var should not have any Azure Monitor-specific features
+    const statsbeatRaw = process.env["AZURE_MONITOR_STATSBEAT_FEATURES"];
+    if (statsbeatRaw) {
+      const statsbeat = JSON.parse(statsbeatRaw);
+      // DISTRO feature should NOT be set when Azure Monitor is not configured
+      expect(statsbeat.feature & 8).toBe(0); // 8 = StatsbeatFeature.DISTRO
+    }
+
+    void shutdownMicrosoftOpenTelemetry();
   });
 
   it("console exporters auto-enabled when no built-in exporters are active", async () => {

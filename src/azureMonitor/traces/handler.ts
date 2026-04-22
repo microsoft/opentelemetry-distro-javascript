@@ -3,11 +3,8 @@
 
 import type { RequestOptions } from "node:http";
 import { createAzureSdkInstrumentation } from "@azure/opentelemetry-instrumentation-azure-sdk";
-import {
-  AzureMonitorTraceExporter,
-  RateLimitedSampler,
-} from "@azure/monitor-opentelemetry-exporter";
-import type { BufferConfig, Sampler } from "@opentelemetry/sdk-trace-base";
+import { AzureMonitorTraceExporter } from "@azure/monitor-opentelemetry-exporter";
+import type { BufferConfig } from "@opentelemetry/sdk-trace-base";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type {
   HttpInstrumentationConfig,
@@ -29,7 +26,6 @@ import { AzureMonitorSpanProcessor } from "./spanProcessor.js";
 import azureFunctionsOtelPkg from "@azure/functions-opentelemetry-instrumentation";
 const { AzureFunctionsInstrumentation } = azureFunctionsOtelPkg;
 import type { Instrumentation } from "@opentelemetry/instrumentation";
-import { ApplicationInsightsSampler } from "./sampler.js";
 
 /**
  * Azure Monitor OpenTelemetry Trace Handler
@@ -41,7 +37,6 @@ export class TraceHandler {
   private _instrumentations: Instrumentation[];
   private _config: InternalConfig;
   private _metricHandler: MetricHandler;
-  private _sampler: Sampler;
 
   /**
    * Initializes a new instance of the TraceHandler class.
@@ -52,16 +47,6 @@ export class TraceHandler {
     this._config = config;
     this._metricHandler = metricHandler;
     this._instrumentations = [];
-    // Check sampler precedence
-    if (this._config.sampler) {
-      this._sampler = this._config.sampler;
-    } else if (this._config.tracesPerSecond && this._config.tracesPerSecond > 0) {
-      // If tracesPerSecond is set to a positive number, use RateLimitedSampler
-      this._sampler = new RateLimitedSampler(this._config.tracesPerSecond);
-    } else {
-      // Otherwise, use PercentageSampler with samplingRatio
-      this._sampler = new ApplicationInsightsSampler(this._config.samplingRatio);
-    }
     this._azureExporter = new AzureMonitorTraceExporter(this._config.azureMonitorExporterOptions);
     const bufferConfig: BufferConfig = {
       maxExportBatchSize: 512,
@@ -72,10 +57,6 @@ export class TraceHandler {
     this._batchSpanProcessor = new BatchSpanProcessor(this._azureExporter, bufferConfig);
     this._azureSpanProcessor = new AzureMonitorSpanProcessor(this._metricHandler);
     this._initializeInstrumentations();
-  }
-
-  public getSampler(): Sampler {
-    return this._sampler;
   }
 
   public getBatchSpanProcessor(): BatchSpanProcessor {
