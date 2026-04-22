@@ -39,7 +39,7 @@ let disposeAzureMonitor: (() => void) | undefined;
  *
  * This is the primary entry point for the distro. It sets up OpenTelemetry
  * providers and instrumentations, then attaches the configured exporters:
- * - Azure Monitor (when `options.azureMonitor` is provided)
+ * - Azure Monitor (enabled by default; disable with `options.azureMonitor.enabled = false`)
  * - OTLP HTTP (when `OTEL_EXPORTER_OTLP_ENDPOINT` is set)
  * - A365 (when `options.a365.enabled` is true or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`)
  *
@@ -52,6 +52,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   const azureMonitorEnabled = options?.azureMonitor?.enabled !== false;
 
   // ── Azure Monitor components (statsbeat, browser SDK loader, etc.) ─
+  disposeAzureMonitor = undefined;
   if (azureMonitorEnabled) {
     disposeAzureMonitor = setupAzureMonitorComponents(config);
   }
@@ -135,10 +136,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     spanProcessors.push(a365ExportProcessor);
   }
 
-  const views: ViewOptions[] = [
-    ...(metricHandler ? metricHandler.getViews() : []),
-    ...customViews,
-  ];
+  const views: ViewOptions[] = [...(metricHandler ? metricHandler.getViews() : []), ...customViews];
 
   // ── Create and start NodeSDK ──────────────────────────────────────
   const sdkConfig: Partial<NodeSDKConfiguration> = {

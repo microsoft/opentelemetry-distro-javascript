@@ -24,19 +24,36 @@ const cjsDir = path.join(__dirname, "..", "dist", "commonjs");
 fs.writeFileSync(path.join(cjsDir, "package.json"), '{"type":"commonjs"}\n');
 
 // 2. module.ts → module-cjs.cts polyfill swap
+const sharedDir = path.join(cjsDir, "shared");
 fs.copyFileSync(
-  path.join(cjsDir, "shared", "module-cjs.cjs"),
-  path.join(cjsDir, "shared", "module.js"),
+  path.join(sharedDir, "module-cjs.cjs"),
+  path.join(sharedDir, "module.js"),
 );
+// Keep source maps consistent: copy the CJS map or remove the stale ESM one
+const moduleCjsMapPath = path.join(sharedDir, "module-cjs.cjs.map");
+const moduleJsMapPath = path.join(sharedDir, "module.js.map");
+if (fs.existsSync(moduleCjsMapPath)) {
+  fs.copyFileSync(moduleCjsMapPath, moduleJsMapPath);
+} else if (fs.existsSync(moduleJsMapPath)) {
+  fs.unlinkSync(moduleJsMapPath);
+}
 
 // 3. Fix Azure Functions default-import in CJS output
 const handlerPath = path.join(cjsDir, "azureMonitor", "traces", "handler.js");
-let handler = fs.readFileSync(handlerPath, "utf8");
+const handler = fs.readFileSync(handlerPath, "utf8");
+const azureFunctionsImportPattern =
+  /const functions_opentelemetry_instrumentation_1 = __importDefault\(require\("@azure\/functions-opentelemetry-instrumentation"\)\);\s*const \{ AzureFunctionsInstrumentation \} = functions_opentelemetry_instrumentation_1\.default;/;
 // Replace the __importDefault pattern with a direct require
-handler = handler.replace(
-  /const functions_opentelemetry_instrumentation_1 = __importDefault\(require\("@azure\/functions-opentelemetry-instrumentation"\)\);\s*const \{ AzureFunctionsInstrumentation \} = functions_opentelemetry_instrumentation_1\.default;/,
+const updatedHandler = handler.replace(
+  azureFunctionsImportPattern,
   'const { AzureFunctionsInstrumentation } = require("@azure/functions-opentelemetry-instrumentation");',
 );
-fs.writeFileSync(handlerPath, handler);
+if (updatedHandler === handler) {
+  throw new Error(
+    `Azure Functions CJS import fixup did not match expected output in ${handlerPath}. ` +
+    `The emitted CommonJS handler format may have changed; update scripts/fixup-cjs.cjs before publishing.`,
+  );
+}
+fs.writeFileSync(handlerPath, updatedHandler);
 
 console.log("CJS fixups applied.");
