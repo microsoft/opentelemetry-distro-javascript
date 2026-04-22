@@ -828,6 +828,7 @@ describe("Main functions", () => {
 
     useMicrosoftOpenTelemetry({
       azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
       spanProcessors: [processor],
     });
 
