@@ -1,5 +1,12 @@
 # Release History
 
+## [0.1.0-apha.4] - 2026-04-22
+
+### Features Added
+- Add console exporter ([#35](https://github.com/microsoft/opentelemetry-distro-javascript/pull/35))
+- Conditional azure monitor and readme updates ([#33](https://github.com/microsoft/opentelemetry-distro-javascript/pull/33))
+- Add a365 hosting middleware ([#29](https://github.com/microsoft/opentelemetry-distro-javascript/pull/29))
+
 ## [0.1.0-alpha.3] - 2026-04-21
 
 ### Features Added
