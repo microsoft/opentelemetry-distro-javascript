@@ -16,7 +16,7 @@ import type { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import type { MeterProvider } from "@opentelemetry/sdk-metrics";
 import type { LoggerProvider } from "@opentelemetry/sdk-logs";
 
-import { useAzureMonitor } from "../../src/index.js";
+import { useMicrosoftOpenTelemetry } from "../../src/distro/index.js";
 import type { Expectation, Scenario } from "./types.js";
 import type { HttpClient } from "@azure/core-rest-pipeline";
 
@@ -41,7 +41,7 @@ export class TraceBasicScenario implements Scenario {
       "k8s.namespace.name": "testNamespaceName",
       "k8s.pod.name": "testPodName",
     });
-    useAzureMonitor({
+    useMicrosoftOpenTelemetry({
       resource: resource,
       tracesPerSecond: 0,
       azureMonitor: {
@@ -204,7 +204,7 @@ export class MetricBasicScenario implements Scenario {
       [SEMRESATTRS_SERVICE_NAMESPACE]: "my-namespace",
       [SEMRESATTRS_SERVICE_INSTANCE_ID]: "my-instance",
     });
-    useAzureMonitor({
+    useMicrosoftOpenTelemetry({
       resource: testResource,
       azureMonitor: {
         azureMonitorExporterOptions: {
@@ -392,7 +392,7 @@ export class MetricBasicScenario implements Scenario {
 
 export class LogBasicScenario implements Scenario {
   prepare(httpClient?: HttpClient): void {
-    useAzureMonitor({
+    useMicrosoftOpenTelemetry({
       azureMonitor: {
         azureMonitorExporterOptions: {
           connectionString: `instrumentationkey=${COMMON_ENVELOPE_PARAMS.instrumentationKey}`,

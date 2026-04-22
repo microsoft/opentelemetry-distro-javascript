@@ -13,6 +13,7 @@ import { APPLICATIONINSIGHTS_SDKSTATS_DISABLED } from "../types.js";
 import { BrowserSdkLoader } from "./browserSdkLoader/browserSdkLoader.js";
 import { setSdkPrefix } from "./metrics/quickpulse/utils.js";
 import { getInstance } from "./utils/statsbeat.js";
+import { Logger } from "../shared/logging/index.js";
 import { SEMRESATTRS_K8S_CLUSTER_NAME } from "@opentelemetry/semantic-conventions";
 
 /**
@@ -20,6 +21,38 @@ import { SEMRESATTRS_K8S_CLUSTER_NAME } from "@opentelemetry/semantic-convention
  * @internal
  */
 const CLOUD_RESOURCE_ID_ATTRIBUTE = "cloud.resource_id";
+
+/**
+ * Check whether Azure Monitor has a usable connection string available
+ * (from config or the APPLICATIONINSIGHTS_CONNECTION_STRING env var).
+ *
+ * @internal
+ */
+export function hasAzureMonitorConnectionString(config: InternalConfig): boolean {
+  return (
+    !!config.azureMonitorExporterOptions?.connectionString ||
+    !!process.env["APPLICATIONINSIGHTS_CONNECTION_STRING"]
+  );
+}
+
+/**
+ * Validate Azure Monitor prerequisites and log a warning when the
+ * connection string is missing. Returns true when Azure Monitor can proceed.
+ *
+ * @internal
+ */
+export function validateAzureMonitorConfig(config: InternalConfig): boolean {
+  if (hasAzureMonitorConnectionString(config)) {
+    return true;
+  }
+  Logger.getInstance().warn(
+    "Azure Monitor was enabled but no connection string was provided. " +
+      "Set the APPLICATIONINSIGHTS_CONNECTION_STRING environment variable or pass " +
+      "azureMonitor.azureMonitorExporterOptions.connectionString. " +
+      "Azure Monitor will be disabled.",
+  );
+  return false;
+}
 
 /**
  * Set up Azure Monitor–specific components (statsbeat, browser SDK loader,

@@ -5,7 +5,6 @@ import type { Context, TracerProvider } from "@opentelemetry/api";
 import { metrics, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import type { MicrosoftOpenTelemetryOptions } from "../../../src/index.js";
-import { useAzureMonitor, shutdownAzureMonitor } from "../../../src/index.js";
 import {
   useMicrosoftOpenTelemetry,
   shutdownMicrosoftOpenTelemetry,
@@ -81,7 +80,7 @@ describe("Main functions", () => {
     logs.disable();
   });
 
-  it("useAzureMonitor", () => {
+  it("useMicrosoftOpenTelemetry", () => {
     const config: MicrosoftOpenTelemetryOptions = {
       azureMonitor: {
         azureMonitorExporterOptions: {
@@ -89,13 +88,13 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     assert.isDefined(metrics.getMeterProvider());
     assert.isDefined(trace.getTracerProvider());
     assert.isDefined(logs.getLoggerProvider());
   });
 
-  it("useAzureMonitor should clear stale global API version before initializing", () => {
+  it("useMicrosoftOpenTelemetry should clear stale global API version before initializing", () => {
     (globalThis as Record<symbol, unknown>)[GLOBAL_OPENTELEMETRY_API_KEY] = {
       version: "1.6.0",
     };
@@ -106,8 +105,8 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
-    // After useAzureMonitor, real (non-noop) providers should be registered
+    useMicrosoftOpenTelemetry(config);
+    // After useMicrosoftOpenTelemetry, real (non-noop) providers should be registered
     const tracerProvider = trace.getTracerProvider();
     const tracer = tracerProvider.getTracer("test");
     // A noop tracer would return a span whose spanContext has an invalid (all-zero) traceId
@@ -119,7 +118,7 @@ describe("Main functions", () => {
     expect(traceId).not.toBe("00000000000000000000000000000000");
   });
 
-  it("useAzureMonitor should handle stale global with a newer/future API version", () => {
+  it("useMicrosoftOpenTelemetry should handle stale global with a newer/future API version", () => {
     // Even if the stale version is higher than the current one, the mismatch still
     // causes registerGlobal() to fail. Our fix should handle any version mismatch.
     (globalThis as Record<symbol, unknown>)[GLOBAL_OPENTELEMETRY_API_KEY] = {
@@ -132,7 +131,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const tracer = trace.getTracerProvider().getTracer("test");
     const span = tracer.startSpan("test-future-version");
     const { traceId } = span.spanContext();
@@ -141,7 +140,7 @@ describe("Main functions", () => {
     expect(traceId).not.toBe("00000000000000000000000000000000");
   });
 
-  it("useAzureMonitor should work when no stale global exists", () => {
+  it("useMicrosoftOpenTelemetry should work when no stale global exists", () => {
     // Regression: deleting a non-existent global key should not throw or break anything.
     delete (globalThis as Record<symbol, unknown>)[GLOBAL_OPENTELEMETRY_API_KEY];
     const config: MicrosoftOpenTelemetryOptions = {
@@ -151,7 +150,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const tracer = trace.getTracerProvider().getTracer("test");
     const span = tracer.startSpan("test-clean-state");
     const { traceId } = span.spanContext();
@@ -160,8 +159,8 @@ describe("Main functions", () => {
     expect(traceId).not.toBe("00000000000000000000000000000000");
   });
 
-  it("useAzureMonitor should work on repeated calls with stale globals", () => {
-    // Simulate calling useAzureMonitor twice — both should succeed even if
+  it("useMicrosoftOpenTelemetry should work on repeated calls with stale globals", () => {
+    // Simulate calling useMicrosoftOpenTelemetry twice — both should succeed even if
     // a stale global is re-injected between calls (e.g. another extension reloads).
     const config: MicrosoftOpenTelemetryOptions = {
       azureMonitor: {
@@ -175,7 +174,7 @@ describe("Main functions", () => {
     (globalThis as Record<symbol, unknown>)[GLOBAL_OPENTELEMETRY_API_KEY] = {
       version: "1.6.0",
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     let tracer = trace.getTracerProvider().getTracer("test");
     let span = tracer.startSpan("test-first-call");
     let { traceId } = span.spanContext();
@@ -187,7 +186,7 @@ describe("Main functions", () => {
     (globalThis as Record<symbol, unknown>)[GLOBAL_OPENTELEMETRY_API_KEY] = {
       version: "1.4.0",
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     tracer = trace.getTracerProvider().getTracer("test");
     span = tracer.startSpan("test-second-call");
     ({ traceId } = span.spanContext());
@@ -204,8 +203,8 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
-    shutdownAzureMonitor();
+    useMicrosoftOpenTelemetry(config);
+    shutdownMicrosoftOpenTelemetry();
     const meterProvider = metrics.getMeterProvider() as MeterProvider;
     assert.strictEqual(meterProvider["_shutdown"], true);
   });
@@ -218,8 +217,8 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
-    await shutdownAzureMonitor();
+    useMicrosoftOpenTelemetry(config);
+    await shutdownMicrosoftOpenTelemetry();
     const meterProvider = metrics.getMeterProvider() as MeterProvider;
     assert.strictEqual(meterProvider["_shutdown"], true);
   });
@@ -247,7 +246,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     // Verify the custom processor was added to the SDK configuration
     // by checking it's in the tracer provider's span processors
     const internalSdk = _getSdkInstance();
@@ -280,7 +279,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     logs.getLogger("testLogger").emit({ body: "testLog" });
     expect(spyonEmit).toHaveBeenCalled();
   });
@@ -295,7 +294,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
 
     const meterConfig = (_getSdkInstance() as any)?._meterProviderConfig;
     expect(meterConfig).toBeDefined();
@@ -329,7 +328,7 @@ describe("Main functions", () => {
         enableLiveMetrics: true,
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"]));
     const features = Number(output["feature"]);
     const instrumentations = Number(output["instrumentation"]);
@@ -363,7 +362,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"]));
     const features = Number(output["feature"]);
     assert.ok(features & StatsbeatFeature.SHIM, `SHIM is not set ${features}`);
@@ -381,7 +380,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"]));
     const features = Number(output["feature"]);
     assert.ok(
@@ -398,7 +397,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"]));
     const features = Number(output["feature"]);
     assert.notOk(
@@ -422,7 +421,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"]));
     const numberOutput = Number(output["feature"]);
     assert.ok(numberOutput & StatsbeatFeature.AAD_HANDLING, "AAD_HANDLING not set");
@@ -444,7 +443,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     assert.strictEqual(process.env["AZURE_MONITOR_PREFIX"], `a${os}m_`);
   });
 
@@ -460,7 +459,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     assert.strictEqual(process.env["AZURE_MONITOR_PREFIX"], `f${os}m_`);
   });
 
@@ -476,7 +475,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     assert.strictEqual(process.env["AZURE_MONITOR_PREFIX"], `k${os}m_`);
   });
 
@@ -492,7 +491,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     assert.strictEqual(process.env["AZURE_MONITOR_PREFIX"], `k${os}m_`);
   });
 
@@ -508,7 +507,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
 
     // Access resource from the SDK's tracer provider instead of from a span
     // This avoids issues with OTel global state in test environments
@@ -535,7 +534,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
 
     // Access resource from the SDK's tracer provider instead of from a span
     // This avoids issues with OTel global state in test environments
@@ -558,7 +557,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
 
     // Access resource from the SDK's tracer provider instead of from a span
     // This avoids issues with OTel global state in test environments
@@ -591,7 +590,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const emptyStatsbeatConfig: string = JSON.stringify({ instrumentation: 0, feature: 0 });
 
     const statsbeatOptions: StatsbeatEnvironmentConfig = JSON.parse(
@@ -622,13 +621,13 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"])) as {
       feature?: number;
     };
     const features = Number(output["feature"] || 0);
     assert.ok(features & StatsbeatFeature.MULTI_IKEY, "MULTI_IKEY not detected");
-    void shutdownAzureMonitor();
+    void shutdownMicrosoftOpenTelemetry();
   });
 
   it("should not detect MULTI_IKEY feature when AZURE_MONITOR_STATSBEAT_FEATURES has MULTI_IKEY disabled", () => {
@@ -642,7 +641,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"])) as {
       feature?: number;
     };
@@ -651,7 +650,7 @@ describe("Main functions", () => {
       !(features & StatsbeatFeature.MULTI_IKEY),
       "MULTI_IKEY detected when it should not be",
     );
-    void shutdownAzureMonitor();
+    void shutdownMicrosoftOpenTelemetry();
   });
 
   it("should detect CUSTOMER_SDKSTATS feature when APPLICATIONINSIGHTS_SDKSTATS_DISABLED is 'true'", () => {
@@ -665,7 +664,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"])) as {
       feature?: number;
     };
@@ -675,7 +674,7 @@ describe("Main functions", () => {
       "CUSTOMER_SDKSTATS feature should be detected when customer explicitly disables SDK stats",
     );
     assert.ok(features & StatsbeatFeature.DISTRO, "DISTRO feature should also be set");
-    void shutdownAzureMonitor();
+    void shutdownMicrosoftOpenTelemetry();
   });
 
   it("should not detect CUSTOMER_SDKSTATS feature when APPLICATIONINSIGHTS_SDKSTATS_DISABLED is not 'true'", () => {
@@ -689,7 +688,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"])) as {
       feature?: number;
     };
@@ -699,7 +698,7 @@ describe("Main functions", () => {
       "CUSTOMER_SDKSTATS feature should not be detected when env var is not 'true'",
     );
     assert.ok(features & StatsbeatFeature.DISTRO, "DISTRO feature should still be set");
-    void shutdownAzureMonitor();
+    void shutdownMicrosoftOpenTelemetry();
   });
 
   it("should not detect CUSTOMER_SDKSTATS feature when APPLICATIONINSIGHTS_SDKSTATS_DISABLED is not set", () => {
@@ -713,7 +712,7 @@ describe("Main functions", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"])) as {
       feature?: number;
     };
@@ -723,7 +722,7 @@ describe("Main functions", () => {
       "CUSTOMER_SDKSTATS feature should not be detected when env var is undefined",
     );
     assert.ok(features & StatsbeatFeature.DISTRO, "DISTRO feature should still be set");
-    void shutdownAzureMonitor();
+    void shutdownMicrosoftOpenTelemetry();
   });
 
   it("should create both AzureMonitor and OTLP metric exporters when OTLP environment variables are set", () => {
@@ -746,7 +745,7 @@ describe("Main functions", () => {
     };
 
     // Initialize the SDK
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
 
     // Get the internal SDK instance
     const internalSdk = _getSdkInstance();
@@ -813,7 +812,7 @@ describe("Main functions", () => {
     assert.isTrue(hasAzureMonitorReader, "Should have Azure Monitor metric reader");
     assert.isTrue(hasOTLPReader, "Should have OTLP metric reader");
 
-    void shutdownAzureMonitor();
+    void shutdownMicrosoftOpenTelemetry();
   });
 
   it("useMicrosoftOpenTelemetry with azureMonitor.enabled=false should skip Azure Monitor handlers", async () => {

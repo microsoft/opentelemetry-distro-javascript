@@ -7,7 +7,10 @@ import { InternalConfig } from "../../../../src/shared/index.js";
 import { MetricHandler } from "../../../../src/azureMonitor/metrics/index.js";
 import { metrics, trace } from "@opentelemetry/api";
 import { describe, it, beforeEach, afterEach, assert } from "vitest";
-import { shutdownAzureMonitor, useAzureMonitor } from "../../../../src/index.js";
+import {
+  useMicrosoftOpenTelemetry,
+  shutdownMicrosoftOpenTelemetry,
+} from "../../../../src/distro/distro.js";
 
 describe("Library/AzureFunctionsInstrumentation", () => {
   let metricHandler: MetricHandler;
@@ -22,11 +25,11 @@ describe("Library/AzureFunctionsInstrumentation", () => {
     }
     metrics.disable();
     trace.disable();
-    await shutdownAzureMonitor();
+    await shutdownMicrosoftOpenTelemetry();
   });
 
   beforeEach(() => {
-    useAzureMonitor({
+    useMicrosoftOpenTelemetry({
       azureMonitor: {
         azureMonitorExporterOptions: {
           connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333;",

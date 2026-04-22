@@ -3,7 +3,7 @@
 
 import { resourceFromAttributes, emptyResource } from "@opentelemetry/resources";
 import type { MicrosoftOpenTelemetryOptions } from "../src";
-import { useAzureMonitor } from "../src";
+import { useMicrosoftOpenTelemetry } from "../src";
 import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import type { Context, Exception, ObservableResult, Span } from "@opentelemetry/api";
 import { metrics, SpanKind, trace, TraceFlags } from "@opentelemetry/api";
@@ -23,16 +23,18 @@ import type { IncomingMessage, RequestOptions } from "node:http";
 
 describe("snippets", () => {
   it("ReadmeSampleESMUsage", () => {
-    useAzureMonitor({
-      azureMonitorExporterOptions: {
-        connectionString: process.env.APPLICATIONINSIGHTS_CONNECTION_STRING,
+    useMicrosoftOpenTelemetry({
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: process.env.APPLICATIONINSIGHTS_CONNECTION_STRING,
+        },
       },
     });
 
     // Your application code follows...
   });
 
-  it("ReadmeSampleUseAzureMonitor", () => {
+  it("ReadmeSampleUseMicrosoftOpenTelemetry", () => {
     const options: MicrosoftOpenTelemetryOptions = {
       azureMonitor: {
         azureMonitorExporterOptions: {
@@ -41,7 +43,7 @@ describe("snippets", () => {
         },
       },
     };
-    useAzureMonitor(options);
+    useMicrosoftOpenTelemetry(options);
   });
 
   it("ReadmeSampleConfiguration", () => {
@@ -85,7 +87,7 @@ describe("snippets", () => {
       },
     };
 
-    useAzureMonitor(options);
+    useMicrosoftOpenTelemetry(options);
   });
 
   it("ReadmeSampleCustomConfig", () => {
@@ -95,7 +97,7 @@ describe("snippets", () => {
   });
 
   it("ReadmeSampleCustomInstrumentation", () => {
-    useAzureMonitor();
+    useMicrosoftOpenTelemetry();
     registerInstrumentations({
       tracerProvider: trace.getTracerProvider(),
       meterProvider: metrics.getMeterProvider(),
@@ -113,7 +115,7 @@ describe("snippets", () => {
     customResource.attributes[SEMRESATTRS_SERVICE_INSTANCE_ID] = "my-instance";
     // @ts-preserve-whitespace
     const options: MicrosoftOpenTelemetryOptions = { resource: customResource };
-    useAzureMonitor(options);
+    useMicrosoftOpenTelemetry(options);
   });
 
   it("ReadmeSampleAddCustomProperty", () => {
@@ -139,7 +141,7 @@ describe("snippets", () => {
       spanProcessors: [new SpanEnrichingProcessor()],
     };
     // @ts-preserve-whitespace
-    useAzureMonitor(options);
+    useMicrosoftOpenTelemetry(options);
   });
 
   it("ReadmeSampleAddOperationName", () => {
@@ -183,7 +185,7 @@ describe("snippets", () => {
       logRecordProcessors: [new LogRecordEnrichingProcessor()],
     };
     // @ts-preserve-whitespace
-    useAzureMonitor(options);
+    useMicrosoftOpenTelemetry(options);
   });
 
   it("ReadmeSampleExcludeUrl", () => {
@@ -211,7 +213,7 @@ describe("snippets", () => {
       },
     };
     // @ts-preserve-whitespace
-    useAzureMonitor(options);
+    useMicrosoftOpenTelemetry(options);
   });
 
   it("ReadmeSampleCustomProcessor", () => {
@@ -235,7 +237,7 @@ describe("snippets", () => {
   });
 
   it("ReadmeSampleCustomMetrics", () => {
-    useAzureMonitor();
+    useMicrosoftOpenTelemetry();
     const meter = metrics.getMeter("testMeter");
     // @ts-preserve-whitespace
     const histogram = meter.createHistogram("histogram");
@@ -256,7 +258,7 @@ describe("snippets", () => {
   });
 
   it("ReadmeSampleCustomExceptions", () => {
-    useAzureMonitor();
+    useMicrosoftOpenTelemetry();
     const tracer = trace.getTracer("testMeter");
     // @ts-preserve-whitespace
     const span = tracer.startSpan("hello");
@@ -272,6 +274,6 @@ describe("snippets", () => {
     process.env["APPLICATIONINSIGHTS_LOG_DESTINATION"] = "file";
     process.env["APPLICATIONINSIGHTS_LOGDIR"] = "path/to/logs";
     // @ts-preserve-whitespace
-    useAzureMonitor();
+    useMicrosoftOpenTelemetry();
   });
 });
