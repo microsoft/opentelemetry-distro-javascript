@@ -1,6 +1,6 @@
 # Release History
 
-## [0.1.0-apha.4] - 2026-04-22
+## [0.1.0-alpha.4] - 2026-04-22
 
 ### Features Added
 - Add console exporter ([#35](https://github.com/microsoft/opentelemetry-distro-javascript/pull/35))
