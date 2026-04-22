@@ -47,6 +47,9 @@ export interface MicrosoftOpenTelemetryOptions {
 
   /** A365 observability configuration. When provided with `enabled: true`, A365 export is enabled. */
   a365?: A365Options;
+
+  /** Enable console exporters for traces, metrics, and logs. Auto-enabled when no other exporter is active. */
+  enableConsoleExporters?: boolean;
 }
 
 /**

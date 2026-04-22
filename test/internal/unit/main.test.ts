@@ -855,4 +855,55 @@ describe("Main functions", () => {
 
     await shutdownMicrosoftOpenTelemetry();
   });
+
+  it("console exporters auto-enabled when no built-in exporters are active", async () => {
+    const { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } =
+      await import("../../../src/index.js");
+    useMicrosoftOpenTelemetry({ azureMonitor: { enabled: false } });
+
+    const internalSdk = _getSdkInstance();
+    const meterProvider = (internalSdk as any)["_meterProvider"];
+    const metricReaders = meterProvider?.["_sharedState"]?.metricCollectors || [];
+    assert.isAbove(metricReaders.length, 0, "Console metric reader should be auto-enabled");
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("enableConsoleExporters=false suppresses console exporters", async () => {
+    const { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } =
+      await import("../../../src/index.js");
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+    });
+
+    const internalSdk = _getSdkInstance();
+    const meterProvider = (internalSdk as any)["_meterProvider"];
+    const metricReaders = meterProvider?.["_sharedState"]?.metricCollectors || [];
+    assert.strictEqual(metricReaders.length, 0, "No metric readers when console is suppressed");
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("enableConsoleExporters=true alongside Azure Monitor", async () => {
+    const { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } =
+      await import("../../../src/index.js");
+    useMicrosoftOpenTelemetry({
+      enableConsoleExporters: true,
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString:
+            "InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://localhost",
+        },
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    const meterProvider = (internalSdk as any)["_meterProvider"];
+    const metricReaders = meterProvider?.["_sharedState"]?.metricCollectors || [];
+    // Should have both Azure Monitor metric reader and console metric reader
+    assert.isAbove(metricReaders.length, 1, "Should have Azure Monitor + Console metric readers");
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
 });
