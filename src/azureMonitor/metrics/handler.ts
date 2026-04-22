@@ -90,10 +90,10 @@ export class MetricHandler {
       this._views.push({ meterName: "@azure/opentelemetry-instrumentation-azure-sdk" });
     }
     if (config.instrumentationOptions.http?.enabled) {
-      this._views.push({ meterName: "@azure/opentelemetry-instrumentation-http" });
+      this._views.push({ meterName: "@opentelemetry/instrumentation-http" });
     }
     if (config.instrumentationOptions.mongoDb?.enabled) {
-      this._views.push({ meterName: "@azure/opentelemetry-instrumentation-mongodb" });
+      this._views.push({ meterName: "@opentelemetry/instrumentation-mongodb" });
     }
     if (config.instrumentationOptions.mySql?.enabled) {
       this._views.push({ meterName: "@opentelemetry/instrumentation-mysql" });

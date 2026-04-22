@@ -5,6 +5,7 @@ import { TraceHandler } from "../../../../src/azureMonitor/traces/index.js";
 import { MetricHandler } from "../../../../src/azureMonitor/metrics/index.js";
 import { InternalConfig } from "../../../../src/shared/index.js";
 import { ApplicationInsightsSampler } from "../../../../src/azureMonitor/traces/sampler.js";
+import { createSampler } from "../../../../src/distro/instrumentations.js";
 import {
   HttpInstrumentation,
   type HttpInstrumentationConfig,
@@ -124,61 +125,46 @@ describe("Library/TraceHandler", () => {
       _config.tracesPerSecond = 10;
       _config.samplingRatio = 0.25;
 
-      metricHandler = new MetricHandler(_config);
-      handler = new TraceHandler(_config, metricHandler);
-
-      expect(handler.getSampler()).toBe(customSampler);
+      expect(createSampler(_config)).toBe(customSampler);
     });
 
     it("falls back to rate-limited sampler when tracesPerSecond is set", () => {
       _config.tracesPerSecond = 7;
       _config.samplingRatio = 0.5;
 
-      metricHandler = new MetricHandler(_config);
-      handler = new TraceHandler(_config, metricHandler);
-
-      expect(handler.getSampler()).toBeInstanceOf(RateLimitedSampler);
+      expect(createSampler(_config)).toBeInstanceOf(RateLimitedSampler);
     });
 
     it("uses ApplicationInsightsSampler when tracesPerSecond is 0", () => {
       _config.tracesPerSecond = 0;
       _config.samplingRatio = 0.3;
 
-      metricHandler = new MetricHandler(_config);
-      handler = new TraceHandler(_config, metricHandler);
-
-      expect(handler.getSampler()).toBeInstanceOf(ApplicationInsightsSampler);
-      expect(handler.getSampler().toString()).toBe("ApplicationInsightsSampler{0.3}");
+      const sampler = createSampler(_config);
+      expect(sampler).toBeInstanceOf(ApplicationInsightsSampler);
+      expect(sampler.toString()).toBe("ApplicationInsightsSampler{0.3}");
     });
 
     it("uses ApplicationInsightsSampler with ratio 1 when tracesPerSecond is 0 and samplingRatio is default", () => {
       _config.tracesPerSecond = 0;
       // samplingRatio defaults to 1 from InternalConfig constructor
 
-      metricHandler = new MetricHandler(_config);
-      handler = new TraceHandler(_config, metricHandler);
-
-      expect(handler.getSampler()).toBeInstanceOf(ApplicationInsightsSampler);
-      expect(handler.getSampler().toString()).toBe("ApplicationInsightsSampler{1}");
+      const sampler = createSampler(_config);
+      expect(sampler).toBeInstanceOf(ApplicationInsightsSampler);
+      expect(sampler.toString()).toBe("ApplicationInsightsSampler{1}");
     });
 
     it("uses RateLimitedSampler by default with tracesPerSecond=5", () => {
       // Default config has tracesPerSecond=5
-      metricHandler = new MetricHandler(_config);
-      handler = new TraceHandler(_config, metricHandler);
-
-      expect(handler.getSampler()).toBeInstanceOf(RateLimitedSampler);
+      expect(createSampler(_config)).toBeInstanceOf(RateLimitedSampler);
     });
 
     it("uses ApplicationInsightsSampler when tracesPerSecond is explicitly undefined", () => {
       _config.tracesPerSecond = undefined;
       _config.samplingRatio = 0.2;
 
-      metricHandler = new MetricHandler(_config);
-      handler = new TraceHandler(_config, metricHandler);
-
-      expect(handler.getSampler()).toBeInstanceOf(ApplicationInsightsSampler);
-      expect(handler.getSampler().toString()).toBe("ApplicationInsightsSampler{0.2}");
+      const sampler = createSampler(_config);
+      expect(sampler).toBeInstanceOf(ApplicationInsightsSampler);
+      expect(sampler.toString()).toBe("ApplicationInsightsSampler{0.2}");
     });
   });
 
