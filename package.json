@@ -1,14 +1,15 @@
 {
   "name": "@microsoft/opentelemetry",
   "author": "Microsoft Corporation",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Microsoft OpenTelemetry distribution for JavaScript/TypeScript",
   "main": "./dist/commonjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/commonjs/index.d.ts",
   "type": "module",
   "scripts": {
-    "build": "npm run clean && tsc -p tsconfig.src.json && tsc -p tsconfig.src.cjs.json",
+    "build": "npm run clean && tsc -p tsconfig.src.json && tsc -p tsconfig.src.cjs.json && npm run fixup-cjs",
+    "fixup-cjs": "node scripts/fixup-cjs.cjs",
     "clean": "rimraf dist",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",

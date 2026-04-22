@@ -2,17 +2,54 @@
 // Licensed under the MIT License.
 
 /**
- * @summary Demonstrates how to use the A365 manual telemetry scopes API.
+ * @summary Demonstrates the A365 manual telemetry scopes API for tracing agent flows.
  *
- * This sample shows how to trace a realistic AI agent flow:
- *   1. Receive a user request (InvokeAgentScope)
- *   2. Call an LLM for inference (InferenceScope)
- *   3. Execute a tool the LLM requested (ExecuteToolScope)
- *   4. Stream the final response (OutputScope)
- *   5. Propagate trace context across service boundaries
+ * ## What this sample shows
  *
- * All scopes create structured OpenTelemetry spans with gen-ai semantic
- * conventions and A365-specific attributes.
+ * When you build an AI agent, a single user request typically triggers several
+ * internal steps: calling an LLM, executing tools, and streaming a response.
+ * The A365 scopes API lets you wrap each step in a structured OpenTelemetry span
+ * that follows gen-ai semantic conventions and A365-specific attributes, so you
+ * get a clear picture of every agent invocation in the A365 observability portal.
+ *
+ * ## Agent flow traced in this sample
+ *
+ * ```
+ * User request
+ *   └─ InvokeAgentScope        — wraps the entire agent invocation
+ *        ├─ InferenceScope      — first LLM call (decides to use a tool)
+ *        ├─ ExecuteToolScope    — runs the tool the LLM requested
+ *        ├─ InferenceScope      — second LLM call (formats the answer)
+ *        └─ OutputScope         — records the streamed response
+ * ```
+ *
+ * The sample also shows **cross-service context propagation**: injecting the
+ * current trace context into outgoing HTTP headers so a downstream service can
+ * continue the same trace.
+ *
+ * ## Scopes at a glance
+ *
+ * | Scope | When to use |
+ * |-------|-------------|
+ * | `InvokeAgentScope` | Top-level span for the full agent turn |
+ * | `InferenceScope` | Each LLM / model call |
+ * | `ExecuteToolScope` | Each tool / function call the LLM requests |
+ * | `OutputScope` | Final response sent back to the user |
+ *
+ * ## Environment variables
+ *
+ * | Variable | Required | Description |
+ * |----------|----------|-------------|
+ * | `A365_BEARER_TOKEN` | Yes | Auth token for the Agent365 observability API (use MSAL in production) |
+ * | `APPLICATIONINSIGHTS_CONNECTION_STRING` | No | Azure Monitor connection string (optional, for dual export) |
+ *
+ * ## Running
+ *
+ * ```bash
+ * cp sample.env .env   # fill in A365_BEARER_TOKEN
+ * npm run build
+ * node dist/a365ManualScopes.js
+ * ```
  */
 
 import {
@@ -35,7 +72,10 @@ import type {
 import "dotenv/config";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Setup
+// Step 1 — Token Resolver
+// ────────────────────────────────────────────────────────────────────────────
+// The A365 exporter calls this function to authenticate each export request.
+// In production, replace with an MSAL confidential-client flow (see a365Export.ts).
 // ────────────────────────────────────────────────────────────────────────────
 
 async function myTokenResolver(agentId: string, tenantId: string): Promise<string> {
@@ -43,7 +83,13 @@ async function myTokenResolver(agentId: string, tenantId: string): Promise<strin
   return process.env.A365_BEARER_TOKEN || "<token>";
 }
 
-// Shared agent identity used across all scopes
+// ────────────────────────────────────────────────────────────────────────────
+// Step 2 — Agent identity
+// ────────────────────────────────────────────────────────────────────────────
+// Every scope requires an AgentDetails object so the A365 portal can group
+// traces by agent. In a real app this comes from your agent's registration.
+// ────────────────────────────────────────────────────────────────────────────
+
 const agentDetails: AgentDetails = {
   agentId: "weather-agent-001",
   agentName: "WeatherBot",
@@ -54,13 +100,24 @@ const agentDetails: AgentDetails = {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
-// Simulated agent logic
+// Step 3 — Simulated agent logic
+// ────────────────────────────────────────────────────────────────────────────
+// The functions below simulate what a real agent does. Each one wraps its work
+// in the appropriate A365 scope so every step shows up as a span in the trace.
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Simulate an LLM inference call that decides to use a tool. */
+/**
+ * Simulate an LLM inference call that decides to use a tool.
+ *
+ * **What happens:**
+ * - Creates an `InferenceScope` with model/provider details
+ * - Records input messages (system prompt + user message)
+ * - Records the LLM's output (a tool-call decision)
+ * - Records token usage and finish reason
+ */
 async function callLLM(
   request: A365Request,
-  parentScope: InvokeAgentScope,
+  _parentScope: InvokeAgentScope,
 ): Promise<{ toolName: string; args: Record<string, unknown>; callId: string }> {
   const details: InferenceDetails = {
     operationName: InferenceOperationType.CHAT,
@@ -111,7 +168,14 @@ async function callLLM(
   }
 }
 
-/** Simulate executing a tool that the LLM requested. */
+/**
+ * Simulate executing a tool that the LLM requested.
+ *
+ * **What happens:**
+ * - Creates an `ExecuteToolScope` with tool name, arguments, and call ID
+ * - Runs the tool (here we just return fake weather data)
+ * - Records the tool response on the scope
+ */
 async function executeTool(
   request: A365Request,
   tool: { toolName: string; args: Record<string, unknown>; callId: string },
@@ -140,7 +204,14 @@ async function executeTool(
   }
 }
 
-/** Simulate a final LLM call to format the tool result into a natural language response. */
+/**
+ * Simulate a final LLM call to format the tool result into a user-facing answer.
+ *
+ * **What happens:**
+ * - Creates a second `InferenceScope` (same agent, same trace)
+ * - Records the tool result as input, the natural-language answer as output
+ * - Records token counts and a "stop" finish reason
+ */
 async function formatResponse(
   request: A365Request,
   toolResult: string,
@@ -175,7 +246,7 @@ async function formatResponse(
   }
 }
 
-/** Record the final streamed output. */
+/** Record the final streamed output with `OutputScope`. */
 function recordOutput(request: A365Request, answer: string): void {
   const scope = OutputScope.start(
     request,
@@ -186,7 +257,16 @@ function recordOutput(request: A365Request, answer: string): void {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Trace context propagation demo
+// Step 4 — Cross-service context propagation
+// ────────────────────────────────────────────────────────────────────────────
+// When your agent calls another service over HTTP, you want the downstream
+// service to continue the same distributed trace. This section shows how:
+//
+//   Service A: injectContextToHeaders(outgoingHeaders)
+//     → sends traceparent / tracestate in the HTTP request
+//
+//   Service B: runWithExtractedTraceContext(incomingHeaders, () => { … })
+//     → any spans created inside the callback are children of Service A's span
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Shows how to propagate trace context across HTTP service boundaries. */
@@ -213,11 +293,11 @@ function demonstrateContextPropagation(): void {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Main
+// Step 5 — Put it all together
 // ────────────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  // Initialize the distro with A365 export enabled
+  // Initialize the distro with A365 export enabled (same as a365Export.ts)
   useMicrosoftOpenTelemetry({
     azureMonitor: {
       azureMonitorExporterOptions: {
@@ -233,6 +313,7 @@ async function main(): Promise<void> {
   });
 
   // ── Simulate an incoming user request ──────────────────────────────────
+  // In a real agent this comes from the hosting SDK (e.g. turnContext.activity).
   const request: A365Request = {
     conversationId: "conv-12345",
     sessionId: "session-abc",

@@ -1,5 +1,16 @@
 # Release History
 
+## [0.1.0-alpha.3] - 2026-04-21
+
+### Features Added
+- Vendor A365 observability code in-repo: scopes, exporter, processors, baggage, context propagation, and configuration ([#27](https://github.com/microsoft/opentelemetry-distro-javascript/pull/27))
+- Add Azure Monitor disable flag ([#30](https://github.com/microsoft/opentelemetry-distro-javascript/pull/30))
+
+### Bugs Fixed
+- Fix dual ESM/CJS output ([#30](https://github.com/microsoft/opentelemetry-distro-javascript/pull/30))
+- Fix samples build: use local package reference, add `skipLibCheck`, replace deprecated `ChatOpenAI` with `AzureChatOpenAI` ([#28](https://github.com/microsoft/opentelemetry-distro-javascript/pull/28))
+
+
 ## [0.1.0-alpha.2] - 2026-04-20
 
 ### Features Added

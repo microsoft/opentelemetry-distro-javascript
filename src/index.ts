@@ -32,7 +32,10 @@ export {
   OpenTelemetryConstants,
   MessageRole,
   FinishReason,
+  Modality,
+  InvocationRole,
   InferenceOperationType,
+  A365_MESSAGE_SCHEMA_VERSION,
   isParentSpanRef,
   createContextWithParentSpanRef,
   runWithParentSpanRef,
@@ -72,6 +75,10 @@ export type {
   OutputMessagesParam,
   ResponseMessagesParam,
   MessagePart,
+  TextPart,
+  ToolCallRequestPart,
+  ToolCallResponsePart,
+  ReasoningPart,
   HeadersCarrier,
 } from "./a365/index.js";
 export type { PerRequestSpanProcessorOptions } from "./a365/index.js";

@@ -11,7 +11,7 @@ import type { A365Options } from "./a365/index.js";
 /**
  * Microsoft OpenTelemetry distribution version.
  */
-export const MICROSOFT_OPENTELEMETRY_VERSION = "0.1.0";
+export const MICROSOFT_OPENTELEMETRY_VERSION = "0.1.0-alpha.3";
 
 /**
  * Microsoft OpenTelemetry Options
@@ -57,6 +57,8 @@ export interface MicrosoftOpenTelemetryOptions {
  * distro level in {@link MicrosoftOpenTelemetryOptions}.
  */
 export interface AzureMonitorOpenTelemetryOptions {
+  /** Enable or disable Azure Monitor export (Default true) */
+  enabled?: boolean;
   /** Azure Monitor Exporter Configuration */
   azureMonitorExporterOptions?: AzureMonitorExporterOptions;
   /** Enable Live Metrics feature (Default false) */

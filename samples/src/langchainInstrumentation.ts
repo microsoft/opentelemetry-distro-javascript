@@ -9,7 +9,7 @@ import {
   useMicrosoftOpenTelemetry,
   shutdownMicrosoftOpenTelemetry,
 } from "@microsoft/opentelemetry";
-import { ChatOpenAI } from "@langchain/openai";
+import { AzureChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";
 import "dotenv/config";
 
@@ -29,8 +29,8 @@ async function main(): Promise<void> {
   });
 
   // Create a LangChain chat model
-  const model = new ChatOpenAI({
-    modelName: "gpt-4o",
+  const model = new AzureChatOpenAI({
+    model: "gpt-4o",
     temperature: 0,
     azureOpenAIApiKey: process.env.AZURE_OPENAI_API_KEY,
     azureOpenAIApiInstanceName: process.env.AZURE_OPENAI_INSTANCE_NAME,

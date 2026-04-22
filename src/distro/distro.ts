@@ -8,6 +8,7 @@ import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { MetricReader, ViewOptions } from "@opentelemetry/sdk-metrics";
 import { type SpanProcessor, BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
+import type { Instrumentation } from "@opentelemetry/instrumentation";
 
 import { InternalConfig } from "../shared/config.js";
 import { MetricHandler } from "../azureMonitor/metrics/index.js";
@@ -38,7 +39,7 @@ let disposeAzureMonitor: (() => void) | undefined;
  *
  * This is the primary entry point for the distro. It sets up OpenTelemetry
  * providers and instrumentations, then attaches the configured exporters:
- * - Azure Monitor (when `options.azureMonitor` is provided)
+ * - Azure Monitor (enabled by default; disable with `options.azureMonitor.enabled = false`)
  * - OTLP HTTP (when `OTEL_EXPORTER_OTLP_ENDPOINT` is set)
  * - A365 (when `options.a365.enabled` is true or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`)
  *
@@ -48,8 +49,13 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   const config = new InternalConfig(options);
   patchOpenTelemetryInstrumentationEnable();
 
+  const azureMonitorEnabled = options?.azureMonitor?.enabled !== false;
+
   // ── Azure Monitor components (statsbeat, browser SDK loader, etc.) ─
-  disposeAzureMonitor = setupAzureMonitorComponents(config);
+  disposeAzureMonitor = undefined;
+  if (azureMonitorEnabled) {
+    disposeAzureMonitor = setupAzureMonitorComponents(config);
+  }
 
   // ── Register global providers ─────────────────────────────────────
   // Remove global providers in OpenTelemetry, these would be overridden if present
@@ -67,14 +73,21 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   const globalOpentelemetryApiKey = Symbol.for("opentelemetry.js.api.1");
   delete (globalThis as Record<symbol, unknown>)[globalOpentelemetryApiKey];
 
-  // ── Azure Monitor handlers ────────────────────────────────────────
-  const metricHandler = new MetricHandler(config);
-  const traceHandler = new TraceHandler(config, metricHandler);
-  const logHandler = new LogHandler(config, metricHandler);
+  // ── Azure Monitor handlers (conditional) ──────────────────────────
+  let metricHandler: MetricHandler | undefined;
+  let traceHandler: TraceHandler | undefined;
+  let logHandler: LogHandler | undefined;
+  const instrumentations: Instrumentation[] = [];
 
-  const instrumentations = traceHandler
-    .getInstrumentations()
-    .concat(logHandler.getInstrumentations());
+  if (azureMonitorEnabled) {
+    metricHandler = new MetricHandler(config);
+    traceHandler = new TraceHandler(config, metricHandler);
+    logHandler = new LogHandler(config, metricHandler);
+    instrumentations.push(
+      ...traceHandler.getInstrumentations(),
+      ...logHandler.getInstrumentations(),
+    );
+  }
 
   const resourceDetectorsList = parseResourceDetectorsFromEnvVar();
 
@@ -84,9 +97,8 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   const logRecordProcessors: LogRecordProcessor[] = [...(options?.logRecordProcessors || [])];
   const customViews: ViewOptions[] = [...(options?.views || [])];
 
-  // Always include Azure Monitor metric reader
   const metricReaders: MetricReader[] = [
-    metricHandler.getMetricReader(),
+    ...(metricHandler ? [metricHandler.getMetricReader()] : []),
     ...(options?.metricReaders || []),
   ];
 
@@ -124,7 +136,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     spanProcessors.push(a365ExportProcessor);
   }
 
-  const views: ViewOptions[] = metricHandler.getViews().concat(customViews);
+  const views: ViewOptions[] = [...(metricHandler ? metricHandler.getViews() : []), ...customViews];
 
   // ── Create and start NodeSDK ──────────────────────────────────────
   const sdkConfig: Partial<NodeSDKConfiguration> = {
@@ -133,16 +145,16 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     views,
     instrumentations: instrumentations,
     logRecordProcessors: [
-      logHandler.getAzureLogRecordProcessor(),
+      ...(logHandler ? [logHandler.getAzureLogRecordProcessor()] : []),
       ...logRecordProcessors,
-      logHandler.getBatchLogRecordProcessor(),
+      ...(logHandler ? [logHandler.getBatchLogRecordProcessor()] : []),
     ],
     resource: config.resource,
-    sampler: traceHandler.getSampler(),
+    sampler: traceHandler?.getSampler(),
     spanProcessors: [
-      traceHandler.getAzureMonitorSpanProcessor(),
+      ...(traceHandler ? [traceHandler.getAzureMonitorSpanProcessor()] : []),
       ...spanProcessors,
-      traceHandler.getBatchSpanProcessor(),
+      ...(traceHandler ? [traceHandler.getBatchSpanProcessor()] : []),
     ],
     resourceDetectors: resourceDetectorsList,
   };

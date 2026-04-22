@@ -23,7 +23,11 @@ import type { InternalConfig } from "../../shared/config.js";
 import type { MetricHandler } from "../metrics/handler.js";
 import { ignoreOutgoingRequestHook } from "../utils/common.js";
 import { AzureMonitorSpanProcessor } from "./spanProcessor.js";
-import { AzureFunctionsInstrumentation } from "@azure/functions-opentelemetry-instrumentation";
+// Default-import + destructure: this package is a webpack bundle so Node.js
+// ESM cannot extract named exports from it (see Node error SyntaxError:
+// "Named export 'AzureFunctionsInstrumentation' not found").
+import azureFunctionsOtelPkg from "@azure/functions-opentelemetry-instrumentation";
+const { AzureFunctionsInstrumentation } = azureFunctionsOtelPkg;
 import type { Instrumentation } from "@opentelemetry/instrumentation";
 import { ApplicationInsightsSampler } from "./sampler.js";
 

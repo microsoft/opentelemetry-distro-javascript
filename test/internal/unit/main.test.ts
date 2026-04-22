@@ -811,4 +811,48 @@ describe("Main functions", () => {
 
     void shutdownAzureMonitor();
   });
+
+  it("useMicrosoftOpenTelemetry with azureMonitor.enabled=false should skip Azure Monitor handlers", async () => {
+    const { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } =
+      await import("../../../src/index.js");
+    const processor: SpanProcessor = {
+      forceFlush: () => Promise.resolve(),
+      onStart: () => {
+        /* no-op */
+      },
+      onEnd: () => {
+        /* no-op */
+      },
+      shutdown: () => Promise.resolve(),
+    };
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      spanProcessors: [processor],
+    });
+
+    // Providers should still be registered (the SDK still starts)
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    // The tracer provider should contain the user-provided processor
+    // but NOT Azure Monitor span processors (AzureMonitorSpanProcessor / BatchSpanProcessor)
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const registeredProcessors = tracerProvider?.["_registeredSpanProcessors"] || [];
+    const processorNames = registeredProcessors.map((p: SpanProcessor) => p.constructor.name);
+    // User-provided processor (Object) should be present but no Azure Monitor ones
+    expect(processorNames).not.toContain("AzureMonitorSpanProcessor");
+    expect(processorNames).not.toContain("AzureMonitorExporterProcessor");
+
+    // Metric readers should not contain Azure Monitor readers
+    const meterProvider = (internalSdk as any)["_meterProvider"];
+    const metricReaders = meterProvider?.["_sharedState"]?.metricCollectors || [];
+    assert.strictEqual(
+      metricReaders.length,
+      0,
+      "Should have no metric readers when Azure Monitor is disabled and no custom readers provided",
+    );
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
 });

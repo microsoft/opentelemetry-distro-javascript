@@ -24,8 +24,8 @@ These sample programs show how to use the `@microsoft/opentelemetry` distributio
 | [sampling.ts][sampling]                     | Demonstrates how to enable sampling to reduce data ingestion volume and control costs.                   |
 | [langchainInstrumentation.ts][langchaininstrumentation] | Demonstrates how to enable LangChain instrumentation to trace GenAI operations.                     |
 | [openaiInstrumentation.ts][openaiinstrumentation]       | Demonstrates how to enable OpenAI Agents SDK instrumentation to trace GenAI operations.             |
-| [a365Export.ts][a365export]                 | Demonstrates how to enable A365 observability export alongside Azure Monitor.                            |
-| [a365ManualScopes.ts][a365manualscopes]     | Demonstrates how to use A365 manual telemetry scopes (InvokeAgent, Inference, ExecuteTool, Output) and cross-service context propagation. |
+| [a365Export.ts][a365export]                 | Demonstrates A365 observability export: token resolver setup, dual export with Azure Monitor, and span routing by tenant/agent. |
+| [a365ManualScopes.ts][a365manualscopes]     | Traces a full agent turn with manual scopes (InvokeAgent → Inference → ExecuteTool → Inference → Output) and cross-service context propagation. |
 | [a365HostingMiddleware.ts][a365hostingmiddleware] | Demonstrates A365 hosting middleware (BaggageMiddleware, OutputLoggingMiddleware, ObservabilityHostingManager, ScopeUtils). |
 
 ## Prerequisites
@@ -48,11 +48,23 @@ npm install
 npm run build
 ```
 
-3. Copy `sample.env` to `.env` and fill in your connection string:
+3. Copy `sample.env` to `.env` and fill in the variables needed by the samples you want to run:
 
 ```bash
 cp sample.env .env
 ```
+
+| **Variable**                             | **Used by**                                            | **Description**                                                    |
+| ---------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------ |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING`  | Most samples                                           | Connection string from your Application Insights resource.         |
+| `OTEL_SERVICE_NAME`                      | cloudRole.ts                                           | Service name mapped to Cloud Role Name.                            |
+| `OTEL_SERVICE_NAMESPACE`                 | cloudRole.ts                                           | Service namespace prepended to Cloud Role Name.                    |
+| `OTEL_SERVICE_INSTANCE_ID`               | cloudRole.ts                                           | Service instance mapped to Cloud Role Instance.                    |
+| `AZURE_OPENAI_API_KEY`                   | langchainInstrumentation.ts, openaiInstrumentation.ts  | API key for your Azure OpenAI resource.                            |
+| `AZURE_OPENAI_INSTANCE_NAME`             | langchainInstrumentation.ts, openaiInstrumentation.ts  | Azure OpenAI resource name (e.g. `contoso`).                      |
+| `AZURE_OPENAI_DEPLOYMENT_NAME`           | langchainInstrumentation.ts, openaiInstrumentation.ts  | Model deployment name (e.g. `gpt-4o`).                            |
+| `AZURE_OPENAI_API_VERSION`               | langchainInstrumentation.ts, openaiInstrumentation.ts  | Azure OpenAI API version (default `2024-06-01`).                   |
+| `A365_BEARER_TOKEN`                      | a365Export.ts, a365ManualScopes.ts                     | Auth token for the Agent365 observability API. In production you would acquire this via MSAL; the samples read it from this env var as a shortcut. |
 
 4. Run a sample:
 
