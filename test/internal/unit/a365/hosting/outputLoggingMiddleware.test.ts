@@ -15,7 +15,6 @@ import {
   A365_PARENT_SPAN_KEY,
   A365_AUTH_TOKEN_KEY,
   OpenTelemetryConstants,
-  InvokeAgentScope,
 } from "../../../../../src/a365/index.js";
 import type {
   TurnContextLike,
@@ -280,7 +279,6 @@ describe("OutputLoggingMiddleware", () => {
     const sendError = new Error("send pipeline failed");
 
     // Override simulateSend to make the final send throw
-    const origSimulate = ctx.simulateSend.bind(ctx);
     ctx.simulateSend = async (activities) => {
       // Register the handler first via onTurn, then trigger a throwing send
       const finalSend = async () => {

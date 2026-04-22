@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
 import { ObservabilityHostingManager } from "../../../../../src/a365/hosting/observabilityHostingManager.js";
 import { BaggageMiddleware } from "../../../../../src/a365/hosting/baggageMiddleware.js";
