@@ -1,5 +1,16 @@
 # Release History
 
+## [Unreleased]
+
+### Breaking Changes
+- Remove Azure Functions auto-instrumentation support from this package. The `instrumentationOptions.azureFunctions` option is no longer available.
+
+### Bugs Fixed
+- Prevent ESM/CJS interop regressions by removing the problematic Azure Functions instrumentation path and adding explicit built-ESM import regression coverage.
+
+### Other Changes
+- Expand PR validation checks to run unit tests, functional tests, and a built ESM import smoke test.
+
 ## [0.1.0-alpha.4] - 2026-04-22
 
 ### Breaking Changes

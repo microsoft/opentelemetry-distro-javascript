@@ -77,7 +77,6 @@ Most instrumentations are enabled by default. Pass `{ enabled: false }` to disab
 |---|---|---|---|
 | `http` | `InstrumentationConfig` | enabled | HTTP client/server instrumentation |
 | `azureSdk` | `InstrumentationConfig` | enabled | Azure SDK instrumentation |
-| `azureFunctions` | `InstrumentationConfig` | enabled | Azure Functions instrumentation |
 | `mongoDb` | `InstrumentationConfig` | enabled | MongoDB instrumentation |
 | `mySql` | `InstrumentationConfig` | enabled | MySQL instrumentation |
 | `postgreSql` | `InstrumentationConfig` | enabled | PostgreSQL instrumentation |
