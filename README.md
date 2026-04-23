@@ -113,7 +113,11 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 | `clusterCategory` | `ClusterCategory` | `"prod"` | Cluster category for endpoint resolution (`local`, `dev`, `test`, `preprod`, `firstrelease`, `prod`, `gov`, `high`, `dod`, `mooncake`, `ex`, `rx`) |
 | `domainOverride` | `string` | — | Override the A365 observability service domain |
 | `authScopes` | `string[]` | `["https://api.powerplatform.com/.default"]` | OAuth scopes for A365 service authentication |
+| `serviceNamespace` | `string` | — | Optional OTel `service.namespace` resource attribute. When set, applies globally to all spans, metrics, and logs (across all exporters: Azure Monitor, OTLP, A365) |
 | `perRequestExport` | `boolean` | `false` | Buffer spans per trace and export on root completion instead of batch export |
+| `exporterOptions` | `Partial<Agent365ExporterOptions>` | — | Tuning options for exporter behavior: `useS2SEndpoint`, `maxQueueSize`, `maxExportBatchSize`, `scheduledDelayMilliseconds`, `exporterTimeoutMilliseconds`, `httpRequestTimeoutMilliseconds` |
+| `observabilityLogLevel` | `string` | `"none"` | A365 internal logger filter level (`none`, `info`, `warn`, `error`), pipe-delimited for multiple levels (e.g., `"warn\|error"`) |
+| `logger` | `ILogger` | — | Custom logger implementation for A365 internals (implements `info()`, `warn()`, `error()` methods) |
 | `baggage` | `A365BaggageOptions` | see below | Baggage propagation and span enrichment options |
 | `hosting` | `A365HostingOptions` | see below | Hosting middleware options (requires `@microsoft/agents-hosting`) |
 
@@ -130,6 +134,36 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 |---|---|---|---|
 | `enabled` | `boolean` | `false` | Enable hosting middleware integration (baggage middleware, output logging, etc.) |
 
+#### `a365.exporterOptions` — Agent365 Exporter Tuning
+
+Fine-tune the A365 exporter behavior via the `exporterOptions` object:
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `useS2SEndpoint` | `boolean` | `false` | Use service-to-service (S2S) endpoint shape instead of standard endpoint |
+| `maxQueueSize` | `number` | `2048` | Maximum number of spans to queue before forcing export |
+| `maxExportBatchSize` | `number` | `512` | Maximum number of spans per export request |
+| `scheduledDelayMilliseconds` | `number` | `5000` | Delay (ms) before batched spans are exported automatically |
+| `exporterTimeoutMilliseconds` | `number` | `30000` | Timeout (ms) for exporter shutdown/flush |
+| `httpRequestTimeoutMilliseconds` | `number` | `10000` | HTTP request timeout (ms) when sending spans to A365 service |
+
+Example:
+
+```typescript
+useMicrosoftOpenTelemetry({
+  a365: {
+    enabled: true,
+    tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId),
+    exporterOptions: {
+      maxQueueSize: 4096,
+      maxExportBatchSize: 1024,
+      scheduledDelayMilliseconds: 10000,
+      httpRequestTimeoutMilliseconds: 15000,
+    },
+  },
+});
+```
+
 #### A365 environment variables
 
 A365 options can also be set via environment variables (highest precedence):
@@ -141,6 +175,13 @@ A365 options can also be set via environment variables (highest precedence):
 | `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated list of OAuth scopes |
 | `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override service domain |
 | `CLUSTER_CATEGORY` | Override cluster category |
+| `A365_OBSERVABILITY_LOG_LEVEL` | A365 internal logger filter level (`none`, `info`, `warn`, `error`, or pipe-delimited combination) — overrides `observabilityLogLevel` |
+| `A365_PER_REQUEST_MAX_TRACES` | Max buffered traces (default: `1000`) |
+| `A365_PER_REQUEST_MAX_SPANS_PER_TRACE` | Max spans per trace (default: `5000`) |
+| `A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS` | Max concurrent exports (default: `20`) |
+| `A365_PER_REQUEST_FLUSH_GRACE_MS` | Grace period after root span ends (default: `250`) |
+| `A365_PER_REQUEST_MAX_TRACE_AGE_MS` | Max trace age before forced flush (default: `1800000`) |
+
 
 ### Example
 

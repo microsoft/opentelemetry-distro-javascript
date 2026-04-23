@@ -17,7 +17,7 @@ import { context, trace, propagation } from "@opentelemetry/api";
 import type { Context, SpanContext } from "@opentelemetry/api";
 import { TraceFlags } from "@opentelemetry/api";
 import type { ParentSpanRef } from "./contracts.js";
-import { Logger } from "../shared/logging/index.js";
+import { getA365Logger } from "./logging.js";
 
 // ---------------------------------------------------------------------------
 // Validation helpers
@@ -66,7 +66,7 @@ export function isParentSpanRef(value: unknown): value is ParentSpanRef {
  * This allows child spans to be correctly parented even when async context is broken.
  */
 export function createContextWithParentSpanRef(base: Context, parent: ParentSpanRef): Context {
-  const logger = Logger.getInstance();
+  const logger = getA365Logger();
 
   if (!isValidTraceId(parent.traceId) || !isValidSpanId(parent.spanId)) {
     logger.warn(

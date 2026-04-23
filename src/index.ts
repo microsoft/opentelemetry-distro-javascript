@@ -18,8 +18,13 @@ export type {
 } from "./distro/index.js";
 
 // ── Re-exports from A365 configuration ──────────────────────────────────────
-export { A365Configuration } from "./a365/index.js";
-export type { ClusterCategory, A365BaggageOptions, A365HostingOptions } from "./a365/index.js";
+export { A365Configuration, configureA365Logger, getA365Logger } from "./a365/index.js";
+export type {
+  ClusterCategory,
+  A365BaggageOptions,
+  A365HostingOptions,
+  ILogger,
+} from "./a365/index.js";
 
 // ── Re-exports from A365 scopes (manual telemetry API) ──────────────────────
 export {

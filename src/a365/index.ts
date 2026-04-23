@@ -7,7 +7,10 @@ export type {
   ClusterCategory,
   A365BaggageOptions,
   A365HostingOptions,
+  ILogger,
 } from "./configuration/index.js";
+
+export { configureA365Logger, getA365Logger } from "./logging.js";
 
 export { Agent365Exporter } from "./exporter/index.js";
 export type { Agent365ExporterOptions, TokenResolver } from "./exporter/index.js";

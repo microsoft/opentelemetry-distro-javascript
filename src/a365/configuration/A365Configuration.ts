@@ -7,6 +7,8 @@ import type {
   A365BaggageOptions,
   A365HostingOptions,
 } from "./A365ConfigurationOptions.js";
+import type { ILogger } from "../logging.js";
+import { configureA365Logger } from "../logging.js";
 import { Logger } from "../../shared/logging/index.js";
 import { JsonConfig } from "../../shared/jsonConfig.js";
 
@@ -40,6 +42,7 @@ export const A365_ENV_VARS = {
   AUTH_SCOPES: "A365_OBSERVABILITY_SCOPES_OVERRIDE",
   DOMAIN: "A365_OBSERVABILITY_DOMAIN_OVERRIDE",
   CLUSTER_CATEGORY: "CLUSTER_CATEGORY",
+  LOG_LEVEL: "A365_OBSERVABILITY_LOG_LEVEL",
 } as const;
 
 const DEFAULT_AUTH_SCOPE = "https://api.powerplatform.com/.default";
@@ -84,8 +87,20 @@ export class A365Configuration {
   /** OAuth scopes for A365 service authentication. */
   public readonly authScopes: string[];
 
+  /** Optional OTel service.namespace override applied when A365 is enabled. */
+  public readonly serviceNamespace?: string;
+
   /** Whether to use per-request export mode. */
   public readonly perRequestExport: boolean;
+
+  /** Exporter tuning options for batch/transport behavior. */
+  public readonly exporterOptions?: A365Options["exporterOptions"];
+
+  /** A365 internal logger filter level (none|info|warn|error, pipe-delimited). */
+  public readonly observabilityLogLevel: string;
+
+  /** Optional custom A365 logger implementation. */
+  public readonly logger?: ILogger;
 
   /** Baggage options. */
   public readonly baggage: Required<A365BaggageOptions>;
@@ -99,7 +114,15 @@ export class A365Configuration {
     let clusterCategory: ClusterCategory = "prod";
     let domainOverride: string | undefined = options?.domainOverride;
     let authScopes: string[] = options?.authScopes ?? [DEFAULT_AUTH_SCOPE];
+    let serviceNamespace: string | undefined = options?.serviceNamespace;
     let perRequestExport = false;
+    let exporterOptions: A365Options["exporterOptions"] = options?.exporterOptions;
+    let observabilityLogLevel = options?.observabilityLogLevel ?? "none";
+
+    configureA365Logger({
+      logger: options?.logger,
+      logLevel: observabilityLogLevel,
+    });
 
     // 2. Apply programmatic options
     if (options) {
@@ -115,6 +138,9 @@ export class A365Configuration {
       clusterCategory = jsonA365.clusterCategory ?? clusterCategory;
       domainOverride = jsonA365.domainOverride ?? domainOverride;
       perRequestExport = jsonA365.perRequestExport ?? perRequestExport;
+      serviceNamespace = jsonA365.serviceNamespace ?? serviceNamespace;
+      exporterOptions = jsonA365.exporterOptions ?? exporterOptions;
+      observabilityLogLevel = jsonA365.observabilityLogLevel ?? observabilityLogLevel;
       if (jsonA365.authScopes) {
         authScopes = jsonA365.authScopes;
       }
@@ -150,13 +176,27 @@ export class A365Configuration {
       );
     }
 
+    const envLogLevel = process.env[A365_ENV_VARS.LOG_LEVEL]?.trim();
+    if (envLogLevel) {
+      observabilityLogLevel = envLogLevel;
+    }
+
     // Assign resolved values
     this.enabled = enabled;
     this.tokenResolver = options?.tokenResolver;
     this.clusterCategory = clusterCategory;
     this.domainOverride = domainOverride;
     this.authScopes = authScopes;
+    this.serviceNamespace = serviceNamespace;
     this.perRequestExport = perRequestExport;
+    this.exporterOptions = exporterOptions;
+    this.observabilityLogLevel = observabilityLogLevel;
+    this.logger = options?.logger;
+
+    configureA365Logger({
+      logger: this.logger,
+      logLevel: this.observabilityLogLevel,
+    });
 
     this.baggage = {
       propagationEnabled:
@@ -181,6 +221,10 @@ export class A365Configuration {
       options.tokenResolver !== undefined ||
       options.domainOverride !== undefined ||
       options.perRequestExport !== undefined ||
+      options.serviceNamespace !== undefined ||
+      options.exporterOptions !== undefined ||
+      options.observabilityLogLevel !== undefined ||
+      options.logger !== undefined ||
       options.hosting?.enabled === true;
 
     if (hasNonTrivialOptions) {

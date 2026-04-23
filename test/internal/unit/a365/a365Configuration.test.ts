@@ -6,6 +6,7 @@ import {
   A365Configuration,
   A365_ENV_VARS,
 } from "../../../../src/a365/configuration/A365Configuration.js";
+import { getA365Logger } from "../../../../src/a365/logging.js";
 import { JsonConfig } from "../../../../src/shared/jsonConfig.js";
 
 describe("A365Configuration", () => {
@@ -29,7 +30,11 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.clusterCategory, "prod");
       assert.strictEqual(config.domainOverride, undefined);
       assert.deepStrictEqual(config.authScopes, ["https://api.powerplatform.com/.default"]);
+      assert.strictEqual(config.serviceNamespace, undefined);
       assert.strictEqual(config.perRequestExport, false);
+      assert.strictEqual(config.exporterOptions, undefined);
+      assert.strictEqual(config.observabilityLogLevel, "none");
+      assert.strictEqual(config.logger, undefined);
       assert.strictEqual(config.tokenResolver, undefined);
     });
 
@@ -70,6 +75,51 @@ describe("A365Configuration", () => {
     it("should apply per-request export", () => {
       const config = new A365Configuration({ perRequestExport: true });
       assert.strictEqual(config.perRequestExport, true);
+    });
+
+    it("should apply service namespace", () => {
+      const config = new A365Configuration({ serviceNamespace: "agent365.app" });
+      assert.strictEqual(config.serviceNamespace, "agent365.app");
+    });
+
+    it("should apply exporter options", () => {
+      const config = new A365Configuration({
+        exporterOptions: {
+          useS2SEndpoint: true,
+          maxQueueSize: 100,
+          maxExportBatchSize: 20,
+          scheduledDelayMilliseconds: 250,
+          exporterTimeoutMilliseconds: 1000,
+          httpRequestTimeoutMilliseconds: 500,
+        },
+      });
+
+      assert.deepStrictEqual(config.exporterOptions, {
+        useS2SEndpoint: true,
+        maxQueueSize: 100,
+        maxExportBatchSize: 20,
+        scheduledDelayMilliseconds: 250,
+        exporterTimeoutMilliseconds: 1000,
+        httpRequestTimeoutMilliseconds: 500,
+      });
+    });
+
+    it("should apply custom logger and log level", () => {
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const config = new A365Configuration({
+        logger: customLogger,
+        observabilityLogLevel: "info|warn|error",
+      });
+
+      assert.strictEqual(config.logger, customLogger);
+      assert.strictEqual(config.observabilityLogLevel, "info|warn|error");
+
+      getA365Logger().info("hello");
+      assert.strictEqual(customLogger.info.mock.calls.length, 1);
     });
 
     it("should apply token resolver", () => {
@@ -129,6 +179,12 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.clusterCategory, "preprod");
     });
 
+    it("should override log level from env", () => {
+      process.env[A365_ENV_VARS.LOG_LEVEL] = "warn|error";
+      const config = new A365Configuration({ observabilityLogLevel: "info" });
+      assert.strictEqual(config.observabilityLogLevel, "warn|error");
+    });
+
     it("should ignore empty env vars", () => {
       process.env[A365_ENV_VARS.DOMAIN] = "";
       const config = new A365Configuration({ domainOverride: "keep.this.com" });
@@ -157,6 +213,12 @@ describe("A365Configuration", () => {
           clusterCategory: "preprod",
           domainOverride: "json.example.com",
           perRequestExport: true,
+          serviceNamespace: "agent365.json",
+          exporterOptions: {
+            maxQueueSize: 4096,
+            maxExportBatchSize: 256,
+          },
+          observabilityLogLevel: "warn",
         },
       });
       const config = new A365Configuration();
@@ -164,6 +226,12 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.clusterCategory, "preprod");
       assert.strictEqual(config.domainOverride, "json.example.com");
       assert.strictEqual(config.perRequestExport, true);
+      assert.strictEqual(config.serviceNamespace, "agent365.json");
+      assert.deepStrictEqual(config.exporterOptions, {
+        maxQueueSize: 4096,
+        maxExportBatchSize: 256,
+      });
+      assert.strictEqual(config.observabilityLogLevel, "warn");
     });
 
     it("JSON config takes precedence over programmatic options", () => {
@@ -257,6 +325,7 @@ describe("A365Configuration", () => {
       assert.strictEqual(A365_ENV_VARS.AUTH_SCOPES, "A365_OBSERVABILITY_SCOPES_OVERRIDE");
       assert.strictEqual(A365_ENV_VARS.DOMAIN, "A365_OBSERVABILITY_DOMAIN_OVERRIDE");
       assert.strictEqual(A365_ENV_VARS.CLUSTER_CATEGORY, "CLUSTER_CATEGORY");
+      assert.strictEqual(A365_ENV_VARS.LOG_LEVEL, "A365_OBSERVABILITY_LOG_LEVEL");
     });
   });
 });

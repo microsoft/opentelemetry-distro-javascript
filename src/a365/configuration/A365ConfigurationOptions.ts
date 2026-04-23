@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { Agent365ExporterOptions } from "../exporter/Agent365ExporterOptions.js";
+import type { ILogger } from "../logging.js";
+
 /**
  * Cluster categories for A365 service endpoint resolution.
  * Mirrors the ClusterCategory enum from Agent365-nodejs.
@@ -45,12 +48,34 @@ export interface A365Options {
   /** OAuth scopes for A365 service authentication. */
   authScopes?: string[];
 
+  /** Optional OTel service.namespace override applied when A365 is enabled. */
+  serviceNamespace?: string;
+
   /**
    * Use per-request export mode (buffer spans per trace, export on root completion).
    * When false, uses standard batch export.
    * @default false
    */
   perRequestExport?: boolean;
+
+  /** Exporter tuning options (queue sizes, timeouts, batch sizing, endpoint shape). */
+  exporterOptions?: Partial<
+    Pick<
+      Agent365ExporterOptions,
+      | "useS2SEndpoint"
+      | "maxQueueSize"
+      | "scheduledDelayMilliseconds"
+      | "exporterTimeoutMilliseconds"
+      | "httpRequestTimeoutMilliseconds"
+      | "maxExportBatchSize"
+    >
+  >;
+
+  /** A365 internal logger filter level (none|info|warn|error, pipe-delimited). */
+  observabilityLogLevel?: string;
+
+  /** Optional custom logger used by A365 internals. */
+  logger?: ILogger;
 
   /** Baggage propagation and span enrichment options. */
   baggage?: A365BaggageOptions;
