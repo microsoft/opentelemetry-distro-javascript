@@ -8,9 +8,7 @@ import type {
   A365HostingOptions,
 } from "./A365ConfigurationOptions.js";
 import type { ILogger } from "../logging.js";
-import { configureA365Logger } from "../logging.js";
-import { Logger } from "../../shared/logging/index.js";
-import { JsonConfig } from "../../shared/jsonConfig.js";
+import { configureA365Logger, getA365Logger } from "../logging.js";
 
 /**
  * Parse an environment variable as a boolean.
@@ -65,11 +63,10 @@ const VALID_CLUSTER_CATEGORIES: ReadonlySet<string> = new Set([
 /**
  * Resolved A365 configuration.
  *
- * Merges values from four sources (lowest to highest precedence):
+ * Merges values from three sources (lowest to highest precedence):
  *   1. Defaults
  *   2. Programmatic options (`A365Options`)
- *   3. JSON config (`applicationinsights.json` → `a365` key)
- *   4. Environment variables (see `A365_ENV_VARS`)
+ *   3. Environment variables (see `A365_ENV_VARS`)
  */
 export class A365Configuration {
   /** Whether A365 observability is enabled. */
@@ -87,7 +84,7 @@ export class A365Configuration {
   /** OAuth scopes for A365 service authentication. */
   public readonly authScopes: string[];
 
-  /** Optional OTel service.namespace override applied when A365 is enabled. */
+  /** Optional OTel service.namespace override applied whenever this option is set. */
   public readonly serviceNamespace?: string;
 
   /** Whether to use per-request export mode. */
@@ -119,11 +116,6 @@ export class A365Configuration {
     let exporterOptions: A365Options["exporterOptions"] = options?.exporterOptions;
     let observabilityLogLevel = options?.observabilityLogLevel ?? "none";
 
-    configureA365Logger({
-      logger: options?.logger,
-      logLevel: observabilityLogLevel,
-    });
-
     // 2. Apply programmatic options
     if (options) {
       enabled = options.enabled ?? enabled;
@@ -131,22 +123,7 @@ export class A365Configuration {
       perRequestExport = options.perRequestExport ?? perRequestExport;
     }
 
-    // 3. Apply JSON config (takes precedence over programmatic options)
-    const jsonA365 = JsonConfig.getInstance().a365;
-    if (jsonA365) {
-      enabled = jsonA365.enabled ?? enabled;
-      clusterCategory = jsonA365.clusterCategory ?? clusterCategory;
-      domainOverride = jsonA365.domainOverride ?? domainOverride;
-      perRequestExport = jsonA365.perRequestExport ?? perRequestExport;
-      serviceNamespace = jsonA365.serviceNamespace ?? serviceNamespace;
-      exporterOptions = jsonA365.exporterOptions ?? exporterOptions;
-      observabilityLogLevel = jsonA365.observabilityLogLevel ?? observabilityLogLevel;
-      if (jsonA365.authScopes) {
-        authScopes = jsonA365.authScopes;
-      }
-    }
-
-    // 4. Apply environment variable overrides (highest precedence)
+    // 3. Apply environment variable overrides (highest precedence)
     const envEnabled = parseEnvBoolean(process.env[A365_ENV_VARS.EXPORTER_ENABLED]);
     if (envEnabled !== undefined) {
       enabled = envEnabled;
@@ -167,18 +144,23 @@ export class A365Configuration {
       domainOverride = envDomain.replace(/\/+$/, "");
     }
 
+    const envLogLevel = process.env[A365_ENV_VARS.LOG_LEVEL]?.trim();
+    if (envLogLevel) {
+      observabilityLogLevel = envLogLevel;
+    }
+
+    configureA365Logger({
+      logger: options?.logger,
+      logLevel: observabilityLogLevel,
+    });
+
     const envCluster = process.env[A365_ENV_VARS.CLUSTER_CATEGORY]?.toLowerCase();
     if (envCluster && VALID_CLUSTER_CATEGORIES.has(envCluster)) {
       clusterCategory = envCluster as ClusterCategory;
     } else if (envCluster) {
-      Logger.getInstance().warn(
+      getA365Logger().warn(
         `Invalid ${A365_ENV_VARS.CLUSTER_CATEGORY} value '${envCluster}'. Using default cluster category.`,
       );
-    }
-
-    const envLogLevel = process.env[A365_ENV_VARS.LOG_LEVEL]?.trim();
-    if (envLogLevel) {
-      observabilityLogLevel = envLogLevel;
     }
 
     // Assign resolved values
@@ -193,19 +175,13 @@ export class A365Configuration {
     this.observabilityLogLevel = observabilityLogLevel;
     this.logger = options?.logger;
 
-    configureA365Logger({
-      logger: this.logger,
-      logLevel: this.observabilityLogLevel,
-    });
-
     this.baggage = {
-      propagationEnabled:
-        jsonA365?.baggage?.propagationEnabled ?? options?.baggage?.propagationEnabled ?? true,
-      enrichSpans: jsonA365?.baggage?.enrichSpans ?? options?.baggage?.enrichSpans ?? true,
+      propagationEnabled: options?.baggage?.propagationEnabled ?? true,
+      enrichSpans: options?.baggage?.enrichSpans ?? true,
     };
 
     this.hosting = {
-      enabled: jsonA365?.hosting?.enabled ?? options?.hosting?.enabled ?? false,
+      enabled: options?.hosting?.enabled ?? false,
     };
 
     // Warn when A365-scoped options are set but A365 is not enabled
@@ -228,7 +204,7 @@ export class A365Configuration {
       options.hosting?.enabled === true;
 
     if (hasNonTrivialOptions) {
-      Logger.getInstance().warn(
+      getA365Logger().warn(
         "A365 configuration options are set but A365 is not enabled. " +
           "Set `a365.enabled: true` or `ENABLE_A365_OBSERVABILITY_EXPORTER=true` to enable.",
       );

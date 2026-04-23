@@ -116,8 +116,8 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 | `serviceNamespace` | `string` | — | Optional OTel `service.namespace` resource attribute. When set, applies globally to all spans, metrics, and logs (across all exporters: Azure Monitor, OTLP, A365) |
 | `perRequestExport` | `boolean` | `false` | Buffer spans per trace and export on root completion instead of batch export |
 | `exporterOptions` | `Partial<Agent365ExporterOptions>` | — | Tuning options for exporter behavior: `useS2SEndpoint`, `maxQueueSize`, `maxExportBatchSize`, `scheduledDelayMilliseconds`, `exporterTimeoutMilliseconds`, `httpRequestTimeoutMilliseconds` |
-| `observabilityLogLevel` | `string` | `"none"` | A365 internal logger filter level (`none`, `info`, `warn`, `error`), pipe-delimited for multiple levels (e.g., `"warn\|error"`) |
-| `logger` | `ILogger` | — | Custom logger implementation for A365 internals (implements `info()`, `warn()`, `error()` methods) |
+| `observabilityLogLevel` | `string` | `"none"` | Filter level for A365 components that use the A365-specific logger (`none`, `info`, `warn`, `error`), pipe-delimited for multiple levels (e.g., `"warn\|error"`). Some A365-related components still use the shared logger. |
+| `logger` | `ILogger` | — | Custom logger implementation for A365 components that use the A365-specific logger path today (implements `info()`, `warn()`, `error()` methods). Some A365-related components still log via the shared logger. |
 | `baggage` | `A365BaggageOptions` | see below | Baggage propagation and span enrichment options |
 | `hosting` | `A365HostingOptions` | see below | Hosting middleware options (requires `@microsoft/agents-hosting`) |
 
@@ -144,8 +144,8 @@ Fine-tune the A365 exporter behavior via the `exporterOptions` object:
 | `maxQueueSize` | `number` | `2048` | Maximum number of spans to queue before forcing export |
 | `maxExportBatchSize` | `number` | `512` | Maximum number of spans per export request |
 | `scheduledDelayMilliseconds` | `number` | `5000` | Delay (ms) before batched spans are exported automatically |
-| `exporterTimeoutMilliseconds` | `number` | `30000` | Timeout (ms) for exporter shutdown/flush |
-| `httpRequestTimeoutMilliseconds` | `number` | `10000` | HTTP request timeout (ms) when sending spans to A365 service |
+| `exporterTimeoutMilliseconds` | `number` | `30000` | Timeout (ms) for batch exporter shutdown/flush when forwarded to `BatchSpanProcessor` |
+| `httpRequestTimeoutMilliseconds` | `number` | `30000` | HTTP request timeout (ms) when sending spans to A365 service |
 
 Example:
 

@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import path from "node:path";
-
 import { InternalConfig } from "../../../../src/shared/index.js";
-import { JsonConfig } from "../../../../src/shared/jsonConfig.js";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import {
   CloudPlatformValues,
@@ -39,58 +36,14 @@ describe("Library/Config", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
-    (JsonConfig["_instance"] as any) = undefined;
   });
 
   describe("#constructor", () => {
-    it("merge JSON config", () => {
-      (JsonConfig["_instance"] as any) = undefined;
-      const customConfigJSONPath = path.resolve(__dirname, "config.json");
-      vi.stubEnv("APPLICATIONINSIGHTS_CONFIGURATION_FILE", customConfigJSONPath);
-      const config = new InternalConfig();
-      assert.deepStrictEqual(
-        config.azureMonitorExporterOptions.connectionString,
-        "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333;IngestionEndpoint=https://centralus-0.in.applicationinsights.azure.com/",
-      );
-      assert.deepStrictEqual(config.samplingRatio, 0.3, "Wrong samplingRatio");
-      assert.deepStrictEqual(config.tracesPerSecond, 0.2, "Wrong tracesPerSecond");
-      assert.deepStrictEqual(
-        config.azureMonitorExporterOptions?.disableOfflineStorage,
-        true,
-        "Wrong disableOfflineStorage",
-      );
-      assert.deepStrictEqual(
-        config.azureMonitorExporterOptions?.storageDirectory,
-        "testPath",
-        "Wrong storageDirectory",
-      );
-      assert.deepStrictEqual(
-        config.instrumentationOptions.azureSdk?.enabled,
-        true,
-        "Wrong azureSdk",
-      );
-      assert.deepStrictEqual(config.instrumentationOptions.mongoDb?.enabled, true, "Wrong mongoDb");
-      assert.deepStrictEqual(config.instrumentationOptions.mySql?.enabled, true, "Wrong mySql");
-      assert.deepStrictEqual(
-        config.instrumentationOptions.postgreSql?.enabled,
-        true,
-        "Wrong postgreSql",
-      );
-      assert.deepStrictEqual(config.instrumentationOptions.redis?.enabled, true, "Wrong redis");
-      assert.deepStrictEqual(config.instrumentationOptions.redis4?.enabled, true, "Wrong redis4");
-    });
-
-    it("JSON config values take precedence over others", () => {
-      const jsonOptions = {
-        azureMonitorExporterOptions: {
-          connectionString: "testConnString",
-          storageDirectory: "teststorageDirectory",
-          disableOfflineStorage: true,
-        },
-        samplingRatio: 1,
-        tracesPerSecond: 2,
+    it("merge programmatic options", () => {
+      const options: MicrosoftOpenTelemetryOptions = {
+        samplingRatio: 0.3,
+        tracesPerSecond: 0.2,
         instrumentationOptions: {
-          http: { enabled: true },
           azureSdk: { enabled: true },
           mongoDb: { enabled: true },
           mySql: { enabled: true },
@@ -98,12 +51,68 @@ describe("Library/Config", () => {
           redis: { enabled: true },
           redis4: { enabled: true },
         },
+        azureMonitor: {
+          azureMonitorExporterOptions: {
+            connectionString:
+              "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333;IngestionEndpoint=https://centralus-0.in.applicationinsights.azure.com/",
+            disableOfflineStorage: true,
+            storageDirectory: "testPath",
+          },
+        },
       };
-      vi.stubEnv("APPLICATIONINSIGHTS_CONFIGURATION_CONTENT", JSON.stringify(jsonOptions));
+      const mergedConfig = new InternalConfig(options);
+      assert.deepStrictEqual(
+        mergedConfig.azureMonitorExporterOptions.connectionString,
+        "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333;IngestionEndpoint=https://centralus-0.in.applicationinsights.azure.com/",
+      );
+      assert.deepStrictEqual(mergedConfig.samplingRatio, 0.3, "Wrong samplingRatio");
+      assert.deepStrictEqual(mergedConfig.tracesPerSecond, 0.2, "Wrong tracesPerSecond");
+      assert.deepStrictEqual(
+        mergedConfig.azureMonitorExporterOptions?.disableOfflineStorage,
+        true,
+        "Wrong disableOfflineStorage",
+      );
+      assert.deepStrictEqual(
+        mergedConfig.azureMonitorExporterOptions?.storageDirectory,
+        "testPath",
+        "Wrong storageDirectory",
+      );
+      assert.deepStrictEqual(
+        mergedConfig.instrumentationOptions.azureSdk?.enabled,
+        true,
+        "Wrong azureSdk",
+      );
+      assert.deepStrictEqual(
+        mergedConfig.instrumentationOptions.mongoDb?.enabled,
+        true,
+        "Wrong mongoDb",
+      );
+      assert.deepStrictEqual(
+        mergedConfig.instrumentationOptions.mySql?.enabled,
+        true,
+        "Wrong mySql",
+      );
+      assert.deepStrictEqual(
+        mergedConfig.instrumentationOptions.postgreSql?.enabled,
+        true,
+        "Wrong postgreSql",
+      );
+      assert.deepStrictEqual(
+        mergedConfig.instrumentationOptions.redis?.enabled,
+        true,
+        "Wrong redis",
+      );
+      assert.deepStrictEqual(
+        mergedConfig.instrumentationOptions.redis4?.enabled,
+        true,
+        "Wrong redis4",
+      );
+    });
 
+    it("programmatic options take precedence over defaults", () => {
       const options: MicrosoftOpenTelemetryOptions = {
-        samplingRatio: 0.5,
-        tracesPerSecond: 4,
+        samplingRatio: 0.6,
+        tracesPerSecond: 4.5,
         instrumentationOptions: {
           http: { enabled: false },
           azureSdk: { enabled: false },
@@ -123,48 +132,24 @@ describe("Library/Config", () => {
       };
 
       const config = new InternalConfig(options);
-      assert.strictEqual(config.samplingRatio, jsonOptions.samplingRatio);
-      assert.strictEqual(config.tracesPerSecond, jsonOptions.tracesPerSecond);
-      assert.strictEqual(
-        config.instrumentationOptions?.http?.enabled,
-        jsonOptions.instrumentationOptions.http.enabled,
-      );
-      assert.strictEqual(
-        config.instrumentationOptions?.azureSdk?.enabled,
-        jsonOptions.instrumentationOptions.azureSdk.enabled,
-      );
-      assert.strictEqual(
-        config.instrumentationOptions?.mongoDb?.enabled,
-        jsonOptions.instrumentationOptions.mongoDb.enabled,
-      );
-      assert.strictEqual(
-        config.instrumentationOptions?.mySql?.enabled,
-        jsonOptions.instrumentationOptions.mySql.enabled,
-      );
-      assert.strictEqual(
-        config.instrumentationOptions?.postgreSql?.enabled,
-        jsonOptions.instrumentationOptions.postgreSql.enabled,
-      );
-      assert.strictEqual(
-        config.instrumentationOptions?.redis?.enabled,
-        jsonOptions.instrumentationOptions.redis.enabled,
-      );
-      assert.strictEqual(
-        config.instrumentationOptions?.redis4?.enabled,
-        jsonOptions.instrumentationOptions.redis4.enabled,
-      );
+      assert.strictEqual(config.samplingRatio, 0.6);
+      assert.strictEqual(config.tracesPerSecond, 4.5);
+      assert.strictEqual(config.instrumentationOptions?.http?.enabled, false);
+      assert.strictEqual(config.instrumentationOptions?.azureSdk?.enabled, false);
+      assert.strictEqual(config.instrumentationOptions?.mongoDb?.enabled, false);
+      assert.strictEqual(config.instrumentationOptions?.mySql?.enabled, false);
+      assert.strictEqual(config.instrumentationOptions?.postgreSql?.enabled, false);
+      assert.strictEqual(config.instrumentationOptions?.redis?.enabled, false);
+      assert.strictEqual(config.instrumentationOptions?.redis4?.enabled, false);
       assert.strictEqual(
         config.azureMonitorExporterOptions?.connectionString,
-        jsonOptions.azureMonitorExporterOptions.connectionString,
+        "testConnStringOther",
       );
       assert.strictEqual(
         config.azureMonitorExporterOptions?.storageDirectory,
-        jsonOptions.azureMonitorExporterOptions.storageDirectory,
+        "teststorageDirectoryOther",
       );
-      assert.strictEqual(
-        config.azureMonitorExporterOptions?.disableOfflineStorage,
-        jsonOptions.azureMonitorExporterOptions.disableOfflineStorage,
-      );
+      assert.strictEqual(config.azureMonitorExporterOptions?.disableOfflineStorage, false);
     });
 
     it("Default config", () => {
@@ -207,27 +192,16 @@ describe("Library/Config", () => {
     });
 
     it("Partial configurations are supported", () => {
-      const env = <{ [id: string]: string }>{};
-
-      const jsonOptions = {
-        azureMonitorExporterOptions: {
-          storageDirectory: "teststorageDirectory",
-        },
+      const options: MicrosoftOpenTelemetryOptions = {
         samplingRatio: 0.7,
         instrumentationOptions: {
-          redis4: { enabled: false },
-        },
-      };
-      env["APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"] = JSON.stringify(jsonOptions);
-      process.env = env;
-
-      const options: MicrosoftOpenTelemetryOptions = {
-        instrumentationOptions: {
           http: { enabled: false },
+          redis4: { enabled: false },
         },
         azureMonitor: {
           azureMonitorExporterOptions: {
             connectionString: "testConnectionString",
+            storageDirectory: "teststorageDirectory",
           },
         },
       };
@@ -284,13 +258,18 @@ describe("Library/Config", () => {
       assert.strictEqual(config.samplingRatio, 0);
     });
 
-    it("instrumentation key validation-valid key passed", () => {
-      new InternalConfig({
-        azureMonitorExporterOptions: {
-          connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+    it("should merge azure monitor connection string from options", () => {
+      const config = new InternalConfig({
+        azureMonitor: {
+          azureMonitorExporterOptions: {
+            connectionString: "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+          },
         },
       });
-      expect(warnStub).not.toHaveBeenCalled();
+      assert.strictEqual(
+        config.azureMonitorExporterOptions.connectionString,
+        "InstrumentationKey=1aa11111-bbbb-1ccc-8ddd-eeeeffff3333",
+      );
     });
 
     // TODO: these tests are incorrect on main
@@ -299,8 +278,10 @@ describe("Library/Config", () => {
     // When changed to `assert.ok(warnStub.calledOnce) it fails on main
     it.todo("instrumentation key validation-invalid key passed", () => {
       new InternalConfig({
-        azureMonitorExporterOptions: {
-          connectionString: "InstrumentationKey=1aa11111bbbb1ccc8dddeeeeffff3333",
+        azureMonitor: {
+          azureMonitorExporterOptions: {
+            connectionString: "InstrumentationKey=1aa11111bbbb1ccc8dddeeeeffff3333",
+          },
         },
       });
       expect(warnStub).toHaveBeenCalled();
@@ -308,8 +289,10 @@ describe("Library/Config", () => {
 
     it.todo("instrumentation key validation-invalid key passed", () => {
       new InternalConfig({
-        azureMonitorExporterOptions: {
-          connectionString: "abc",
+        azureMonitor: {
+          azureMonitorExporterOptions: {
+            connectionString: "abc",
+          },
         },
       });
       expect(warnStub).toHaveBeenCalled();

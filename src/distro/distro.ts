@@ -156,6 +156,20 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       domainOverride: a365Config.domainOverride,
       tokenResolver: a365Config.tokenResolver,
     });
+    const batchSpanProcessorOptions = {
+      ...(a365Config.exporterOptions?.maxQueueSize !== undefined
+        ? { maxQueueSize: a365Config.exporterOptions.maxQueueSize }
+        : {}),
+      ...(a365Config.exporterOptions?.scheduledDelayMilliseconds !== undefined
+        ? { scheduledDelayMillis: a365Config.exporterOptions.scheduledDelayMilliseconds }
+        : {}),
+      ...(a365Config.exporterOptions?.exporterTimeoutMilliseconds !== undefined
+        ? { exportTimeoutMillis: a365Config.exporterOptions.exporterTimeoutMilliseconds }
+        : {}),
+      ...(a365Config.exporterOptions?.maxExportBatchSize !== undefined
+        ? { maxExportBatchSize: a365Config.exporterOptions.maxExportBatchSize }
+        : {}),
+    };
     const a365Exporter = new Agent365Exporter(exporterOptions);
     // A365SpanProcessor copies baggage (tenant, agent, session, etc.) to span attributes
     if (a365Config.baggage.enrichSpans) {
@@ -165,12 +179,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     // with the request's auth token; BatchSpanProcessor for standard batch export
     const a365ExportProcessor = a365Config.perRequestExport
       ? new PerRequestSpanProcessor(a365Exporter)
-      : new BatchSpanProcessor(a365Exporter, {
-          maxQueueSize: exporterOptions.maxQueueSize,
-          scheduledDelayMillis: exporterOptions.scheduledDelayMilliseconds,
-          exportTimeoutMillis: exporterOptions.exporterTimeoutMilliseconds,
-          maxExportBatchSize: exporterOptions.maxExportBatchSize,
-        });
+      : new BatchSpanProcessor(a365Exporter, batchSpanProcessorOptions);
     spanProcessors.push(a365ExportProcessor);
   } else if (a365ConsoleExportFallback) {
     // A365 options provided but exporter disabled — fall back to console export

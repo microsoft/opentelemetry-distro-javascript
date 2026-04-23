@@ -64,6 +64,23 @@ describe("A365 logging", () => {
     assert.strictEqual(loggerB.info.mock.calls.length, 1);
   });
 
+  it("allows clearing a previously configured custom logger", () => {
+    const customLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    configureA365Logger({ logger: customLogger, logLevel: "info" });
+    getA365Logger().info("first");
+    assert.strictEqual(customLogger.info.mock.calls.length, 1);
+
+    configureA365Logger({ logger: undefined });
+    getA365Logger().info("second");
+
+    assert.strictEqual(customLogger.info.mock.calls.length, 1);
+  });
+
   it("uses A365_OBSERVABILITY_LOG_LEVEL by default", () => {
     process.env.A365_OBSERVABILITY_LOG_LEVEL = "error";
     _resetA365LoggerForTest();

@@ -4,6 +4,7 @@
 
 ### Breaking Changes
 - Remove Azure Functions auto-instrumentation support from this package. The `instrumentationOptions.azureFunctions` option is no longer available.
+- Remove JSON configuration support (`applicationinsights.json`, `APPLICATIONINSIGHTS_CONFIGURATION_FILE`, and `APPLICATIONINSIGHTS_CONFIGURATION_CONTENT`). Configuration now comes only from programmatic options and environment variables.
 
 ### Features Added
 - Expose additional A365 public configuration options through `A365Options`: `serviceNamespace`, `exporterOptions`, `observabilityLogLevel`, and `logger`.
@@ -12,6 +13,7 @@
 
 ### Bugs Fixed
 - Prevent ESM/CJS interop regressions by removing the problematic Azure Functions instrumentation path and adding explicit built-ESM import regression coverage.
+- Remove startup noise caused by implicit JSON config file probing in the Microsoft distro.
 
 ### Other Changes
 - Expand PR validation checks to run unit tests, functional tests, and a built ESM import smoke test.

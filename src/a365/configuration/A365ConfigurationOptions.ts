@@ -48,7 +48,7 @@ export interface A365Options {
   /** OAuth scopes for A365 service authentication. */
   authScopes?: string[];
 
-  /** Optional OTel service.namespace override applied when A365 is enabled. */
+  /** Optional OTel service.namespace override applied whenever this option is set. */
   serviceNamespace?: string;
 
   /**
@@ -74,7 +74,7 @@ export interface A365Options {
   /** A365 internal logger filter level (none|info|warn|error, pipe-delimited). */
   observabilityLogLevel?: string;
 
-  /** Optional custom logger used by A365 internals. */
+  /** Optional custom logger used by A365 components on the A365-specific logger path. */
   logger?: ILogger;
 
   /** Baggage propagation and span enrichment options. */

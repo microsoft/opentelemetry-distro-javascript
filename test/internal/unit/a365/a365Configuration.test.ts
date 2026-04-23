@@ -6,20 +6,18 @@ import {
   A365Configuration,
   A365_ENV_VARS,
 } from "../../../../src/a365/configuration/A365Configuration.js";
-import { getA365Logger } from "../../../../src/a365/logging.js";
-import { JsonConfig } from "../../../../src/shared/jsonConfig.js";
+import { _resetA365LoggerForTest, getA365Logger } from "../../../../src/a365/logging.js";
 
 describe("A365Configuration", () => {
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    (JsonConfig as any)["_instance"] = undefined;
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    (JsonConfig as any)["_instance"] = undefined;
+    _resetA365LoggerForTest();
     vi.restoreAllMocks();
   });
 
@@ -197,73 +195,39 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.clusterCategory, "prod");
     });
 
+    it("routes invalid cluster-category warnings through the configured A365 logger", () => {
+      process.env[A365_ENV_VARS.CLUSTER_CATEGORY] = "staging";
+      process.env[A365_ENV_VARS.LOG_LEVEL] = "warn";
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+
+      new A365Configuration({ enabled: true, logger: customLogger });
+
+      assert.strictEqual(customLogger.warn.mock.calls.length, 1);
+    });
+
+    it("applies env log level before invalid cluster-category warnings", () => {
+      process.env[A365_ENV_VARS.CLUSTER_CATEGORY] = "staging";
+      process.env[A365_ENV_VARS.LOG_LEVEL] = "none";
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+
+      new A365Configuration({ logger: customLogger, observabilityLogLevel: "warn" });
+
+      assert.strictEqual(customLogger.warn.mock.calls.length, 0);
+    });
+
     it("should ignore unrecognized boolean env var values", () => {
       process.env[A365_ENV_VARS.EXPORTER_ENABLED] = "maybe";
       const config = new A365Configuration();
       // Unrecognized value is ignored, default stands
       assert.strictEqual(config.enabled, false);
-    });
-  });
-
-  describe("JSON config", () => {
-    it("should apply A365 options from JSON config", () => {
-      process.env["APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"] = JSON.stringify({
-        a365: {
-          enabled: true,
-          clusterCategory: "preprod",
-          domainOverride: "json.example.com",
-          perRequestExport: true,
-          serviceNamespace: "agent365.json",
-          exporterOptions: {
-            maxQueueSize: 4096,
-            maxExportBatchSize: 256,
-          },
-          observabilityLogLevel: "warn",
-        },
-      });
-      const config = new A365Configuration();
-      assert.strictEqual(config.enabled, true);
-      assert.strictEqual(config.clusterCategory, "preprod");
-      assert.strictEqual(config.domainOverride, "json.example.com");
-      assert.strictEqual(config.perRequestExport, true);
-      assert.strictEqual(config.serviceNamespace, "agent365.json");
-      assert.deepStrictEqual(config.exporterOptions, {
-        maxQueueSize: 4096,
-        maxExportBatchSize: 256,
-      });
-      assert.strictEqual(config.observabilityLogLevel, "warn");
-    });
-
-    it("JSON config takes precedence over programmatic options", () => {
-      process.env["APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"] = JSON.stringify({
-        a365: { clusterCategory: "gov" },
-      });
-      const config = new A365Configuration({ clusterCategory: "prod" });
-      assert.strictEqual(config.clusterCategory, "gov");
-    });
-
-    it("env vars take precedence over JSON config", () => {
-      process.env["APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"] = JSON.stringify({
-        a365: { enabled: true, clusterCategory: "preprod" },
-      });
-      process.env[A365_ENV_VARS.EXPORTER_ENABLED] = "false";
-      process.env[A365_ENV_VARS.CLUSTER_CATEGORY] = "gov";
-      const config = new A365Configuration();
-      assert.strictEqual(config.enabled, false);
-      assert.strictEqual(config.clusterCategory, "gov");
-    });
-
-    it("should apply baggage and hosting from JSON config", () => {
-      process.env["APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"] = JSON.stringify({
-        a365: {
-          baggage: { propagationEnabled: false, enrichSpans: false },
-          hosting: { enabled: true },
-        },
-      });
-      const config = new A365Configuration();
-      assert.strictEqual(config.baggage.propagationEnabled, false);
-      assert.strictEqual(config.baggage.enrichSpans, false);
-      assert.strictEqual(config.hosting.enabled, true);
     });
   });
 
@@ -312,6 +276,23 @@ describe("A365Configuration", () => {
     it("should not warn when no options are set and A365 is disabled", () => {
       const config = new A365Configuration();
       assert.strictEqual(config.enabled, false);
+    });
+
+    it("routes disabled-option warnings through the configured A365 logger", () => {
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+
+      new A365Configuration({
+        enabled: false,
+        tokenResolver: () => "token",
+        logger: customLogger,
+        observabilityLogLevel: "warn",
+      });
+
+      assert.strictEqual(customLogger.warn.mock.calls.length, 1);
     });
   });
 

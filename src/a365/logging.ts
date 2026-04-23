@@ -57,7 +57,7 @@ function defaultLogger(): ILogger {
 
 /** Configure the global A365 logger and optional log level filter. */
 export function configureA365Logger(options?: { logger?: ILogger; logLevel?: string }): void {
-  if (options?.logger) {
+  if (options && "logger" in options) {
     globalLogger = options.logger;
   }
 
