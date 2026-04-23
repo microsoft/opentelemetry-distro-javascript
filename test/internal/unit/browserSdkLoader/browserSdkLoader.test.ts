@@ -5,7 +5,10 @@ import type http from "node:http";
 import { BrowserSdkLoader } from "../../../../src/azureMonitor/browserSdkLoader/browserSdkLoader.js";
 import * as BrowserSdkLoaderHelper from "../../../../src/azureMonitor/browserSdkLoader/browserSdkLoaderHelper.js";
 import type { MicrosoftOpenTelemetryOptions } from "../../../../src/index.js";
-import { shutdownAzureMonitor, useAzureMonitor } from "../../../../src/index.js";
+import {
+  useMicrosoftOpenTelemetry,
+  shutdownMicrosoftOpenTelemetry,
+} from "../../../../src/distro/distro.js";
 import { getOsPrefix } from "../../../../src/azureMonitor/utils/common.js";
 import { metrics, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
@@ -17,7 +20,7 @@ describe("#BrowserSdkLoader", () => {
 
   afterEach(async () => {
     process.env = originalEnv;
-    await shutdownAzureMonitor();
+    await shutdownMicrosoftOpenTelemetry();
     vi.restoreAllMocks();
   });
 
@@ -43,7 +46,7 @@ describe("#BrowserSdkLoader", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     assert.strictEqual(BrowserSdkLoader.getInstance().isInitialized(), true);
   });
 
@@ -59,7 +62,7 @@ describe("#BrowserSdkLoader", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const browserSdkLoader = BrowserSdkLoader.getInstance();
 
     const _headers: any = {};
@@ -101,7 +104,7 @@ describe("#BrowserSdkLoader", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const browserSdkLoader = BrowserSdkLoader.getInstance();
 
     const _headers: any = {};
@@ -145,7 +148,7 @@ describe("#BrowserSdkLoader", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const browserSdkLoader = BrowserSdkLoader.getInstance();
     const _headers: any = {};
 
@@ -180,7 +183,7 @@ describe("#BrowserSdkLoader", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const browserSdkLoader = BrowserSdkLoader.getInstance();
 
     const _headers: any = {};
@@ -225,7 +228,7 @@ describe("#BrowserSdkLoader", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const browserSdkLoader = BrowserSdkLoader.getInstance();
 
     const _headers: any = {};
@@ -270,7 +273,7 @@ describe("#BrowserSdkLoader", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const browserSdkLoader = BrowserSdkLoader.getInstance();
 
     const _headers: any = {};
@@ -314,7 +317,7 @@ describe("#BrowserSdkLoader", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const browserSdkLoader = BrowserSdkLoader.getInstance();
 
     assert.equal(browserSdkLoader["_isIkeyValid"], true, "ikey should be set to valid");
@@ -361,7 +364,7 @@ describe("#BrowserSdkLoader", () => {
         },
       },
     };
-    useAzureMonitor(config);
+    useMicrosoftOpenTelemetry(config);
     const browserSdkLoader = BrowserSdkLoader.getInstance();
 
     assert.equal(browserSdkLoader["_isIkeyValid"], false, "ikey should be set to invalid");

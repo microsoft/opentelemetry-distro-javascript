@@ -1,5 +1,8 @@
 # @microsoft/opentelemetry
 
+[![npm version](https://badge.fury.io/js/%40microsoft%2Fopentelemetry.svg)](https://www.npmjs.com/package/@microsoft/opentelemetry)
+[![license](https://img.shields.io/npm/l/%40microsoft%2Fopentelemetry)](https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/LICENSE)
+
 Microsoft OpenTelemetry distribution for Node.js — one import, one call, full observability across Azure Monitor, OTLP-compatible backends, and A365.
 
 ## Getting Started
@@ -7,6 +10,23 @@ Microsoft OpenTelemetry distribution for Node.js — one import, one call, full 
 ```bash
 npm install @microsoft/opentelemetry
 ```
+
+> **Important:** Import and call `useMicrosoftOpenTelemetry()` as early as possible in your application entry point so instrumentations can patch libraries before they are loaded.
+
+### A365
+
+```typescript
+import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+
+useMicrosoftOpenTelemetry({
+  a365: {
+    enabled: true,
+    tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId),
+  },
+});
+```
+
+### Azure Monitor
 
 ```typescript
 import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
@@ -20,6 +40,16 @@ useMicrosoftOpenTelemetry({
 });
 ```
 
+### OTLP only (no Azure Monitor)
+
+```typescript
+import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+
+// Set OTEL_EXPORTER_OTLP_ENDPOINT in your environment
+useMicrosoftOpenTelemetry();
+```
+
+
 That's it — traces, metrics, and logs are collected automatically with built-in instrumentations for HTTP, databases, and more.
 
 ## Configuration
@@ -31,13 +61,31 @@ That's it — traces, metrics, and logs are collected automatically with built-i
 | `resource` | `Resource` | auto-detected | OpenTelemetry Resource (service name, version, etc.) |
 | `samplingRatio` | `number` | `1.0` | Ratio of telemetry items to transmit (0.0–1.0) |
 | `tracesPerSecond` | `number` | `5` | Max traces per second. Set to `0` to use `samplingRatio` instead |
-| `instrumentationOptions` | `InstrumentationOptions` | all enabled | Toggle built-in instrumentations (HTTP, MongoDB, MySQL, PostgreSQL, Redis, Azure SDK, Azure Functions, Winston, Bunyan, OpenAI Agents, LangChain) |
+| `instrumentationOptions` | `InstrumentationOptions` | all enabled | Toggle built-in instrumentations (see below) |
 | `spanProcessors` | `SpanProcessor[]` | — | Additional span processors |
 | `logRecordProcessors` | `LogRecordProcessor[]` | — | Additional log record processors |
 | `metricReaders` | `MetricReader[]` | — | Additional metric readers |
 | `views` | `ViewOptions[]` | — | Metric views |
-| `azureMonitor` | `AzureMonitorOpenTelemetryOptions` | — | Azure Monitor backend config (see below) |
+| `azureMonitor` | `AzureMonitorOpenTelemetryOptions` | — | Azure Monitor backend config. When provided, Azure Monitor export is enabled |
 | `a365` | `A365Options` | — | A365 observability config |
+
+### `InstrumentationOptions`
+
+Most instrumentations are enabled by default. Pass `{ enabled: false }` to disable individual instrumentations, or provide an `InstrumentationConfig` object to customize them.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `http` | `InstrumentationConfig` | enabled | HTTP client/server instrumentation |
+| `azureSdk` | `InstrumentationConfig` | enabled | Azure SDK instrumentation |
+| `mongoDb` | `InstrumentationConfig` | enabled | MongoDB instrumentation |
+| `mySql` | `InstrumentationConfig` | enabled | MySQL instrumentation |
+| `postgreSql` | `InstrumentationConfig` | enabled | PostgreSQL instrumentation |
+| `redis` | `InstrumentationConfig` | enabled | Redis instrumentation |
+| `redis4` | `InstrumentationConfig` | enabled | Redis 4 instrumentation |
+| `bunyan` | `InstrumentationConfig` | disabled | Bunyan log instrumentation |
+| `winston` | `InstrumentationConfig` | disabled | Winston log instrumentation |
+| `openaiAgents` | `boolean | OpenAIAgentsInstrumentationConfig` | disabled | OpenAI Agents SDK instrumentation (requires `@openai/agents`) |
+| `langchain` | `boolean | LangChainInstrumentationConfig` | disabled | LangChain instrumentation (requires `@langchain/core`) |
 
 ### `azureMonitor` options
 
@@ -48,7 +96,7 @@ That's it — traces, metrics, and logs are collected automatically with built-i
 | `enableStandardMetrics` | `boolean` | `true` | Enable standard metrics collection |
 | `enableTraceBasedSamplingForLogs` | `boolean` | `false` | Enable log sampling based on trace |
 | `enablePerformanceCounters` | `boolean` | `true` | Enable performance counter collection |
-| `browserSdkLoaderOptions` | `BrowserSdkLoaderOptions` | — | Application Insights browser SDK loader config |
+| `browserSdkLoaderOptions` | `BrowserSdkLoaderOptions` | disabled | Application Insights browser SDK loader config (`enabled`, `connectionString`) |
 
 ### OTLP via environment variables
 
@@ -66,6 +114,23 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 | `domainOverride` | `string` | — | Override the A365 observability service domain |
 | `authScopes` | `string[]` | `["https://api.powerplatform.com/.default"]` | OAuth scopes for A365 service authentication |
 | `perRequestExport` | `boolean` | `false` | Buffer spans per trace and export on root completion instead of batch export |
+| `baggage` | `A365BaggageOptions` | see below | Baggage propagation and span enrichment options |
+| `hosting` | `A365HostingOptions` | see below | Hosting middleware options (requires `@microsoft/agents-hosting`) |
+
+#### `a365.baggage` options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `propagationEnabled` | `boolean` | `true` | Enable baggage propagation from request headers to span context |
+| `enrichSpans` | `boolean` | `true` | Copy baggage items (tenant, agent, session, etc.) to span attributes |
+
+#### `a365.hosting` options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | `boolean` | `false` | Enable hosting middleware integration (baggage middleware, output logging, etc.) |
+
+#### A365 environment variables
 
 A365 options can also be set via environment variables (highest precedence):
 
@@ -90,7 +155,6 @@ useMicrosoftOpenTelemetry({
     azureMonitorExporterOptions: {
       connectionString: process.env.APPLICATIONINSIGHTS_CONNECTION_STRING,
     },
-    enableLiveMetrics: true,
   },
 });
 

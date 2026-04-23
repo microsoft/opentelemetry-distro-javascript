@@ -47,6 +47,9 @@ export interface MicrosoftOpenTelemetryOptions {
 
   /** A365 observability configuration. When provided with `enabled: true`, A365 export is enabled. */
   a365?: A365Options;
+
+  /** Enable console exporters for traces, metrics, and logs. Auto-enabled when no other exporter is active. */
+  enableConsoleExporters?: boolean;
 }
 
 /**
@@ -61,11 +64,11 @@ export interface AzureMonitorOpenTelemetryOptions {
   enabled?: boolean;
   /** Azure Monitor Exporter Configuration */
   azureMonitorExporterOptions?: AzureMonitorExporterOptions;
-  /** Enable Live Metrics feature (Default false) */
+  /** Enable Live Metrics feature (Default true) */
   enableLiveMetrics?: boolean;
   /** Enable Standard Metrics feature (Default true) */
   enableStandardMetrics?: boolean;
-  /** Enable log sampling based on trace (Default true) */
+  /** Enable log sampling based on trace (Default false) */
   enableTraceBasedSamplingForLogs?: boolean;
   /** Enable Performance Counter feature */
   enablePerformanceCounters?: boolean;
@@ -79,8 +82,6 @@ export interface AzureMonitorOpenTelemetryOptions {
 export interface InstrumentationOptions {
   /** Azure SDK Instrumentation Config */
   azureSdk?: InstrumentationConfig;
-  /** Azure Functions Instrumentation Config */
-  azureFunctions?: InstrumentationConfig;
   /** HTTP Instrumentation Config */
   http?: InstrumentationConfig;
   /** MongoDB Instrumentation Config */

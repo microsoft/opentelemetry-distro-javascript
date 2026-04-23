@@ -85,7 +85,6 @@ export class InternalConfig {
     this.instrumentationOptions = {
       http: { enabled: true },
       azureSdk: { enabled: true },
-      azureFunctions: { enabled: true },
       mongoDb: { enabled: true },
       mySql: { enabled: true },
       postgreSql: { enabled: true },

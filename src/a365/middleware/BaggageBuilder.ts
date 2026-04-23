@@ -177,7 +177,7 @@ export class BaggageBuilder {
    * Set multiple baggage pairs from a dictionary or iterable.
    * @param pairs Dictionary or iterable of key-value pairs
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   setPairs(
     pairs: Record<string, any> | Iterable<[string, any]> | null | undefined,
   ): BaggageBuilder {

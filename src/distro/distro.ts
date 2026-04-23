@@ -6,9 +6,15 @@ import { logs } from "@opentelemetry/api-logs";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { MetricReader, ViewOptions } from "@opentelemetry/sdk-metrics";
-import { type SpanProcessor, BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import {
+  type SpanProcessor,
+  BatchSpanProcessor,
+  SimpleSpanProcessor,
+  ConsoleSpanExporter,
+} from "@opentelemetry/sdk-trace-base";
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
-import type { Instrumentation } from "@opentelemetry/instrumentation";
+import { SimpleLogRecordProcessor, ConsoleLogRecordExporter } from "@opentelemetry/sdk-logs";
+import { ConsoleMetricExporter, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 
 import { InternalConfig } from "../shared/config.js";
 import { MetricHandler } from "../azureMonitor/metrics/index.js";
@@ -17,7 +23,11 @@ import { LogHandler } from "../azureMonitor/logs/index.js";
 import { AZURE_MONITOR_OPENTELEMETRY_VERSION } from "../types.js";
 import { patchOpenTelemetryInstrumentationEnable } from "../azureMonitor/utils/opentelemetryInstrumentationPatcher.js";
 import { parseResourceDetectorsFromEnvVar } from "../utils/common.js";
-import { setupAzureMonitorComponents } from "../azureMonitor/index.js";
+import {
+  setupAzureMonitorComponents,
+  hasAzureMonitorConnectionString,
+  validateAzureMonitorConfig,
+} from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import {
   A365Configuration,
@@ -27,6 +37,7 @@ import {
 } from "../a365/index.js";
 import type { MicrosoftOpenTelemetryOptions } from "../types.js";
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
+import { createInstrumentations, createSampler, createViews } from "./instrumentations.js";
 
 process.env["AZURE_MONITOR_DISTRO_VERSION"] = AZURE_MONITOR_OPENTELEMETRY_VERSION;
 process.env["MICROSOFT_OPENTELEMETRY_VERSION"] = MICROSOFT_OPENTELEMETRY_VERSION;
@@ -39,7 +50,9 @@ let disposeAzureMonitor: (() => void) | undefined;
  *
  * This is the primary entry point for the distro. It sets up OpenTelemetry
  * providers and instrumentations, then attaches the configured exporters:
- * - Azure Monitor (enabled by default; disable with `options.azureMonitor.enabled = false`)
+ * - Azure Monitor (when `options.azureMonitor` is provided or the
+ *   `APPLICATIONINSIGHTS_CONNECTION_STRING` env var is set; explicitly disable
+ *   with `options.azureMonitor.enabled = false`)
  * - OTLP HTTP (when `OTEL_EXPORTER_OTLP_ENDPOINT` is set)
  * - A365 (when `options.a365.enabled` is true or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`)
  *
@@ -49,10 +62,18 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   const config = new InternalConfig(options);
   patchOpenTelemetryInstrumentationEnable();
 
-  const azureMonitorEnabled = options?.azureMonitor?.enabled !== false;
+  // Azure Monitor is enabled when configured programmatically or via JSON config.
+  // An explicit `enabled: false` always wins, even if a connection string is present.
+  // Connection-string validation is delegated to the Azure Monitor module.
+  const azureMonitorRequested =
+    options?.azureMonitor?.enabled !== false &&
+    (!!options?.azureMonitor || hasAzureMonitorConnectionString(config));
+  const azureMonitorEnabled = azureMonitorRequested && validateAzureMonitorConfig(config);
+
+  // Reset dispose callback to avoid stale references from a previous initialization
+  disposeAzureMonitor = undefined;
 
   // ── Azure Monitor components (statsbeat, browser SDK loader, etc.) ─
-  disposeAzureMonitor = undefined;
   if (azureMonitorEnabled) {
     disposeAzureMonitor = setupAzureMonitorComponents(config);
   }
@@ -73,20 +94,22 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   const globalOpentelemetryApiKey = Symbol.for("opentelemetry.js.api.1");
   delete (globalThis as Record<symbol, unknown>)[globalOpentelemetryApiKey];
 
-  // ── Azure Monitor handlers (conditional) ──────────────────────────
+  // ── Instrumentations, sampler, and views (always created) ─────────
+  const instrumentations = createInstrumentations(config, {
+    filterAzureMonitorRequests: azureMonitorEnabled,
+  });
+  const sampler = createSampler(config);
+  const views: ViewOptions[] = createViews(config);
+
+  // ── Azure Monitor handlers (only when configured) ─────────────────
   let metricHandler: MetricHandler | undefined;
   let traceHandler: TraceHandler | undefined;
   let logHandler: LogHandler | undefined;
-  const instrumentations: Instrumentation[] = [];
 
   if (azureMonitorEnabled) {
     metricHandler = new MetricHandler(config);
     traceHandler = new TraceHandler(config, metricHandler);
     logHandler = new LogHandler(config, metricHandler);
-    instrumentations.push(
-      ...traceHandler.getInstrumentations(),
-      ...logHandler.getInstrumentations(),
-    );
   }
 
   const resourceDetectorsList = parseResourceDetectorsFromEnvVar();
@@ -118,6 +141,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
 
   // ── A365 exporter (enabled via options.a365 or env vars) ──────────
   const a365Config = new A365Configuration(options?.a365);
+  const a365ConsoleExportFallback = !a365Config.enabled && !!options?.a365;
   if (a365Config.enabled) {
     const a365Exporter = new Agent365Exporter({
       clusterCategory: a365Config.clusterCategory,
@@ -134,15 +158,46 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       ? new PerRequestSpanProcessor(a365Exporter)
       : new BatchSpanProcessor(a365Exporter);
     spanProcessors.push(a365ExportProcessor);
+  } else if (a365ConsoleExportFallback) {
+    // A365 options provided but exporter disabled — fall back to console export
+    // so developers can validate spans locally (matches upstream A365 SDK behavior
+    // when ENABLE_A365_OBSERVABILITY_EXPORTER=false).
+    spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
   }
 
-  const views: ViewOptions[] = [...(metricHandler ? metricHandler.getViews() : []), ...customViews];
+  // Merge views: use Azure Monitor views when available (they cover the same
+  // instrumentations as createViews), otherwise fall back to the standalone views.
+  const allViews: ViewOptions[] = [
+    ...(metricHandler ? metricHandler.getViews() : views),
+    ...customViews,
+  ];
+  // ── Console exporters (auto-enabled when no other exporter is active, or explicitly) ─
+  const hasCustomProcessors =
+    (options?.spanProcessors?.length ?? 0) > 0 ||
+    (options?.metricReaders?.length ?? 0) > 0 ||
+    (options?.logRecordProcessors?.length ?? 0) > 0;
+  const consoleEnabled =
+    options?.enableConsoleExporters ??
+    (!azureMonitorEnabled && !isOtlpEnabled() && !a365Config.enabled && !hasCustomProcessors);
+  if (consoleEnabled) {
+    // Skip span console exporter when A365 fallback already added one
+    if (!a365ConsoleExportFallback) {
+      spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
+    }
+    metricReaders.push(
+      new PeriodicExportingMetricReader({
+        exporter: new ConsoleMetricExporter(),
+        exportIntervalMillis: config.metricExportIntervalMillis,
+      }),
+    );
+    logRecordProcessors.push(new SimpleLogRecordProcessor(new ConsoleLogRecordExporter()));
+  }
 
   // ── Create and start NodeSDK ──────────────────────────────────────
   const sdkConfig: Partial<NodeSDKConfiguration> = {
     autoDetectResources: true,
     metricReaders: metricReaders,
-    views,
+    views: allViews,
     instrumentations: instrumentations,
     logRecordProcessors: [
       ...(logHandler ? [logHandler.getAzureLogRecordProcessor()] : []),
@@ -150,7 +205,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       ...(logHandler ? [logHandler.getBatchLogRecordProcessor()] : []),
     ],
     resource: config.resource,
-    sampler: traceHandler?.getSampler(),
+    sampler,
     spanProcessors: [
       ...(traceHandler ? [traceHandler.getAzureMonitorSpanProcessor()] : []),
       ...spanProcessors,

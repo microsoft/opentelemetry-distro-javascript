@@ -1,5 +1,27 @@
 # Release History
 
+## [Unreleased]
+
+### Breaking Changes
+- Remove Azure Functions auto-instrumentation support from this package. The `instrumentationOptions.azureFunctions` option is no longer available.
+
+### Bugs Fixed
+- Prevent ESM/CJS interop regressions by removing the problematic Azure Functions instrumentation path and adding explicit built-ESM import regression coverage.
+
+### Other Changes
+- Expand PR validation checks to run unit tests, functional tests, and a built ESM import smoke test.
+
+## [0.1.0-alpha.4] - 2026-04-22
+
+### Features Added
+- Add console exporter ([#35](https://github.com/microsoft/opentelemetry-distro-javascript/pull/35))
+- Conditional azure monitor and readme updates ([#33](https://github.com/microsoft/opentelemetry-distro-javascript/pull/33))
+- Add a365 hosting middleware ([#29](https://github.com/microsoft/opentelemetry-distro-javascript/pull/29))
+
+### Bugs Fixed
+- Fix A365 scopes producing no-op spans with zeroed trace/span IDs after distro initialization. ([#41](https://github.com/microsoft/opentelemetry-distro-javascript/pull/41))
+- Remove legacy useAzureMonitor API and add Azure Monitor E2E tests([#38](https://github.com/microsoft/opentelemetry-distro-javascript/pull/38))
+
 ## [0.1.0-alpha.3] - 2026-04-21
 
 ### Features Added

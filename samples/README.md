@@ -26,6 +26,7 @@ These sample programs show how to use the `@microsoft/opentelemetry` distributio
 | [openaiInstrumentation.ts][openaiinstrumentation]       | Demonstrates how to enable OpenAI Agents SDK instrumentation to trace GenAI operations.             |
 | [a365Export.ts][a365export]                 | Demonstrates A365 observability export: token resolver setup, dual export with Azure Monitor, and span routing by tenant/agent. |
 | [a365ManualScopes.ts][a365manualscopes]     | Traces a full agent turn with manual scopes (InvokeAgent → Inference → ExecuteTool → Inference → Output) and cross-service context propagation. |
+| [a365HostingMiddleware.ts][a365hostingmiddleware] | Demonstrates A365 hosting middleware (BaggageMiddleware, OutputLoggingMiddleware, ObservabilityHostingManager, ScopeUtils). |
 
 ## Prerequisites
 
@@ -90,3 +91,4 @@ APPLICATIONINSIGHTS_CONNECTION_STRING="<your connection string>" node dist/basic
 [openaiinstrumentation]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/openaiInstrumentation.ts
 [a365export]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/a365Export.ts
 [a365manualscopes]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/a365ManualScopes.ts
+[a365hostingmiddleware]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/a365HostingMiddleware.ts
