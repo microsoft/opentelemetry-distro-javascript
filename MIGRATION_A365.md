@@ -119,6 +119,15 @@ useMicrosoftOpenTelemetry({
     tokenResolver: async (agentId, tenantId) => getToken(agentId, tenantId),
     clusterCategory: "prod",
     perRequestExport: true,
+    domainOverride: "custom.a365.example.com", // optional
+    authScopes: ["https://api.powerplatform.com/.default"], // optional
+    baggage: {
+      propagationEnabled: true,
+      enrichSpans: true,
+    },
+    hosting: {
+      enabled: true, // requires @microsoft/agents-hosting
+    },
   },
   // Optional: also send to Azure Monitor
   azureMonitor: {
@@ -128,6 +137,22 @@ useMicrosoftOpenTelemetry({
   },
 });
 ```
+
+### A365 Configuration Coverage
+
+All A365 observability options are available through `a365`:
+
+| Option | Type | Default | Notes |
+|---|---|---|---|
+| `enabled` | `boolean` | `false` | Enables A365 exporter path |
+| `tokenResolver` | `(agentId, tenantId) => string \| Promise<string>` | — | Required when exporting to A365 |
+| `clusterCategory` | `ClusterCategory` | `"prod"` | Same category values as Agent365-nodejs |
+| `domainOverride` | `string` | — | Optional endpoint override |
+| `authScopes` | `string[]` | `["https://api.powerplatform.com/.default"]` | Optional OAuth scopes override |
+| `perRequestExport` | `boolean` | `false` | Export per trace when root span completes |
+| `baggage.propagationEnabled` | `boolean` | `true` | Read baggage from incoming headers |
+| `baggage.enrichSpans` | `boolean` | `true` | Copy baggage values onto span attributes |
+| `hosting.enabled` | `boolean` | `false` | Turns on hosting middleware integration |
 
 ## Environment Variables
 
@@ -145,6 +170,43 @@ Environment variable names are **unchanged** from Agent365-nodejs:
 | `A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS` | Max concurrent exports (default: `20`) |
 | `A365_PER_REQUEST_FLUSH_GRACE_MS` | Grace period after root span ends (default: `250`) |
 | `A365_PER_REQUEST_MAX_TRACE_AGE_MS` | Max trace age before forced flush (default: `1800000`) |
+
+### Logging Level Configuration
+
+During migration, these environment variables control SDK diagnostics:
+
+| Environment Variable | Values | Behavior |
+|---|---|---|
+| `APPLICATIONINSIGHTS_INSTRUMENTATION_LOGGING_LEVEL` | `ALL`, `VERBOSE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `NONE` | Primary switch for OpenTelemetry diagnostics; also maps Azure logger levels for `VERBOSE`, `INFO`, `WARN`, `ERROR` |
+| `OTEL_LOG_LEVEL` | `ALL`, `VERBOSE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `NONE` | Used when `APPLICATIONINSIGHTS_INSTRUMENTATION_LOGGING_LEVEL` is not set |
+| `AZURE_LOG_LEVEL` | `verbose`, `info`, `warning`, `error` | Controls Azure logger level when the App Insights logging level variable is not mapped/absent |
+
+Example:
+
+```bash
+set APPLICATIONINSIGHTS_INSTRUMENTATION_LOGGING_LEVEL=INFO
+```
+
+### Console Exporters During Migration
+
+You can keep local visibility while migrating by using console exporters.
+
+```typescript
+useMicrosoftOpenTelemetry({
+  a365: {
+    enabled: true,
+    tokenResolver: async (agentId, tenantId) => getToken(agentId, tenantId),
+  },
+  enableConsoleExporters: true, // traces + metrics + logs to console
+});
+```
+
+Behavior summary:
+
+- `enableConsoleExporters: true`: always adds console exporters for traces, metrics, and logs.
+- `enableConsoleExporters: false`: disables automatic console exporters.
+- If **no** Azure Monitor/OTLP/A365 exporter is active, console exporters are auto-enabled.
+- If `a365` options are provided but A365 is disabled (`a365.enabled` false/omitted), a span console exporter is added as a fallback so spans are still visible locally.
 
 ## Scopes
 
@@ -225,6 +287,26 @@ runWithExportToken(initialToken, async () => {
 });
 ```
 
+## Hosting Middleware and Utilities
+
+If you previously used hosting helpers with Agent365, they are also exported from `@microsoft/opentelemetry`:
+
+- `BaggageMiddleware`
+- `OutputLoggingMiddleware`
+- `ObservabilityHostingManager`
+- `BaggageBuilderUtils`
+- `ScopeUtils`
+
+Use the same APIs with updated imports:
+
+```typescript
+import {
+  BaggageMiddleware,
+  OutputLoggingMiddleware,
+  ObservabilityHostingManager,
+} from "@microsoft/opentelemetry";
+```
+
 ## What's Not Migrated
 
 The following Agent365-nodejs components are **not** included in `@microsoft/opentelemetry` because they are runtime/hosting concerns rather than observability:
@@ -246,4 +328,6 @@ The following Agent365-nodejs components are **not** included in `@microsoft/ope
 - [ ] Rename `SpanDetails` type references to `A365SpanDetails`
 - [ ] Rename `SpanProcessor` references to `A365SpanProcessor`
 - [ ] Verify environment variables work (names are unchanged)
+- [ ] Set diagnostic logging level (`APPLICATIONINSIGHTS_INSTRUMENTATION_LOGGING_LEVEL` or `OTEL_LOG_LEVEL`) for migration validation
+- [ ] Decide whether to force console exporters (`enableConsoleExporters`) during rollout/debugging
 - [ ] Remove `@microsoft/agents-a365-runtime` dependency if no longer needed

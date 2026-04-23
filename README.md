@@ -68,10 +68,17 @@ That's it — traces, metrics, and logs are collected automatically with built-i
 | `views` | `ViewOptions[]` | — | Metric views |
 | `azureMonitor` | `AzureMonitorOpenTelemetryOptions` | — | Azure Monitor backend config. When provided, Azure Monitor export is enabled |
 | `a365` | `A365Options` | — | A365 observability config |
+| `enableConsoleExporters` | `boolean` | auto | Enable console exporters for traces, metrics, and logs |
 
 ### `InstrumentationOptions`
 
-Most instrumentations are enabled by default. Pass `{ enabled: false }` to disable individual instrumentations, or provide an `InstrumentationConfig` object to customize them.
+Most instrumentations use `InstrumentationConfig` shape (`{ enabled?: boolean, ... }`).
+
+- Built-in infra instrumentations (`http`, `azureSdk`, `azureFunctions`, `mongoDb`, `mySql`, `postgreSql`, `redis`, `redis4`) are enabled by default.
+- Logging instrumentations (`bunyan`, `winston`) are disabled by default.
+- GenAI instrumentations (`openaiAgents`, `langchain`) are disabled by default.
+
+Set `enabled: true` or `enabled: false` explicitly for predictable behavior.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -85,8 +92,67 @@ Most instrumentations are enabled by default. Pass `{ enabled: false }` to disab
 | `redis4` | `InstrumentationConfig` | enabled | Redis 4 instrumentation |
 | `bunyan` | `InstrumentationConfig` | disabled | Bunyan log instrumentation |
 | `winston` | `InstrumentationConfig` | disabled | Winston log instrumentation |
-| `openaiAgents` | `boolean | OpenAIAgentsInstrumentationConfig` | disabled | OpenAI Agents SDK instrumentation (requires `@openai/agents`) |
-| `langchain` | `boolean | LangChainInstrumentationConfig` | disabled | LangChain instrumentation (requires `@langchain/core`) |
+| `openaiAgents` | `OpenAIAgentsInstrumentationConfig` | disabled | OpenAI Agents SDK instrumentation (requires `@openai/agents`) |
+| `langchain` | `LangChainInstrumentationConfig` | disabled | LangChain instrumentation (requires `@langchain/core`) |
+
+#### Turn instrumentations on/off
+
+```typescript
+useMicrosoftOpenTelemetry({
+  instrumentationOptions: {
+    // Disable specific built-in instrumentations
+    http: { enabled: false },
+    redis: { enabled: false },
+
+    // Explicitly enable GenAI instrumentations
+    openaiAgents: {
+      enabled: true,
+      isContentRecordingEnabled: true,
+    },
+    langchain: {
+      enabled: true,
+      isContentRecordingEnabled: true,
+    },
+  },
+});
+```
+
+Disable most built-in auto-instrumentation:
+
+```typescript
+useMicrosoftOpenTelemetry({
+  instrumentationOptions: {
+    http: { enabled: false },
+    azureSdk: { enabled: false },
+    azureFunctions: { enabled: false },
+    mongoDb: { enabled: false },
+    mySql: { enabled: false },
+    postgreSql: { enabled: false },
+    redis: { enabled: false },
+    redis4: { enabled: false },
+    bunyan: { enabled: false },
+    winston: { enabled: false },
+    openaiAgents: { enabled: false },
+    langchain: { enabled: false },
+  },
+});
+```
+
+### Console exporters
+
+Use console exporters when validating local telemetry or debugging setup.
+
+```typescript
+useMicrosoftOpenTelemetry({
+  enableConsoleExporters: true,
+});
+```
+
+Behavior:
+
+- `enableConsoleExporters: true`: always enable console exporters (traces, metrics, logs).
+- `enableConsoleExporters: false`: never auto-add console exporters.
+- Omitted: console exporters auto-enable only when no other exporter path is active.
 
 ### `azureMonitor` options
 
