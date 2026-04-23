@@ -82,8 +82,6 @@ export interface AzureMonitorOpenTelemetryOptions {
 export interface InstrumentationOptions {
   /** Azure SDK Instrumentation Config */
   azureSdk?: InstrumentationConfig;
-  /** Azure Functions Instrumentation Config */
-  azureFunctions?: InstrumentationConfig;
   /** HTTP Instrumentation Config */
   http?: InstrumentationConfig;
   /** MongoDB Instrumentation Config */

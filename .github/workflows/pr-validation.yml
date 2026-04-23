@@ -59,5 +59,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Run tests
-        run: npm test
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run functional tests
+        run: npm run test:functional
+
+      - name: Run ESM build import regression test
+        run: npm run test:esm-build

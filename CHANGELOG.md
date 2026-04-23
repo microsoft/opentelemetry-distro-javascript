@@ -2,12 +2,20 @@
 
 ## [0.1.0-alpha.5] - 2026-04-24 
 
+### Breaking Changes
+- Remove Azure Functions auto-instrumentation support from this package. The `instrumentationOptions.azureFunctions` option is no longer available.
+
 ### Features Added
 - Wire GenAI instrumentation options into distro initialization (`openaiAgents`, `langchain`) with lifecycle cleanup on shutdown. ([#44](https://github.com/microsoft/opentelemetry-distro-javascript/pull/44))
 - Connect A365 configuration to runtime behavior: pass `authScopes` into token resolution and auto-register hosting middleware when `hosting.enabled` and `hosting.adapter` are provided. ([#44](https://github.com/microsoft/opentelemetry-distro-javascript/pull/44))
 
 ### Bugs Fixed
-- Eliminate configuration no-ops by wiring `tracerName` / `tracerVersion` into OpenAI tracer initialization and aligning docs with actual runtime behavior. ([#44](https://github.com/microsoft/opentelemetry-distro-javascript/pull/44))
+- Prevent ESM/CJS interop regressions by removing the problematic Azure Functions instrumentation path and adding explicit built-ESM import regression coverage.
+- - Eliminate configuration no-ops by wiring `tracerName` / `tracerVersion` into OpenAI tracer initialization and aligning docs with actual runtime behavior. ([#44](https://github.com/microsoft/opentelemetry-distro-javascript/pull/44))
+
+
+### Other Changes
+- Expand PR validation checks to run unit tests, functional tests, and a built ESM import smoke test.
 
 ## [0.1.0-alpha.4] - 2026-04-22
 

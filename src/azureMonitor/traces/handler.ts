@@ -20,11 +20,6 @@ import type { InternalConfig } from "../../shared/config.js";
 import type { MetricHandler } from "../metrics/handler.js";
 import { ignoreOutgoingRequestHook } from "../utils/common.js";
 import { AzureMonitorSpanProcessor } from "./spanProcessor.js";
-// Default-import + destructure: this package is a webpack bundle so Node.js
-// ESM cannot extract named exports from it (see Node error SyntaxError:
-// "Named export 'AzureFunctionsInstrumentation' not found").
-import azureFunctionsOtelPkg from "@azure/functions-opentelemetry-instrumentation";
-const { AzureFunctionsInstrumentation } = azureFunctionsOtelPkg;
 import type { Instrumentation } from "@opentelemetry/instrumentation";
 
 /**
@@ -133,11 +128,6 @@ export class TraceHandler {
     ) {
       this._instrumentations.push(
         new RedisInstrumentation(this._config.instrumentationOptions.redis),
-      );
-    }
-    if (this._config.instrumentationOptions.azureFunctions?.enabled) {
-      this._instrumentations.push(
-        new AzureFunctionsInstrumentation(this._config.instrumentationOptions.azureFunctions),
       );
     }
   }

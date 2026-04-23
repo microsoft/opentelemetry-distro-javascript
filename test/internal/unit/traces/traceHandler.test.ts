@@ -110,7 +110,6 @@ describe("Library/TraceHandler", () => {
       _config.instrumentationOptions = {
         http: { enabled: false },
         azureSdk: { enabled: false },
-        azureFunctions: { enabled: false },
         mongoDb: { enabled: false },
         mySql: { enabled: false },
         postgreSql: { enabled: false },
@@ -245,7 +244,6 @@ describe("Library/TraceHandler", () => {
       _config.instrumentationOptions = {
         http: { enabled: true },
         azureSdk: { enabled: false },
-        azureFunctions: { enabled: false },
         mongoDb: { enabled: false },
         mySql: { enabled: false },
         postgreSql: { enabled: false },
@@ -346,7 +344,6 @@ describe("Library/TraceHandler", () => {
       _config.instrumentationOptions = {
         http: { enabled: false },
         azureSdk: { enabled: false },
-        azureFunctions: { enabled: false },
         mongoDb: { enabled: false },
         mySql: { enabled: false },
         postgreSql: { enabled: false },
