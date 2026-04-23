@@ -5,8 +5,8 @@
  * Per-request export token context propagation.
  *
  * Uses OpenTelemetry Context (backed by AsyncLocalStorage) to carry and
- * refresh a per-request bearer token that the PerRequestSpanProcessor
- * restores at export time.
+ * refresh a per-request bearer token that the export pipeline
+ * reads at export time.
  *
  * Adapted from microsoft/Agent365-nodejs agents-a365-observability/src/tracing/context/token-context.ts
  */
