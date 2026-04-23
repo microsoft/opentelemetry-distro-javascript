@@ -76,7 +76,7 @@ Most instrumentations use `InstrumentationConfig` shape (`{ enabled?: boolean, .
 
 - Built-in infra instrumentations (`http`, `azureSdk`, `azureFunctions`, `mongoDb`, `mySql`, `postgreSql`, `redis`, `redis4`) are enabled by default.
 - Logging instrumentations (`bunyan`, `winston`) are disabled by default.
-- GenAI instrumentations (`openaiAgents`, `langchain`) are disabled by default.
+- GenAI instrumentations (`openaiAgents`, `langchain`) are enabled by default.
 
 Set `enabled: true` or `enabled: false` explicitly for predictable behavior.
 
@@ -91,8 +91,8 @@ Set `enabled: true` or `enabled: false` explicitly for predictable behavior.
 | `redis4` | `InstrumentationConfig` | enabled | Redis 4 instrumentation |
 | `bunyan` | `InstrumentationConfig` | disabled | Bunyan log instrumentation |
 | `winston` | `InstrumentationConfig` | disabled | Winston log instrumentation |
-| `openaiAgents` | `OpenAIAgentsInstrumentationConfig` | disabled | OpenAI Agents SDK instrumentation (requires `@openai/agents`) |
-| `langchain` | `LangChainInstrumentationConfig` | disabled | LangChain instrumentation (requires `@langchain/core`) |
+| `openaiAgents` | `OpenAIAgentsInstrumentationConfig` | enabled | OpenAI Agents SDK instrumentation (requires `@openai/agents`) |
+| `langchain` | `LangChainInstrumentationConfig` | enabled | LangChain instrumentation (requires `@langchain/core`) |
 
 #### Turn instrumentations on/off
 
