@@ -89,12 +89,6 @@ describe("snippets", () => {
     useMicrosoftOpenTelemetry(options);
   });
 
-  it("ReadmeSampleCustomConfig", () => {
-    process.env["APPLICATIONINSIGHTS_CONFIGURATION_FILE"] = "path/to/customConfig.json";
-    // @ts-preserve-whitespace
-    // Application Insights SDK setup....
-  });
-
   it("ReadmeSampleCustomInstrumentation", () => {
     useMicrosoftOpenTelemetry();
     registerInstrumentations({

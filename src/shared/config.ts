@@ -16,8 +16,6 @@ import type {
 import type { Sampler } from "@opentelemetry/sdk-trace-base";
 import type { AzureMonitorExporterOptions } from "@azure/monitor-opentelemetry-exporter";
 import { EnvConfig } from "./envConfig.js";
-import { JsonConfig } from "./jsonConfig.js";
-import { Logger } from "./logging/index.js";
 import {
   azureAksDetector,
   azureAppServiceDetector,
@@ -138,8 +136,6 @@ export class InternalConfig {
             : this.enablePerformanceCounters;
       }
     }
-    // JSON configuration will take precedence over options provided
-    this._mergeJsonConfig();
     // ENV configuration will take precedence over other configurations
     this._mergeEnvConfig();
   }
@@ -151,49 +147,6 @@ export class InternalConfig {
     this.tracesPerSecond =
       envConfig.tracesPerSecond !== undefined ? envConfig.tracesPerSecond : this.tracesPerSecond;
     this.sampler = envConfig.sampler ?? this.sampler;
-  }
-
-  private _mergeJsonConfig(): void {
-    try {
-      const jsonConfig = JsonConfig.getInstance();
-      // Global options
-      this.samplingRatio =
-        jsonConfig.samplingRatio !== undefined ? jsonConfig.samplingRatio : this.samplingRatio;
-      this.tracesPerSecond =
-        jsonConfig.tracesPerSecond !== undefined
-          ? jsonConfig.tracesPerSecond
-          : this.tracesPerSecond;
-      this.instrumentationOptions = Object.assign(
-        this.instrumentationOptions,
-        jsonConfig.instrumentationOptions,
-      );
-      // Azure Monitor-scoped options
-      const azureMonitor = jsonConfig.azureMonitor;
-      if (azureMonitor) {
-        this.browserSdkLoaderOptions = Object.assign(
-          this.browserSdkLoaderOptions,
-          azureMonitor.browserSdkLoaderOptions,
-        );
-        this.enableLiveMetrics =
-          azureMonitor.enableLiveMetrics !== undefined
-            ? azureMonitor.enableLiveMetrics
-            : this.enableLiveMetrics;
-        this.enableStandardMetrics =
-          azureMonitor.enableStandardMetrics !== undefined
-            ? azureMonitor.enableStandardMetrics
-            : this.enableStandardMetrics;
-        this.enableTraceBasedSamplingForLogs =
-          azureMonitor.enableTraceBasedSamplingForLogs !== undefined
-            ? azureMonitor.enableTraceBasedSamplingForLogs
-            : this.enableTraceBasedSamplingForLogs;
-        this.azureMonitorExporterOptions = Object.assign(
-          this.azureMonitorExporterOptions,
-          azureMonitor.azureMonitorExporterOptions,
-        );
-      }
-    } catch (error) {
-      Logger.getInstance().error("Failed to load JSON config file values.", error);
-    }
   }
 
   private _setDefaultResource(): void {
