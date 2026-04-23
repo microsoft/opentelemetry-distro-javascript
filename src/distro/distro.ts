@@ -29,12 +29,7 @@ import {
   validateAzureMonitorConfig,
 } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
-import {
-  A365Configuration,
-  Agent365Exporter,
-  A365SpanProcessor,
-  PerRequestSpanProcessor,
-} from "../a365/index.js";
+import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
 import type { MicrosoftOpenTelemetryOptions } from "../types.js";
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
 import { createInstrumentations, createSampler, createViews } from "./instrumentations.js";
@@ -152,12 +147,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     if (a365Config.baggage.enrichSpans) {
       spanProcessors.push(new A365SpanProcessor());
     }
-    // PerRequestSpanProcessor buffers spans per trace and exports on root completion
-    // with the request's auth token; BatchSpanProcessor for standard batch export
-    const a365ExportProcessor = a365Config.perRequestExport
-      ? new PerRequestSpanProcessor(a365Exporter)
-      : new BatchSpanProcessor(a365Exporter);
-    spanProcessors.push(a365ExportProcessor);
+    spanProcessors.push(new BatchSpanProcessor(a365Exporter));
   } else if (a365ConsoleExportFallback) {
     // A365 options provided but exporter disabled — fall back to console export
     // so developers can validate spans locally (matches upstream A365 SDK behavior

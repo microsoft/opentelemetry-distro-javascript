@@ -20,6 +20,8 @@ export type {
 // ── Re-exports from A365 configuration ──────────────────────────────────────
 export { A365Configuration } from "./a365/index.js";
 export type { ClusterCategory, A365BaggageOptions, A365HostingOptions } from "./a365/index.js";
+export { Agent365Exporter } from "./a365/index.js";
+export type { Agent365ExporterOptions, TokenResolver } from "./a365/index.js";
 
 // ── Re-exports from A365 scopes (manual telemetry API) ──────────────────────
 export {
@@ -44,7 +46,6 @@ export {
   BaggageBuilder,
   BaggageScope,
   A365SpanProcessor,
-  PerRequestSpanProcessor,
   GENERIC_ATTRIBUTES,
   INVOKE_AGENT_ATTRIBUTES,
   runWithExportToken,
@@ -80,7 +81,6 @@ export type {
   ReasoningPart,
   HeadersCarrier,
 } from "./a365/index.js";
-export type { PerRequestSpanProcessorOptions } from "./a365/index.js";
 
 // ── Re-exports from A365 hosting utilities ──────────────────────────────────
 export {

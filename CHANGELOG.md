@@ -2,7 +2,12 @@
 
 ## [0.1.0-alpha.4] - 2026-04-22
 
+### Breaking Changes
+- Remove `PerRequestSpanProcessor` and its `PerRequestSpanProcessorOptions` from the public API. The `perRequestExport` option on `A365Options` and the `ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT` environment variable have also been removed. ([#40](https://github.com/microsoft/opentelemetry-distro-javascript/pull/40))
+  - **Migration:** If you were relying on per-request export behaviour, use the now-public `Agent365Exporter` together with any OTel-compatible `SpanProcessor`. See the [migration guide](./MIGRATION_A365.md#custom-span-export) for an example.
+
 ### Features Added
+- Export `Agent365Exporter`, `Agent365ExporterOptions`, and `TokenResolver` as public API to enable custom span processor configurations. ([#40](https://github.com/microsoft/opentelemetry-distro-javascript/pull/40))
 - Add console exporter ([#35](https://github.com/microsoft/opentelemetry-distro-javascript/pull/35))
 - Conditional azure monitor and readme updates ([#33](https://github.com/microsoft/opentelemetry-distro-javascript/pull/33))
 - Add a365 hosting middleware ([#29](https://github.com/microsoft/opentelemetry-distro-javascript/pull/29))

@@ -29,7 +29,6 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.clusterCategory, "prod");
       assert.strictEqual(config.domainOverride, undefined);
       assert.deepStrictEqual(config.authScopes, ["https://api.powerplatform.com/.default"]);
-      assert.strictEqual(config.perRequestExport, false);
       assert.strictEqual(config.tokenResolver, undefined);
     });
 
@@ -67,11 +66,6 @@ describe("A365Configuration", () => {
       assert.deepStrictEqual(config.authScopes, scopes);
     });
 
-    it("should apply per-request export", () => {
-      const config = new A365Configuration({ perRequestExport: true });
-      assert.strictEqual(config.perRequestExport, true);
-    });
-
     it("should apply token resolver", () => {
       const resolver = (_agentId: string, _tenantId: string) => "token";
       const config = new A365Configuration({ tokenResolver: resolver });
@@ -103,12 +97,6 @@ describe("A365Configuration", () => {
       process.env[A365_ENV_VARS.EXPORTER_ENABLED] = "false";
       const config = new A365Configuration({ enabled: true });
       assert.strictEqual(config.enabled, false);
-    });
-
-    it("should override per-request export from env", () => {
-      process.env[A365_ENV_VARS.PER_REQUEST_EXPORT] = "true";
-      const config = new A365Configuration();
-      assert.strictEqual(config.perRequestExport, true);
     });
 
     it("should override auth scopes from env (space-separated)", () => {
@@ -156,14 +144,12 @@ describe("A365Configuration", () => {
           enabled: true,
           clusterCategory: "preprod",
           domainOverride: "json.example.com",
-          perRequestExport: true,
         },
       });
       const config = new A365Configuration();
       assert.strictEqual(config.enabled, true);
       assert.strictEqual(config.clusterCategory, "preprod");
       assert.strictEqual(config.domainOverride, "json.example.com");
-      assert.strictEqual(config.perRequestExport, true);
     });
 
     it("JSON config takes precedence over programmatic options", () => {
@@ -213,11 +199,9 @@ describe("A365Configuration", () => {
     it("programmatic options take precedence over defaults", () => {
       const config = new A365Configuration({
         enabled: true,
-        perRequestExport: true,
       });
 
       assert.strictEqual(config.enabled, true);
-      assert.strictEqual(config.perRequestExport, true);
     });
   });
 
@@ -250,10 +234,6 @@ describe("A365Configuration", () => {
   describe("env var constants", () => {
     it("should have correct env var names", () => {
       assert.strictEqual(A365_ENV_VARS.EXPORTER_ENABLED, "ENABLE_A365_OBSERVABILITY_EXPORTER");
-      assert.strictEqual(
-        A365_ENV_VARS.PER_REQUEST_EXPORT,
-        "ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT",
-      );
       assert.strictEqual(A365_ENV_VARS.AUTH_SCOPES, "A365_OBSERVABILITY_SCOPES_OVERRIDE");
       assert.strictEqual(A365_ENV_VARS.DOMAIN, "A365_OBSERVABILITY_DOMAIN_OVERRIDE");
       assert.strictEqual(A365_ENV_VARS.CLUSTER_CATEGORY, "CLUSTER_CATEGORY");

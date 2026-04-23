@@ -114,7 +114,6 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 | `clusterCategory` | `ClusterCategory` | `"prod"` | Cluster category for endpoint resolution (`local`, `dev`, `test`, `preprod`, `firstrelease`, `prod`, `gov`, `high`, `dod`, `mooncake`, `ex`, `rx`) |
 | `domainOverride` | `string` | — | Override the A365 observability service domain |
 | `authScopes` | `string[]` | `["https://api.powerplatform.com/.default"]` | OAuth scopes for A365 service authentication |
-| `perRequestExport` | `boolean` | `false` | Buffer spans per trace and export on root completion instead of batch export |
 | `baggage` | `A365BaggageOptions` | see below | Baggage propagation and span enrichment options |
 | `hosting` | `A365HostingOptions` | see below | Hosting middleware options (requires `@microsoft/agents-hosting`) |
 
@@ -138,7 +137,6 @@ A365 options can also be set via environment variables (highest precedence):
 | Environment Variable | Description |
 |---|---|
 | `ENABLE_A365_OBSERVABILITY_EXPORTER` | `"true"` / `"false"` — override `enabled` |
-| `ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT` | `"true"` / `"false"` — override `perRequestExport` |
 | `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated list of OAuth scopes |
 | `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override service domain |
 | `CLUSTER_CATEGORY` | Override cluster category |

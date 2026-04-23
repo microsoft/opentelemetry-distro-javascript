@@ -45,13 +45,6 @@ export interface A365Options {
   /** OAuth scopes for A365 service authentication. */
   authScopes?: string[];
 
-  /**
-   * Use per-request export mode (buffer spans per trace, export on root completion).
-   * When false, uses standard batch export.
-   * @default false
-   */
-  perRequestExport?: boolean;
-
   /** Baggage propagation and span enrichment options. */
   baggage?: A365BaggageOptions;
 
