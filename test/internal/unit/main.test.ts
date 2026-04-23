@@ -956,60 +956,6 @@ describe("Main functions", () => {
     await shutdownMicrosoftOpenTelemetry();
   });
 
-  it("wires A365 exporter tuning options and service namespace", async () => {
-    useMicrosoftOpenTelemetry({
-      azureMonitor: { enabled: false },
-      enableConsoleExporters: false,
-      a365: {
-        enabled: true,
-        tokenResolver: () => "token",
-        serviceNamespace: "agent365.unit",
-        exporterOptions: {
-          useS2SEndpoint: true,
-          maxQueueSize: 123,
-          scheduledDelayMilliseconds: 456,
-          exporterTimeoutMilliseconds: 789,
-          httpRequestTimeoutMilliseconds: 321,
-          maxExportBatchSize: 50,
-        },
-      },
-    });
-
-    const internalSdk = _getSdkInstance();
-    assert.isDefined(internalSdk);
-
-    const tracerProvider = (internalSdk as any)["_tracerProvider"];
-    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
-    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
-
-    const batchProcessor = registeredProcessors.find(
-      (processor: any) =>
-        processor.constructor?.name === "BatchSpanProcessor" &&
-        processor["_exporter"]?.constructor?.name === "Agent365Exporter",
-    );
-
-    assert.isDefined(batchProcessor, "Expected an Agent365 BatchSpanProcessor");
-    assert.strictEqual(batchProcessor["_maxQueueSize"], 123);
-    assert.strictEqual(batchProcessor["_scheduledDelayMillis"], 456);
-    assert.strictEqual(batchProcessor["_exportTimeoutMillis"], 789);
-    assert.strictEqual(batchProcessor["_maxExportBatchSize"], 50);
-
-    const exporterOptions = batchProcessor["_exporter"]?.["options"];
-    assert.isDefined(exporterOptions);
-    assert.strictEqual(exporterOptions.useS2SEndpoint, true);
-    assert.strictEqual(exporterOptions.httpRequestTimeoutMilliseconds, 321);
-
-    const tracerResourceAttributes = tracerProvider?.resource?.attributes || {};
-    const configuredResourceAttributes =
-      (internalSdk as any)["_configuration"]?.resource?.attributes || {};
-    const serviceNamespace =
-      tracerResourceAttributes["service.namespace"] ||
-      configuredResourceAttributes["service.namespace"];
-    assert.strictEqual(serviceNamespace, "agent365.unit");
-
-    await shutdownMicrosoftOpenTelemetry();
-  });
-
   it("preserves BatchSpanProcessor defaults when A365 exporter tuning is omitted", async () => {
     useMicrosoftOpenTelemetry({
       azureMonitor: { enabled: false },

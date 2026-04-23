@@ -34,9 +34,7 @@ import {
   A365Configuration,
   Agent365Exporter,
   A365SpanProcessor,
-  PerRequestSpanProcessor,
   ResolvedExporterOptions,
-  configureA365Logger,
 } from "../a365/index.js";
 import type { MicrosoftOpenTelemetryOptions } from "../types.js";
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
@@ -144,43 +142,20 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
 
   // ── A365 exporter (enabled via options.a365 or env vars) ──────────
   const a365Config = new A365Configuration(options?.a365);
-  configureA365Logger({
-    logger: a365Config.logger,
-    logLevel: a365Config.observabilityLogLevel,
-  });
   const a365ConsoleExportFallback = !a365Config.enabled && !!options?.a365;
   if (a365Config.enabled) {
     const exporterOptions = new ResolvedExporterOptions({
-      ...a365Config.exporterOptions,
       clusterCategory: a365Config.clusterCategory,
       domainOverride: a365Config.domainOverride,
+      authScopes: a365Config.authScopes,
       tokenResolver: a365Config.tokenResolver,
     });
-    const batchSpanProcessorOptions = {
-      ...(a365Config.exporterOptions?.maxQueueSize !== undefined
-        ? { maxQueueSize: a365Config.exporterOptions.maxQueueSize }
-        : {}),
-      ...(a365Config.exporterOptions?.scheduledDelayMilliseconds !== undefined
-        ? { scheduledDelayMillis: a365Config.exporterOptions.scheduledDelayMilliseconds }
-        : {}),
-      ...(a365Config.exporterOptions?.exporterTimeoutMilliseconds !== undefined
-        ? { exportTimeoutMillis: a365Config.exporterOptions.exporterTimeoutMilliseconds }
-        : {}),
-      ...(a365Config.exporterOptions?.maxExportBatchSize !== undefined
-        ? { maxExportBatchSize: a365Config.exporterOptions.maxExportBatchSize }
-        : {}),
-    };
     const a365Exporter = new Agent365Exporter(exporterOptions);
     // A365SpanProcessor copies baggage (tenant, agent, session, etc.) to span attributes
     if (a365Config.baggage.enrichSpans) {
       spanProcessors.push(new A365SpanProcessor());
     }
-    // PerRequestSpanProcessor buffers spans per trace and exports on root completion
-    // with the request's auth token; BatchSpanProcessor for standard batch export
-    const a365ExportProcessor = a365Config.perRequestExport
-      ? new PerRequestSpanProcessor(a365Exporter)
-      : new BatchSpanProcessor(a365Exporter, batchSpanProcessorOptions);
-    spanProcessors.push(a365ExportProcessor);
+    spanProcessors.push(new BatchSpanProcessor(a365Exporter));
   } else if (a365ConsoleExportFallback) {
     // A365 options provided but exporter disabled — fall back to console export
     // so developers can validate spans locally (matches upstream A365 SDK behavior
@@ -194,12 +169,6 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     ...(metricHandler ? metricHandler.getViews() : views),
     ...customViews,
   ];
-
-  const sdkResource = a365Config.serviceNamespace
-    ? config.resource.merge(
-        resourceFromAttributes({ "service.namespace": a365Config.serviceNamespace }),
-      )
-    : config.resource;
 
   // ── Console exporters (auto-enabled when no other exporter is active, or explicitly) ─
   const hasCustomProcessors =
@@ -234,7 +203,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       ...logRecordProcessors,
       ...(logHandler ? [logHandler.getBatchLogRecordProcessor()] : []),
     ],
-    resource: sdkResource,
+    resource: config.resource,
     sampler,
     spanProcessors: [
       ...(traceHandler ? [traceHandler.getAzureMonitorSpanProcessor()] : []),

@@ -113,11 +113,6 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 | `clusterCategory` | `ClusterCategory` | `"prod"` | Cluster category for endpoint resolution (`local`, `dev`, `test`, `preprod`, `firstrelease`, `prod`, `gov`, `high`, `dod`, `mooncake`, `ex`, `rx`) |
 | `domainOverride` | `string` | — | Override the A365 observability service domain |
 | `authScopes` | `string[]` | `["https://api.powerplatform.com/.default"]` | OAuth scopes for A365 service authentication |
-| `serviceNamespace` | `string` | — | Optional OTel `service.namespace` resource attribute. When set, applies globally to all spans, metrics, and logs (across all exporters: Azure Monitor, OTLP, A365) |
-| `perRequestExport` | `boolean` | `false` | Buffer spans per trace and export on root completion instead of batch export |
-| `exporterOptions` | `Partial<Agent365ExporterOptions>` | — | Tuning options for exporter behavior: `useS2SEndpoint`, `maxQueueSize`, `maxExportBatchSize`, `scheduledDelayMilliseconds`, `exporterTimeoutMilliseconds`, `httpRequestTimeoutMilliseconds` |
-| `observabilityLogLevel` | `string` | `"none"` | Filter level for A365 components that use the A365-specific logger (`none`, `info`, `warn`, `error`), pipe-delimited for multiple levels (e.g., `"warn\|error"`). Some A365-related components still use the shared logger. |
-| `logger` | `ILogger` | — | Custom logger implementation for A365 components that use the A365-specific logger path today (implements `info()`, `warn()`, `error()` methods). Some A365-related components still log via the shared logger. |
 | `baggage` | `A365BaggageOptions` | see below | Baggage propagation and span enrichment options |
 | `hosting` | `A365HostingOptions` | see below | Hosting middleware options (requires `@microsoft/agents-hosting`) |
 
@@ -134,17 +129,7 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 |---|---|---|---|
 | `enabled` | `boolean` | `false` | Enable hosting middleware integration (baggage middleware, output logging, etc.) |
 
-#### `a365.exporterOptions` — Agent365 Exporter Tuning
 
-Fine-tune the A365 exporter behavior via the `exporterOptions` object:
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `useS2SEndpoint` | `boolean` | `false` | Use service-to-service (S2S) endpoint shape instead of standard endpoint |
-| `maxQueueSize` | `number` | `2048` | Maximum number of spans to queue before forcing export |
-| `maxExportBatchSize` | `number` | `512` | Maximum number of spans per export request |
-| `scheduledDelayMilliseconds` | `number` | `5000` | Delay (ms) before batched spans are exported automatically |
-| `exporterTimeoutMilliseconds` | `number` | `30000` | Timeout (ms) for batch exporter shutdown/flush when forwarded to `BatchSpanProcessor` |
 | `httpRequestTimeoutMilliseconds` | `number` | `30000` | HTTP request timeout (ms) when sending spans to A365 service |
 
 Example:
@@ -171,7 +156,6 @@ A365 options can also be set via environment variables (highest precedence):
 | Environment Variable | Description |
 |---|---|
 | `ENABLE_A365_OBSERVABILITY_EXPORTER` | `"true"` / `"false"` — override `enabled` |
-| `ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT` | `"true"` / `"false"` — override `perRequestExport` |
 | `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated list of OAuth scopes |
 | `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override service domain |
 | `CLUSTER_CATEGORY` | Override cluster category |

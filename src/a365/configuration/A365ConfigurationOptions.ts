@@ -48,35 +48,6 @@ export interface A365Options {
   /** OAuth scopes for A365 service authentication. */
   authScopes?: string[];
 
-  /** Optional OTel service.namespace override applied whenever this option is set. */
-  serviceNamespace?: string;
-
-  /**
-   * Use per-request export mode (buffer spans per trace, export on root completion).
-   * When false, uses standard batch export.
-   * @default false
-   */
-  perRequestExport?: boolean;
-
-  /** Exporter tuning options (queue sizes, timeouts, batch sizing, endpoint shape). */
-  exporterOptions?: Partial<
-    Pick<
-      Agent365ExporterOptions,
-      | "useS2SEndpoint"
-      | "maxQueueSize"
-      | "scheduledDelayMilliseconds"
-      | "exporterTimeoutMilliseconds"
-      | "httpRequestTimeoutMilliseconds"
-      | "maxExportBatchSize"
-    >
-  >;
-
-  /** A365 internal logger filter level (none|info|warn|error, pipe-delimited). */
-  observabilityLogLevel?: string;
-
-  /** Optional custom logger used by A365 components on the A365-specific logger path. */
-  logger?: ILogger;
-
   /** Baggage propagation and span enrichment options. */
   baggage?: A365BaggageOptions;
 

@@ -38,8 +38,6 @@ export class OpenTelemetryConstants {
   public static readonly ENABLE_OBSERVABILITY = "ENABLE_OBSERVABILITY";
   public static readonly ENABLE_A365_OBSERVABILITY_EXPORTER = "ENABLE_A365_OBSERVABILITY_EXPORTER";
   public static readonly ENABLE_A365_OBSERVABILITY = "ENABLE_A365_OBSERVABILITY";
-  public static readonly ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT =
-    "ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT";
 
   // ── GenAI core attributes ────────────────────────────────────────
   public static readonly GEN_AI_OPERATION_NAME_KEY = "gen_ai.operation.name";

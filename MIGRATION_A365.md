@@ -78,17 +78,6 @@ useMicrosoftOpenTelemetry({
     enabled: true,
     tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId),
     clusterCategory: "prod",
-    domainOverride: "optional.domain.com",
-    authScopes: ["https://api.powerplatform.com/.default"],
-    serviceNamespace: "my.app.namespace",           // NEW
-    perRequestExport: true,
-    exporterOptions: {                              // NEW
-      maxQueueSize: 1024,
-      maxExportBatchSize: 256,
-      scheduledDelayMilliseconds: 1000,
-    },
-    observabilityLogLevel: "warn|error",            // NEW
-    logger: customLogger,                           // NEW
     baggage: {
       propagationEnabled: true,
       enrichSpans: true,
@@ -102,16 +91,9 @@ useMicrosoftOpenTelemetry({
 Use the same environment variables as before:
 
 - `ENABLE_A365_OBSERVABILITY_EXPORTER`
-- `ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT`
 - `A365_OBSERVABILITY_SCOPES_OVERRIDE`
 - `A365_OBSERVABILITY_DOMAIN_OVERRIDE`
 - `CLUSTER_CATEGORY`
-- `A365_OBSERVABILITY_LOG_LEVEL` (NEW)
-- `A365_PER_REQUEST_MAX_TRACES`
-- `A365_PER_REQUEST_MAX_SPANS_PER_TRACE`
-- `A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS`
-- `A365_PER_REQUEST_FLUSH_GRACE_MS`
-- `A365_PER_REQUEST_MAX_TRACE_AGE_MS`
 
 ## 7. Dual Export (Optional)
 
@@ -122,6 +104,8 @@ useMicrosoftOpenTelemetry({
   a365: {
     enabled: true,
     tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId),
+=======
+>>>>>>> upstream/main
   },
   azureMonitor: {
     azureMonitorExporterOptions: {
@@ -133,7 +117,54 @@ useMicrosoftOpenTelemetry({
 
 ## 8. Shutdown
 
+<<<<<<< HEAD
 Call shutdown on application exit:
+=======
+Environment variable names are **unchanged** from Agent365-nodejs:
+
+| Environment Variable | Description |
+|---|---|
+| `ENABLE_A365_OBSERVABILITY_EXPORTER` | Enable/disable A365 exporter (`true`, `1`, `yes`, `on`) |
+| `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated list of OAuth scopes |
+| `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override service domain |
+| `CLUSTER_CATEGORY` | Cluster category (`prod`, `dev`, `test`, etc.) |
+
+## Custom Span Export
+
+If your previous setup used `perRequestExport: true` (buffering spans per trace and exporting when a trace completes), use a custom `SpanProcessor` with the exported `Agent365Exporter`.
+`BatchSpanProcessor` and `SimpleSpanProcessor` are supported, but they change export timing compared to the removed per-request behavior.
+To keep equivalent timing semantics, implement a custom span processor.
+
+```typescript
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { useMicrosoftOpenTelemetry, Agent365Exporter } from "@microsoft/opentelemetry";
+
+const exporter = new Agent365Exporter({
+  clusterCategory: "prod",
+  tokenResolver: async (agentId, tenantId) => getToken(agentId, tenantId),
+});
+
+// Disable built-in A365 exporter to avoid double exporting when using custom processors.
+process.env.ENABLE_A365_OBSERVABILITY_EXPORTER = "false";
+
+// Supply any OTel-compatible SpanProcessor wrapping Agent365Exporter.
+// Note: BatchSpanProcessor does not export on root-span completion.
+useMicrosoftOpenTelemetry({
+  a365: { enabled: false },
+  spanProcessors: [new BatchSpanProcessor(exporter)],
+});
+```
+
+> **Note:** `Agent365Exporter` is a standard `SpanExporter`. You can wrap it with any
+> `SpanProcessor` from `@opentelemetry/sdk-trace-base` (e.g. `BatchSpanProcessor`,
+> `SimpleSpanProcessor`) or a custom implementation.
+
+## Scopes
+
+Scope usage is identical. Just update the import path:
+
+### Before
+>>>>>>> upstream/main
 
 ```typescript
 import { shutdownMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";

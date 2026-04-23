@@ -28,11 +28,6 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.clusterCategory, "prod");
       assert.strictEqual(config.domainOverride, undefined);
       assert.deepStrictEqual(config.authScopes, ["https://api.powerplatform.com/.default"]);
-      assert.strictEqual(config.serviceNamespace, undefined);
-      assert.strictEqual(config.perRequestExport, false);
-      assert.strictEqual(config.exporterOptions, undefined);
-      assert.strictEqual(config.observabilityLogLevel, "none");
-      assert.strictEqual(config.logger, undefined);
       assert.strictEqual(config.tokenResolver, undefined);
     });
 
@@ -70,56 +65,6 @@ describe("A365Configuration", () => {
       assert.deepStrictEqual(config.authScopes, scopes);
     });
 
-    it("should apply per-request export", () => {
-      const config = new A365Configuration({ perRequestExport: true });
-      assert.strictEqual(config.perRequestExport, true);
-    });
-
-    it("should apply service namespace", () => {
-      const config = new A365Configuration({ serviceNamespace: "agent365.app" });
-      assert.strictEqual(config.serviceNamespace, "agent365.app");
-    });
-
-    it("should apply exporter options", () => {
-      const config = new A365Configuration({
-        exporterOptions: {
-          useS2SEndpoint: true,
-          maxQueueSize: 100,
-          maxExportBatchSize: 20,
-          scheduledDelayMilliseconds: 250,
-          exporterTimeoutMilliseconds: 1000,
-          httpRequestTimeoutMilliseconds: 500,
-        },
-      });
-
-      assert.deepStrictEqual(config.exporterOptions, {
-        useS2SEndpoint: true,
-        maxQueueSize: 100,
-        maxExportBatchSize: 20,
-        scheduledDelayMilliseconds: 250,
-        exporterTimeoutMilliseconds: 1000,
-        httpRequestTimeoutMilliseconds: 500,
-      });
-    });
-
-    it("should apply custom logger and log level", () => {
-      const customLogger = {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
-      const config = new A365Configuration({
-        logger: customLogger,
-        observabilityLogLevel: "info|warn|error",
-      });
-
-      assert.strictEqual(config.logger, customLogger);
-      assert.strictEqual(config.observabilityLogLevel, "info|warn|error");
-
-      getA365Logger().info("hello");
-      assert.strictEqual(customLogger.info.mock.calls.length, 1);
-    });
-
     it("should apply token resolver", () => {
       const resolver = (_agentId: string, _tenantId: string) => "token";
       const config = new A365Configuration({ tokenResolver: resolver });
@@ -153,12 +98,6 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.enabled, false);
     });
 
-    it("should override per-request export from env", () => {
-      process.env[A365_ENV_VARS.PER_REQUEST_EXPORT] = "true";
-      const config = new A365Configuration();
-      assert.strictEqual(config.perRequestExport, true);
-    });
-
     it("should override auth scopes from env (space-separated)", () => {
       process.env[A365_ENV_VARS.AUTH_SCOPES] = "scope1 scope2 scope3";
       const config = new A365Configuration();
@@ -177,12 +116,6 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.clusterCategory, "preprod");
     });
 
-    it("should override log level from env", () => {
-      process.env[A365_ENV_VARS.LOG_LEVEL] = "warn|error";
-      const config = new A365Configuration({ observabilityLogLevel: "info" });
-      assert.strictEqual(config.observabilityLogLevel, "warn|error");
-    });
-
     it("should ignore empty env vars", () => {
       process.env[A365_ENV_VARS.DOMAIN] = "";
       const config = new A365Configuration({ domainOverride: "keep.this.com" });
@@ -193,34 +126,6 @@ describe("A365Configuration", () => {
       process.env[A365_ENV_VARS.CLUSTER_CATEGORY] = "staging";
       const config = new A365Configuration();
       assert.strictEqual(config.clusterCategory, "prod");
-    });
-
-    it("routes invalid cluster-category warnings through the configured A365 logger", () => {
-      process.env[A365_ENV_VARS.CLUSTER_CATEGORY] = "staging";
-      process.env[A365_ENV_VARS.LOG_LEVEL] = "warn";
-      const customLogger = {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
-
-      new A365Configuration({ enabled: true, logger: customLogger });
-
-      assert.strictEqual(customLogger.warn.mock.calls.length, 1);
-    });
-
-    it("applies env log level before invalid cluster-category warnings", () => {
-      process.env[A365_ENV_VARS.CLUSTER_CATEGORY] = "staging";
-      process.env[A365_ENV_VARS.LOG_LEVEL] = "none";
-      const customLogger = {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
-
-      new A365Configuration({ logger: customLogger, observabilityLogLevel: "warn" });
-
-      assert.strictEqual(customLogger.warn.mock.calls.length, 0);
     });
 
     it("should ignore unrecognized boolean env var values", () => {
@@ -245,11 +150,9 @@ describe("A365Configuration", () => {
     it("programmatic options take precedence over defaults", () => {
       const config = new A365Configuration({
         enabled: true,
-        perRequestExport: true,
       });
 
       assert.strictEqual(config.enabled, true);
-      assert.strictEqual(config.perRequestExport, true);
     });
   });
 
@@ -277,32 +180,11 @@ describe("A365Configuration", () => {
       const config = new A365Configuration();
       assert.strictEqual(config.enabled, false);
     });
-
-    it("routes disabled-option warnings through the configured A365 logger", () => {
-      const customLogger = {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
-
-      new A365Configuration({
-        enabled: false,
-        tokenResolver: () => "token",
-        logger: customLogger,
-        observabilityLogLevel: "warn",
-      });
-
-      assert.strictEqual(customLogger.warn.mock.calls.length, 1);
-    });
   });
 
   describe("env var constants", () => {
     it("should have correct env var names", () => {
       assert.strictEqual(A365_ENV_VARS.EXPORTER_ENABLED, "ENABLE_A365_OBSERVABILITY_EXPORTER");
-      assert.strictEqual(
-        A365_ENV_VARS.PER_REQUEST_EXPORT,
-        "ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT",
-      );
       assert.strictEqual(A365_ENV_VARS.AUTH_SCOPES, "A365_OBSERVABILITY_SCOPES_OVERRIDE");
       assert.strictEqual(A365_ENV_VARS.DOMAIN, "A365_OBSERVABILITY_DOMAIN_OVERRIDE");
       assert.strictEqual(A365_ENV_VARS.CLUSTER_CATEGORY, "CLUSTER_CATEGORY");

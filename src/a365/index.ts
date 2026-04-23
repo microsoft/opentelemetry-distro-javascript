@@ -83,11 +83,9 @@ export { BaggageBuilder, BaggageScope } from "./middleware/index.js";
 // ── Processors ──────────────────────────────────────────────────────────────
 export {
   A365SpanProcessor,
-  PerRequestSpanProcessor,
   GENERIC_ATTRIBUTES,
   INVOKE_AGENT_ATTRIBUTES,
 } from "./processors/index.js";
-export type { PerRequestSpanProcessorOptions } from "./processors/index.js";
 
 // ── Token context ───────────────────────────────────────────────────────────
 export { runWithExportToken, updateExportToken, getExportToken } from "./context/tokenContext.js";
