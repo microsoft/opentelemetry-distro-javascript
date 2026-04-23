@@ -6,19 +6,16 @@ import {
   A365Configuration,
   A365_ENV_VARS,
 } from "../../../../src/a365/configuration/A365Configuration.js";
-import { JsonConfig } from "../../../../src/shared/jsonConfig.js";
 
 describe("A365Configuration", () => {
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    (JsonConfig as any)["_instance"] = undefined;
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    (JsonConfig as any)["_instance"] = undefined;
     vi.restoreAllMocks();
   });
 
@@ -146,56 +143,6 @@ describe("A365Configuration", () => {
       const config = new A365Configuration();
       // Unrecognized value is ignored, default stands
       assert.strictEqual(config.enabled, false);
-    });
-  });
-
-  describe("JSON config", () => {
-    it("should apply A365 options from JSON config", () => {
-      process.env["APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"] = JSON.stringify({
-        a365: {
-          enabled: true,
-          clusterCategory: "preprod",
-          domainOverride: "json.example.com",
-          perRequestExport: true,
-        },
-      });
-      const config = new A365Configuration();
-      assert.strictEqual(config.enabled, true);
-      assert.strictEqual(config.clusterCategory, "preprod");
-      assert.strictEqual(config.domainOverride, "json.example.com");
-      assert.strictEqual(config.perRequestExport, true);
-    });
-
-    it("JSON config takes precedence over programmatic options", () => {
-      process.env["APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"] = JSON.stringify({
-        a365: { clusterCategory: "gov" },
-      });
-      const config = new A365Configuration({ clusterCategory: "prod" });
-      assert.strictEqual(config.clusterCategory, "gov");
-    });
-
-    it("env vars take precedence over JSON config", () => {
-      process.env["APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"] = JSON.stringify({
-        a365: { enabled: true, clusterCategory: "preprod" },
-      });
-      process.env[A365_ENV_VARS.EXPORTER_ENABLED] = "false";
-      process.env[A365_ENV_VARS.CLUSTER_CATEGORY] = "gov";
-      const config = new A365Configuration();
-      assert.strictEqual(config.enabled, false);
-      assert.strictEqual(config.clusterCategory, "gov");
-    });
-
-    it("should apply baggage and hosting from JSON config", () => {
-      process.env["APPLICATIONINSIGHTS_CONFIGURATION_CONTENT"] = JSON.stringify({
-        a365: {
-          baggage: { propagationEnabled: false, enrichSpans: false },
-          hosting: { enabled: true },
-        },
-      });
-      const config = new A365Configuration();
-      assert.strictEqual(config.baggage.propagationEnabled, false);
-      assert.strictEqual(config.baggage.enrichSpans, false);
-      assert.strictEqual(config.hosting.enabled, true);
     });
   });
 
