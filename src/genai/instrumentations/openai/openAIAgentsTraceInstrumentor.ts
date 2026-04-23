@@ -6,7 +6,6 @@
 import { diag, trace, Tracer } from "@opentelemetry/api";
 import {
   InstrumentationBase,
-  InstrumentationConfig,
   InstrumentationModuleDefinition,
 } from "@opentelemetry/instrumentation";
 import { setTraceProcessors, setTracingDisabled, TracingProcessor } from "@openai/agents";
