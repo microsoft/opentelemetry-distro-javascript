@@ -2,7 +2,7 @@
 * @hectorhdzg @JacksonWeber @lzchen @MSNev @rads-1996
 
 # A365 co-owners
-/src/microsoft/opentelemetry/a365/ @fpfp100
+/src/a365/ @fpfp100
 
 # LangChain instrumentation co-owners
 /src/genai/instrumentations/langchain/ @fpfp100
