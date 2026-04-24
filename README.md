@@ -241,6 +241,26 @@ new ObservabilityHostingManager().configure(adapter as unknown as { use(...m: un
 });
 ```
 
+
+| `httpRequestTimeoutMilliseconds` | `number` | `30000` | HTTP request timeout (ms) when sending spans to A365 service |
+
+Example:
+
+```typescript
+useMicrosoftOpenTelemetry({
+  a365: {
+    enabled: true,
+    tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId),
+    exporterOptions: {
+      maxQueueSize: 4096,
+      maxExportBatchSize: 1024,
+      scheduledDelayMilliseconds: 10000,
+      httpRequestTimeoutMilliseconds: 15000,
+    },
+  },
+});
+```
+
 #### A365 environment variables
 
 A365 options can also be set via environment variables (highest precedence):
@@ -251,6 +271,13 @@ A365 options can also be set via environment variables (highest precedence):
 | `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated list of OAuth scopes |
 | `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override service domain |
 | `CLUSTER_CATEGORY` | Override cluster category |
+| `A365_OBSERVABILITY_LOG_LEVEL` | A365 internal logger filter level (`none`, `info`, `warn`, `error`, or pipe-delimited combination) — overrides `observabilityLogLevel` |
+| `A365_PER_REQUEST_MAX_TRACES` | Max buffered traces (default: `1000`) |
+| `A365_PER_REQUEST_MAX_SPANS_PER_TRACE` | Max spans per trace (default: `5000`) |
+| `A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS` | Max concurrent exports (default: `20`) |
+| `A365_PER_REQUEST_FLUSH_GRACE_MS` | Grace period after root span ends (default: `250`) |
+| `A365_PER_REQUEST_MAX_TRACE_AGE_MS` | Max trace age before forced flush (default: `1800000`) |
+
 
 ### Example
 

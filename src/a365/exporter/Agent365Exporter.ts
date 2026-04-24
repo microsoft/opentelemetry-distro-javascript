@@ -17,7 +17,7 @@ import {
   resolveAgent365Endpoint,
   truncateSpan,
 } from "./utils.js";
-import { Logger } from "../../shared/logging/index.js";
+import { getA365Logger } from "../logging.js";
 
 const DEFAULT_MAX_RETRIES = 3;
 
@@ -78,7 +78,7 @@ interface OTLPStatus {
 export class Agent365Exporter implements SpanExporter {
   private closed = false;
   private readonly options: ResolvedExporterOptions;
-  private readonly logger = Logger.getInstance();
+  private readonly logger = getA365Logger();
 
   constructor(options?: Agent365ExporterOptions) {
     this.options = new ResolvedExporterOptions(options);

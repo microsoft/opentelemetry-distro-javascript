@@ -955,4 +955,33 @@ describe("Main functions", () => {
 
     await shutdownMicrosoftOpenTelemetry();
   });
+
+  it("preserves BatchSpanProcessor defaults when A365 exporter tuning is omitted", async () => {
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        tokenResolver: () => "token",
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const batchProcessor = registeredProcessors.find(
+      (processor: any) =>
+        processor.constructor?.name === "BatchSpanProcessor" &&
+        processor["_exporter"]?.constructor?.name === "Agent365Exporter",
+    );
+
+    assert.isDefined(batchProcessor, "Expected an Agent365 BatchSpanProcessor");
+    assert.strictEqual(batchProcessor["_exportTimeoutMillis"], 30000);
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
 });

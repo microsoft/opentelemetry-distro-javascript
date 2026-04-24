@@ -6,6 +6,7 @@ import {
   A365Configuration,
   A365_ENV_VARS,
 } from "../../../../src/a365/configuration/A365Configuration.js";
+import { _resetA365LoggerForTest } from "../../../../src/a365/logging.js";
 
 describe("A365Configuration", () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -16,6 +17,7 @@ describe("A365Configuration", () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    _resetA365LoggerForTest();
     vi.restoreAllMocks();
   });
 
@@ -186,6 +188,7 @@ describe("A365Configuration", () => {
       assert.strictEqual(A365_ENV_VARS.AUTH_SCOPES, "A365_OBSERVABILITY_SCOPES_OVERRIDE");
       assert.strictEqual(A365_ENV_VARS.DOMAIN, "A365_OBSERVABILITY_DOMAIN_OVERRIDE");
       assert.strictEqual(A365_ENV_VARS.CLUSTER_CATEGORY, "CLUSTER_CATEGORY");
+      assert.strictEqual(A365_ENV_VARS.LOG_LEVEL, "A365_OBSERVABILITY_LOG_LEVEL");
     });
   });
 });

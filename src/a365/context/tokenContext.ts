@@ -13,7 +13,7 @@
 
 import { context, createContextKey } from "@opentelemetry/api";
 import type { Context } from "@opentelemetry/api";
-import { Logger } from "../../shared/logging/index.js";
+import { getA365Logger } from "../logging.js";
 
 const EXPORT_TOKEN_KEY = createContextKey("a365_export_token");
 
@@ -37,7 +37,7 @@ interface TokenHolder {
 export function runWithExportToken<T>(token: string, fn: () => T): T {
   const holder: TokenHolder = { token };
   const ctxWithToken = context.active().setValue(EXPORT_TOKEN_KEY, holder);
-  Logger.getInstance().info("[TokenContext] Running function with export token in context.");
+  getA365Logger().info("[TokenContext] Running function with export token in context.");
   return context.with(ctxWithToken, fn);
 }
 
@@ -54,10 +54,10 @@ export function updateExportToken(token: string): boolean {
   const value = context.active().getValue(EXPORT_TOKEN_KEY);
   if (value && typeof value === "object" && "token" in value) {
     (value as TokenHolder).token = token;
-    Logger.getInstance().info("[TokenContext] Export token updated in context.");
+    getA365Logger().info("[TokenContext] Export token updated in context.");
     return true;
   }
-  Logger.getInstance().warn(
+  getA365Logger().warn(
     "[TokenContext] updateExportToken called but no token holder found in active context. Was runWithExportToken called?",
   );
   return false;

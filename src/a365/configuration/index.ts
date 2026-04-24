@@ -8,3 +8,5 @@ export type {
   A365BaggageOptions,
   A365HostingOptions,
 } from "./A365ConfigurationOptions.js";
+
+export type { ILogger } from "../logging.js";
