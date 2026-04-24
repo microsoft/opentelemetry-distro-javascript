@@ -1,6 +1,6 @@
 # Release History
 
-## [Unreleased]
+## [0.1.0-alpha.5] - 2026-04-24 
 
 ### Breaking Changes
 - Remove Azure Functions auto-instrumentation support from this package. The `instrumentationOptions.azureFunctions` option is no longer available.

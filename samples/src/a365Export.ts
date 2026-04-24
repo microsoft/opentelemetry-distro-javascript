@@ -83,9 +83,9 @@ async function main(): Promise<void> {
 
     // A365 observability export configuration
     a365: {
-      enabled: true,                   // turn on the Agent365 exporter
-      tokenResolver: myTokenResolver,  // called per-export with (agentId, tenantId)
-      clusterCategory: "dev",          // target cluster: dev | test | preprod | prod | …
+      enabled: true, // turn on the Agent365 exporter
+      tokenResolver: myTokenResolver, // called per-export with (agentId, tenantId)
+      clusterCategory: "dev", // target cluster: dev | test | preprod | prod | …
     },
   });
 

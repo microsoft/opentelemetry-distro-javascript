@@ -29,15 +29,16 @@ import {
   validateAzureMonitorConfig,
 } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
-import {
-  A365Configuration,
-  Agent365Exporter,
-  A365SpanProcessor,
-  ResolvedExporterOptions,
-} from "../a365/index.js";
-import type { MicrosoftOpenTelemetryOptions } from "../types.js";
+import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
+import type {
+  MicrosoftOpenTelemetryOptions,
+  InstrumentationOptions,
+  OpenAIAgentsInstrumentationConfig,
+  LangChainInstrumentationConfig,
+} from "../types.js";
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
 import { createInstrumentations, createSampler, createViews } from "./instrumentations.js";
+import { Logger } from "../shared/logging/index.js";
 
 process.env["AZURE_MONITOR_DISTRO_VERSION"] = AZURE_MONITOR_OPENTELEMETRY_VERSION;
 process.env["MICROSOFT_OPENTELEMETRY_VERSION"] = MICROSOFT_OPENTELEMETRY_VERSION;
@@ -61,6 +62,7 @@ let disposeAzureMonitor: (() => void) | undefined;
 export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOptions): void {
   const config = new InternalConfig(options);
   patchOpenTelemetryInstrumentationEnable();
+  initializeGenAIInstrumentations(options?.instrumentationOptions);
 
   // Azure Monitor is enabled when configured programmatically or via JSON config.
   // An explicit `enabled: false` always wins, even if a connection string is present.
@@ -143,12 +145,12 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   const a365Config = new A365Configuration(options?.a365);
   const a365ConsoleExportFallback = !a365Config.enabled && !!options?.a365;
   if (a365Config.enabled) {
-    const exporterOptions = new ResolvedExporterOptions({
+    const a365Exporter = new Agent365Exporter({
       clusterCategory: a365Config.clusterCategory,
       domainOverride: a365Config.domainOverride,
+      authScopes: a365Config.authScopes,
       tokenResolver: a365Config.tokenResolver,
     });
-    const a365Exporter = new Agent365Exporter(exporterOptions);
     // A365SpanProcessor copies baggage (tenant, agent, session, etc.) to span attributes
     if (a365Config.baggage.enrichSpans) {
       spanProcessors.push(new A365SpanProcessor());
@@ -167,7 +169,6 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     ...(metricHandler ? metricHandler.getViews() : views),
     ...customViews,
   ];
-
   // ── Console exporters (auto-enabled when no other exporter is active, or explicitly) ─
   const hasCustomProcessors =
     (options?.spanProcessors?.length ?? 0) > 0 ||
@@ -220,6 +221,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
  */
 export function shutdownMicrosoftOpenTelemetry(): Promise<void> {
   disposeAzureMonitor?.();
+  void resetGenAIInstrumentations();
   return sdk?.shutdown();
 }
 
@@ -230,4 +232,68 @@ export function shutdownMicrosoftOpenTelemetry(): Promise<void> {
 
 export function _getSdkInstance(): NodeSDK | undefined {
   return sdk;
+}
+
+function initializeGenAIInstrumentations(options?: InstrumentationOptions): void {
+  const openAIOptions = options?.openaiAgents;
+  if (openAIOptions && openAIOptions.enabled !== false) {
+    void initializeOpenAIAgentsInstrumentation(openAIOptions);
+  }
+
+  const langChainOptions = options?.langchain;
+  if (langChainOptions && langChainOptions.enabled !== false) {
+    void initializeLangChainInstrumentation(langChainOptions);
+  }
+}
+
+async function initializeOpenAIAgentsInstrumentation(
+  options: OpenAIAgentsInstrumentationConfig,
+): Promise<void> {
+  try {
+    const { OpenAIAgentsTraceInstrumentor } =
+      await import("../genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js");
+    OpenAIAgentsTraceInstrumentor.instrument(options);
+  } catch (error) {
+    Logger.getInstance().warn(
+      "[GenAI] Failed to initialize OpenAI Agents instrumentation. " +
+        "Ensure @openai/agents is installed when openaiAgents config is enabled.",
+      error,
+    );
+  }
+}
+
+async function initializeLangChainInstrumentation(
+  options: LangChainInstrumentationConfig,
+): Promise<void> {
+  try {
+    const [{ LangChainTraceInstrumentor }, callbackManagerModule] = await Promise.all([
+      import("../genai/instrumentations/langchain/langchainTraceInstrumentor.js"),
+      import("@langchain/core/callbacks/manager"),
+    ]);
+    LangChainTraceInstrumentor.instrument(callbackManagerModule, options);
+  } catch (error) {
+    Logger.getInstance().warn(
+      "[GenAI] Failed to initialize LangChain instrumentation. " +
+        "Ensure @langchain/core is installed when langchain config is enabled.",
+      error,
+    );
+  }
+}
+
+async function resetGenAIInstrumentations(): Promise<void> {
+  try {
+    const { OpenAIAgentsTraceInstrumentor } =
+      await import("../genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js");
+    OpenAIAgentsTraceInstrumentor.resetInstance();
+  } catch {
+    // Ignore when optional dependency is not installed.
+  }
+
+  try {
+    const { LangChainTraceInstrumentor } =
+      await import("../genai/instrumentations/langchain/langchainTraceInstrumentor.js");
+    LangChainTraceInstrumentor.resetInstance();
+  } catch {
+    // Ignore when optional dependency is not installed.
+  }
 }

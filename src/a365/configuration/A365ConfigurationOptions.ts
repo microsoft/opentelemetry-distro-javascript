@@ -31,10 +31,14 @@ export interface A365Options {
 
   /**
    * Token resolver for authenticating with the A365 observability service.
-   * Called with (agentId, tenantId) extracted from span attributes.
+   * Called with (agentId, tenantId, authScopes) extracted from span attributes/config.
    * Must return a bearer token string or a promise resolving to one.
    */
-  tokenResolver?: (agentId: string, tenantId: string) => string | Promise<string>;
+  tokenResolver?: (
+    agentId: string,
+    tenantId: string,
+    authScopes?: string[],
+  ) => string | Promise<string>;
 
   /** Cluster category for the A365 service endpoint. */
   clusterCategory?: ClusterCategory;
@@ -67,4 +71,16 @@ export interface A365HostingOptions {
    * Requires `@microsoft/agents-hosting` as an optional peer dependency.
    */
   enabled?: boolean;
+
+  /**
+   * Adapter instance where hosting middleware will be auto-registered.
+   * Must expose a `use(...middlewares)` method compatible with agents-hosting adapters.
+   */
+  adapter?: { use(...middlewares: unknown[]): void };
+
+  /**
+   * Enable output logging middleware auto-registration when hosting is enabled.
+   * @default true
+   */
+  enableOutputLogging?: boolean;
 }

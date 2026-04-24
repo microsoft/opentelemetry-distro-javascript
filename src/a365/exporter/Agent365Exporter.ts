@@ -159,7 +159,7 @@ export class Agent365Exporter implements SpanExporter {
 
   private async resolveToken(agentId: string, tenantId: string): Promise<string | null> {
     if (!this.options.tokenResolver) return null;
-    const result = this.options.tokenResolver(agentId, tenantId);
+    const result = this.options.tokenResolver(agentId, tenantId, this.options.authScopes);
     return result instanceof Promise ? result : result;
   }
 

@@ -88,6 +88,8 @@ export class InternalConfig {
       postgreSql: { enabled: true },
       redis: { enabled: true },
       redis4: { enabled: true },
+      openaiAgents: { enabled: true },
+      langchain: { enabled: true },
     };
     this._setDefaultResource();
     this.browserSdkLoaderOptions = {

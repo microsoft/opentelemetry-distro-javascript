@@ -10,6 +10,7 @@ import type { ClusterCategory } from "../configuration/A365ConfigurationOptions.
 export type TokenResolver = (
   agentId: string,
   tenantId: string,
+  authScopes?: string[],
 ) => string | null | Promise<string | null>;
 
 /**
@@ -27,6 +28,9 @@ export interface Agent365ExporterOptions {
 
   /** Override the A365 observability service domain. */
   domainOverride?: string;
+
+  /** OAuth scopes used during token resolution. */
+  authScopes?: string[];
 
   /** Maximum span queue size before drops occur. @default 2048 */
   maxQueueSize?: number;
@@ -50,6 +54,7 @@ export class ResolvedExporterOptions {
   public readonly tokenResolver?: TokenResolver;
   public readonly useS2SEndpoint: boolean;
   public readonly domainOverride?: string;
+  public readonly authScopes: string[];
   public readonly maxQueueSize: number;
   public readonly scheduledDelayMilliseconds: number;
   public readonly exporterTimeoutMilliseconds: number;
@@ -61,6 +66,7 @@ export class ResolvedExporterOptions {
     this.tokenResolver = options?.tokenResolver;
     this.useS2SEndpoint = options?.useS2SEndpoint ?? false;
     this.domainOverride = options?.domainOverride;
+    this.authScopes = options?.authScopes ?? ["https://api.powerplatform.com/.default"];
     this.maxQueueSize = options?.maxQueueSize ?? 2048;
     this.scheduledDelayMilliseconds = options?.scheduledDelayMilliseconds ?? 5000;
     this.exporterTimeoutMilliseconds = options?.exporterTimeoutMilliseconds ?? 90000;

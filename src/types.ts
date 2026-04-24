@@ -103,21 +103,21 @@ export interface InstrumentationOptions {
 
   /**
    * OpenAI Agents SDK instrumentation.
-   * Pass `true` for defaults or a configuration object.
+   * Uses InstrumentationConfig shape (`enabled`, etc.) plus OpenAI-specific options.
    * Requires `@openai/agents` as an optional peer dependency.
    */
-  openaiAgents?: boolean | OpenAIAgentsInstrumentationConfig;
+  openaiAgents?: OpenAIAgentsInstrumentationConfig;
 
   /**
    * LangChain instrumentation.
-   * Pass `true` for defaults or a configuration object.
+   * Uses InstrumentationConfig shape (`enabled`, etc.) plus LangChain-specific options.
    * Requires `@langchain/core` as an optional peer dependency.
    */
-  langchain?: boolean | LangChainInstrumentationConfig;
+  langchain?: LangChainInstrumentationConfig;
 }
 
 /** Configuration for OpenAI Agents SDK instrumentation. */
-export interface OpenAIAgentsInstrumentationConfig {
+export interface OpenAIAgentsInstrumentationConfig extends InstrumentationConfig {
   /** Custom tracer name. */
   tracerName?: string;
   /** Custom tracer version. */
@@ -136,7 +136,7 @@ export interface OpenAIAgentsInstrumentationConfig {
 }
 
 /** Configuration for LangChain instrumentation. */
-export interface LangChainInstrumentationConfig {
+export interface LangChainInstrumentationConfig extends InstrumentationConfig {
   /** Enable recording of message content in spans. */
   isContentRecordingEnabled?: boolean;
 }

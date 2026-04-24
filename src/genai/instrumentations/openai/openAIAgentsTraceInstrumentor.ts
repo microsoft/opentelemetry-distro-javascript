@@ -6,28 +6,11 @@
 import { diag, trace, Tracer } from "@opentelemetry/api";
 import {
   InstrumentationBase,
-  InstrumentationConfig,
   InstrumentationModuleDefinition,
 } from "@opentelemetry/instrumentation";
 import { setTraceProcessors, setTracingDisabled, TracingProcessor } from "@openai/agents";
+import type { OpenAIAgentsInstrumentationConfig } from "../../../types.js";
 import { OpenAIAgentsTraceProcessor } from "./openAIAgentsTraceProcessor.js";
-
-/**
- * Configuration options for the OpenAI Agents instrumentor.
- */
-export interface OpenAIAgentsInstrumentationConfig extends InstrumentationConfig {
-  /**
-   * When true, the gen_ai.input.messages attribute containing LLM input
-   * messages will be suppressed and not attached to spans in InvokeAgent scopes.
-   * @default false
-   */
-  suppressInvokeAgentInput?: boolean;
-  /**
-   * Whether to enable content recording (input/output messages, tool args, etc.).
-   * @default false
-   */
-  isContentRecordingEnabled?: boolean;
-}
 
 /**
  * Internal singleton implementation.
@@ -48,7 +31,10 @@ class OpenAIAgentsTraceInstrumentorImpl extends InstrumentationBase<OpenAIAgents
       ...config,
     });
 
-    this.otelTracer = trace.getTracer("microsoft-otel-openai-agents", "1.0.0");
+    this.otelTracer = trace.getTracer(
+      config.tracerName ?? "microsoft-otel-openai-agents",
+      config.tracerVersion ?? "1.0.0",
+    );
 
     OpenAIAgentsTraceInstrumentorImpl._instance = this;
     diag.info("[OpenAIAgentsTraceInstrumentor] Initialized");
