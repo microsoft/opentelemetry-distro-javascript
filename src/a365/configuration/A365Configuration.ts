@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-  A365Options,
-  ClusterCategory,
-} from "./A365ConfigurationOptions.js";
+import type { A365Options, ClusterCategory } from "./A365ConfigurationOptions.js";
 import { getA365Logger } from "../logging.js";
 
 /**
@@ -139,8 +136,7 @@ export class A365Configuration {
     if (!options) return;
 
     const hasNonTrivialOptions =
-      options.tokenResolver !== undefined ||
-      options.domainOverride !== undefined;
+      options.tokenResolver !== undefined || options.domainOverride !== undefined;
 
     if (hasNonTrivialOptions) {
       getA365Logger().warn(

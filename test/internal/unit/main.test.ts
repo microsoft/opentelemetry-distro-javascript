@@ -979,7 +979,10 @@ describe("Main functions", () => {
       (processor: any) => processor.constructor?.name === "A365SpanProcessor",
     );
 
-    assert.isDefined(a365SpanProcessor, "Expected A365SpanProcessor to be registered when A365 is enabled");
+    assert.isDefined(
+      a365SpanProcessor,
+      "Expected A365SpanProcessor to be registered when A365 is enabled",
+    );
 
     await shutdownMicrosoftOpenTelemetry();
   });
