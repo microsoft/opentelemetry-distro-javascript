@@ -129,10 +129,7 @@ async function callLLM(
   const scope = InferenceScope.start(request, details, agentDetails);
   try {
     // Record what we sent to the LLM
-    scope.recordInputMessages([
-      "You are a helpful weather assistant.",
-      request.content as string,
-    ]);
+    scope.recordInputMessages(["You are a helpful weather assistant.", request.content as string]);
 
     // Simulate LLM response latency
     await new Promise((r) => setTimeout(r, 50));
@@ -212,10 +209,7 @@ async function executeTool(
  * - Records the tool result as input, the natural-language answer as output
  * - Records token counts and a "stop" finish reason
  */
-async function formatResponse(
-  request: A365Request,
-  toolResult: string,
-): Promise<string> {
+async function formatResponse(request: A365Request, toolResult: string): Promise<string> {
   const details: InferenceDetails = {
     operationName: InferenceOperationType.CHAT,
     model: "gpt-4o",
@@ -248,11 +242,7 @@ async function formatResponse(
 
 /** Record the final streamed output with `OutputScope`. */
 function recordOutput(request: A365Request, answer: string): void {
-  const scope = OutputScope.start(
-    request,
-    { messages: [answer] },
-    agentDetails,
-  );
+  const scope = OutputScope.start(request, { messages: [answer] }, agentDetails);
   scope.dispose();
 }
 
@@ -284,7 +274,12 @@ function demonstrateContextPropagation(): void {
     const scope = InvokeAgentScope.start(
       { conversationId: "cross-service-conv" },
       { endpoint: { host: "service-b.internal", port: 8080 } },
-      { ...agentDetails, agentId: "downstream-agent", agentName: "DownstreamBot", tenantId: "contoso-tenant-id" },
+      {
+        ...agentDetails,
+        agentId: "downstream-agent",
+        agentName: "DownstreamBot",
+        tenantId: "contoso-tenant-id",
+      },
     );
     console.log("  Created child span in Service B, traceId:", scope.getSpanContext().traceId);
     scope.recordResponse("Handled by downstream agent");
@@ -324,19 +319,14 @@ async function main(): Promise<void> {
   console.log("=== A365 Manual Telemetry Scopes Demo ===\n");
 
   // 1️⃣ InvokeAgentScope — wraps the entire agent invocation
-  const invokeScope = InvokeAgentScope.start(
-    request,
-    {},
-    agentDetails,
-    {
-      userDetails: {
-        userId: "user-jane-doe",
-        userName: "Jane Doe",
-        userEmail: "jane@contoso.com",
-        tenantId: "contoso-tenant-id",
-      },
+  const invokeScope = InvokeAgentScope.start(request, {}, agentDetails, {
+    userDetails: {
+      userId: "user-jane-doe",
+      userName: "Jane Doe",
+      userEmail: "jane@contoso.com",
+      tenantId: "contoso-tenant-id",
     },
-  );
+  });
 
   try {
     console.log("1. InvokeAgentScope started");
@@ -345,7 +335,9 @@ async function main(): Promise<void> {
     // 2️⃣ InferenceScope — first LLM call (decides to use a tool)
     console.log("2. Calling LLM (InferenceScope)...");
     const toolCall = await callLLM(request, invokeScope);
-    console.log(`   LLM wants to call tool: ${toolCall.toolName}(${JSON.stringify(toolCall.args)})`);
+    console.log(
+      `   LLM wants to call tool: ${toolCall.toolName}(${JSON.stringify(toolCall.args)})`,
+    );
 
     // 3️⃣ ExecuteToolScope — run the tool
     console.log("3. Executing tool (ExecuteToolScope)...");

@@ -85,7 +85,13 @@ function createMockTurnContext(): TurnContextLike {
   };
 
   const turnState = new Map<string, unknown>();
-  const sendHandlers: Array<(ctx: TurnContextLike, activities: ActivityLike[], next: () => Promise<unknown[]>) => Promise<unknown[]>> = [];
+  const sendHandlers: Array<
+    (
+      ctx: TurnContextLike,
+      activities: ActivityLike[],
+      next: () => Promise<unknown[]>,
+    ) => Promise<unknown[]>
+  > = [];
 
   return {
     activity,
@@ -104,7 +110,8 @@ function createMockTurnContext(): TurnContextLike {
       let chain = sendNext;
       for (const h of [...sendHandlers].reverse()) {
         const prev = chain;
-        chain = () => h(this as unknown as TurnContextLike, outgoing, prev as () => Promise<unknown[]>);
+        chain = () =>
+          h(this as unknown as TurnContextLike, outgoing, prev as () => Promise<unknown[]>);
       }
       await chain();
     },
@@ -178,7 +185,9 @@ async function demoOutputLoggingMiddleware(): Promise<void> {
   console.log("\n=== Demo 3: OutputLoggingMiddleware ===\n");
 
   const middleware = new OutputLoggingMiddleware();
-  const ctx = createMockTurnContext() as TurnContextLike & { sendActivity(text: string): Promise<void> };
+  const ctx = createMockTurnContext() as TurnContextLike & {
+    sendActivity(text: string): Promise<void>;
+  };
 
   // Set the auth token so the middleware can derive agent details
   ctx.turnState.set(A365_AUTH_TOKEN_KEY, "<mock-token>");
@@ -242,7 +251,9 @@ async function demoScopeUtils(): Promise<void> {
     ctx,
     authToken,
   );
-  console.log(`  InferenceScope created from TurnContext (traceId: ${inferenceScope.getSpanContext().traceId})`);
+  console.log(
+    `  InferenceScope created from TurnContext (traceId: ${inferenceScope.getSpanContext().traceId})`,
+  );
   console.log("  Input messages from activity.text were auto-recorded.");
 
   // Simulate response
@@ -262,7 +273,9 @@ async function demoScopeUtils(): Promise<void> {
 async function demoFullAgentTurn(): Promise<void> {
   console.log("\n=== Demo 5: Full Agent Turn with Middleware ===\n");
 
-  const ctx = createMockTurnContext() as TurnContextLike & { sendActivity(text: string): Promise<void> };
+  const ctx = createMockTurnContext() as TurnContextLike & {
+    sendActivity(text: string): Promise<void>;
+  };
   const authToken = "<mock-token>";
 
   // Register middleware
@@ -297,7 +310,11 @@ async function demoFullAgentTurn(): Promise<void> {
 
         // LLM inference
         const inference = ScopeUtils.populateInferenceScopeFromTurnContext(
-          { operationName: InferenceOperationType.CHAT, model: "gpt-4o", providerName: "azure-openai" },
+          {
+            operationName: InferenceOperationType.CHAT,
+            model: "gpt-4o",
+            providerName: "azure-openai",
+          },
           ctx,
           authToken,
         );

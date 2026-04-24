@@ -146,6 +146,8 @@ export class A365Configuration {
 
     this.hosting = {
       enabled: options?.hosting?.enabled ?? false,
+      adapter: options?.hosting?.adapter,
+      enableOutputLogging: options?.hosting?.enableOutputLogging ?? true,
     };
 
     // Warn when A365-scoped options are set but A365 is not enabled

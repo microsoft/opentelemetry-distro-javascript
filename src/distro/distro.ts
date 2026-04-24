@@ -30,7 +30,12 @@ import {
 } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
-import type { MicrosoftOpenTelemetryOptions } from "../types.js";
+import type {
+  MicrosoftOpenTelemetryOptions,
+  InstrumentationOptions,
+  OpenAIAgentsInstrumentationConfig,
+  LangChainInstrumentationConfig,
+} from "../types.js";
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
 import { createInstrumentations, createSampler, createViews } from "./instrumentations.js";
 import { Logger } from "../shared/logging/index.js";
