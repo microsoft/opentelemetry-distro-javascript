@@ -1,0 +1,58 @@
+name: Notify code owners on new issues
+
+on:
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/CODEOWNERS
+          sparse-checkout-cone-mode: false
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Map issue labels to the CODEOWNERS path that defines their owners.
+            const labelToPath = {
+              'a365': '/src/microsoft/opentelemetry/a365/',
+              'langchain': '/src/microsoft/opentelemetry/_genai/_langchain/',
+            };
+
+            // Parse .github/CODEOWNERS into [{ pattern, owners }] (skip blanks/comments).
+            const codeownersText = fs.readFileSync('.github/CODEOWNERS', 'utf8');
+            const rules = codeownersText
+              .split('\n')
+              .map(l => l.trim())
+              .filter(l => l && !l.startsWith('#'))
+              .map(l => {
+                const [pattern, ...owners] = l.split(/\s+/);
+                return { pattern, owners: owners.map(o => o.replace(/^@/, '')) };
+              });
+
+            const defaultRule = rules.find(r => r.pattern === '*');
+            const defaultOwners = defaultRule ? defaultRule.owners : [];
+
+            const labels = context.payload.issue.labels.map(l => l.name.toLowerCase());
+            const mentions = new Set(defaultOwners);
+
+            for (const [label, path] of Object.entries(labelToPath)) {
+              if (!labels.includes(label)) continue;
+              const rule = rules.find(r => r.pattern === path);
+              if (rule) rule.owners.forEach(o => mentions.add(o));
+            }
+
+            // Ping owners via a comment so they get a GitHub notification email
+            const mentionList = [...mentions].map(u => `@${u}`).join(' ');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `cc ${mentionList}`,
+            });
