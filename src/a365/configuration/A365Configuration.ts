@@ -1,11 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-  A365Options,
-  ClusterCategory,
-  A365BaggageOptions,
-} from "./A365ConfigurationOptions.js";
+import type { A365Options, ClusterCategory } from "./A365ConfigurationOptions.js";
 import { getA365Logger } from "../logging.js";
 
 /**
@@ -85,16 +81,6 @@ export class A365Configuration {
   /** OAuth scopes for A365 service authentication. */
   public readonly authScopes: string[];
 
-  /** Baggage options. */
-  public readonly baggage: Required<A365BaggageOptions>;
-
-  /** Hosting options. */
-  public readonly hosting: {
-    enabled: boolean;
-    adapter?: { use(...middlewares: unknown[]): void };
-    enableOutputLogging: boolean;
-  };
-
   constructor(options?: A365Options) {
     // 1. Set defaults
     let enabled = false;
@@ -140,17 +126,6 @@ export class A365Configuration {
     this.domainOverride = domainOverride;
     this.authScopes = authScopes;
 
-    this.baggage = {
-      propagationEnabled: options?.baggage?.propagationEnabled ?? true,
-      enrichSpans: options?.baggage?.enrichSpans ?? true,
-    };
-
-    this.hosting = {
-      enabled: options?.hosting?.enabled ?? false,
-      adapter: options?.hosting?.adapter,
-      enableOutputLogging: options?.hosting?.enableOutputLogging ?? true,
-    };
-
     // Warn when A365-scoped options are set but A365 is not enabled
     if (!this.enabled) {
       this._warnIfOptionsSetButDisabled(options);
@@ -161,9 +136,7 @@ export class A365Configuration {
     if (!options) return;
 
     const hasNonTrivialOptions =
-      options.tokenResolver !== undefined ||
-      options.domainOverride !== undefined ||
-      options.hosting?.enabled === true;
+      options.tokenResolver !== undefined || options.domainOverride !== undefined;
 
     if (hasNonTrivialOptions) {
       getA365Logger().warn(

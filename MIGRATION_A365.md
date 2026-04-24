@@ -145,42 +145,7 @@ Core A365 export variables continue to work:
 | `CLUSTER_CATEGORY` | Cluster category (`prod`, `dev`, `test`, etc.) |
 | `A365_OBSERVABILITY_LOG_LEVEL` | A365 internal log filter (`none`, `info`, `warn`, `error`, pipe combinations) |
 
-## 7) PerRequestSpanProcessor migration note
-
-`PerRequestSpanProcessor` behavior is treated as a **private/internal compatibility path** and is **not part of the public migration surface**.
-
-What this means:
-
-- Do not rely on `PerRequestSpanProcessor` as a public API contract in `@microsoft/opentelemetry`.
-- Public migration guidance remains: use the standard distro setup (`useMicrosoftOpenTelemetry`) and public A365 APIs.
-- If you previously depended on per-request buffering semantics, implement your own per-request `SpanProcessor` in application code and wire it using public APIs (`Agent365Exporter` + `spanProcessors`).
-
-Example shape:
-
-```typescript
-import {
-  Agent365Exporter,
-  A365SpanProcessor,
-  useMicrosoftOpenTelemetry,
-} from "@microsoft/opentelemetry";
-
-const exporter = new Agent365Exporter({
-  tokenResolver: async (agentId, tenantId) => getToken(agentId, tenantId),
-  clusterCategory: "prod",
-});
-
-useMicrosoftOpenTelemetry({
-  // Provide your own processor pipeline.
-  spanProcessors: [
-    new A365SpanProcessor(),
-    new MyPerRequestSpanProcessor(exporter),
-  ],
-});
-```
-
-`MyPerRequestSpanProcessor` is your app-owned implementation of request-buffered flush behavior.
-
-## 8) Migration checklist
+## 7) Migration checklist
 
 - [ ] Replace `@microsoft/agents-a365-observability` with `@microsoft/opentelemetry`
 - [ ] If used, replace `@microsoft/agents-a365-observability-hosting` imports with `@microsoft/opentelemetry`
@@ -188,6 +153,5 @@ useMicrosoftOpenTelemetry({
 - [ ] Rename `Request` to `A365Request`
 - [ ] Rename `SpanDetails` to `A365SpanDetails`
 - [ ] Rename A365 `SpanProcessor` usage to `A365SpanProcessor`
-- [ ] If you previously depended on `PerRequestSpanProcessor`, move that behavior into an app-owned custom `SpanProcessor` wired via `spanProcessors`
 - [ ] Migrate middleware setup to `configureA365Hosting(adapter, ...)` (or `ObservabilityHostingManager`)
 - [ ] Set new diagnostics logging variables for rollout validation (`OTEL_LOG_LEVEL`; optionally `AZURE_LOG_LEVEL`)

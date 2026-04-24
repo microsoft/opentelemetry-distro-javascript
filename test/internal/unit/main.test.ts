@@ -958,6 +958,35 @@ describe("Main functions", () => {
     await shutdownMicrosoftOpenTelemetry();
   });
 
+  it("registers A365SpanProcessor when A365 is enabled", async () => {
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        tokenResolver: () => "token",
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const a365SpanProcessor = registeredProcessors.find(
+      (processor: any) => processor.constructor?.name === "A365SpanProcessor",
+    );
+
+    assert.isDefined(
+      a365SpanProcessor,
+      "Expected A365SpanProcessor to be registered when A365 is enabled",
+    );
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
   it("preserves BatchSpanProcessor defaults when A365 exporter tuning is omitted", async () => {
     useMicrosoftOpenTelemetry({
       azureMonitor: { enabled: false },

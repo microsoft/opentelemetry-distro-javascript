@@ -2,13 +2,7 @@
 // Licensed under the MIT License.
 
 export { A365Configuration, A365_ENV_VARS } from "./configuration/index.js";
-export type {
-  A365Options,
-  ClusterCategory,
-  A365BaggageOptions,
-  A365HostingOptions,
-  ILogger,
-} from "./configuration/index.js";
+export type { A365Options, ClusterCategory, ILogger } from "./configuration/index.js";
 
 export { configureA365Logger, getA365Logger } from "./logging.js";
 
@@ -105,14 +99,10 @@ export {
   A365_PARENT_SPAN_KEY,
   A365_AUTH_TOKEN_KEY,
   ObservabilityHostingManager,
-  AgenticTokenCache,
-  AgenticTokenCacheInstance,
   configureA365Hosting,
 } from "./hosting/index.js";
 export type {
   ObservabilityHostingOptions,
-  AuthorizationLike,
-  AgenticTokenCacheOptions,
   HostingAdapterLike,
   TurnContextLike,
   ActivityLike,

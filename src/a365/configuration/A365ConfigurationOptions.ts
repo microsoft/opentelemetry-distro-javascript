@@ -48,39 +48,4 @@ export interface A365Options {
 
   /** OAuth scopes for A365 service authentication. */
   authScopes?: string[];
-
-  /** Baggage propagation and span enrichment options. */
-  baggage?: A365BaggageOptions;
-
-  /** Hosting middleware options (requires @microsoft/agents-hosting). */
-  hosting?: A365HostingOptions;
-}
-
-/** Baggage propagation and span enrichment options. */
-export interface A365BaggageOptions {
-  /** Enable baggage propagation from request headers to span context. */
-  propagationEnabled?: boolean;
-  /** Copy baggage items to span attributes. */
-  enrichSpans?: boolean;
-}
-
-/** Hosting middleware options. */
-export interface A365HostingOptions {
-  /**
-   * Enable hosting middleware integration (baggage middleware, output logging, etc.).
-   * Requires `@microsoft/agents-hosting` as an optional peer dependency.
-   */
-  enabled?: boolean;
-
-  /**
-   * Adapter instance where hosting middleware will be auto-registered.
-   * Must expose a `use(...middlewares)` method compatible with agents-hosting adapters.
-   */
-  adapter?: { use(...middlewares: unknown[]): void };
-
-  /**
-   * Enable output logging middleware auto-registration when hosting is enabled.
-   * @default true
-   */
-  enableOutputLogging?: boolean;
 }

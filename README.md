@@ -179,27 +179,9 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 | `clusterCategory` | `ClusterCategory` | `"prod"` | Cluster category for endpoint resolution (`local`, `dev`, `test`, `preprod`, `firstrelease`, `prod`, `gov`, `high`, `dod`, `mooncake`, `ex`, `rx`) |
 | `domainOverride` | `string` | — | Override the A365 observability service domain |
 | `authScopes` | `string[]` | `["https://api.powerplatform.com/.default"]` | OAuth scopes for A365 service authentication |
-| `baggage` | `A365BaggageOptions` | see below | Baggage propagation and span enrichment options |
-| `hosting` | `A365HostingOptions` | see below | Hosting middleware options (requires `@microsoft/agents-hosting`) |
-
-#### `a365.baggage` options
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `propagationEnabled` | `boolean` | `true` | Enable baggage propagation from request headers to span context |
-| `enrichSpans` | `boolean` | `true` | Copy baggage items (tenant, agent, session, etc.) to span attributes |
-
-#### `a365.hosting` options
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `enabled` | `boolean` | `false` | Currently does not auto-attach, enable, or disable hosting middleware by itself; attach hosting middleware explicitly as described below. |
-| `adapter` | `{ use(...middlewares): void }` | — | Adapter reference for hosting integration configuration. |
-| `enableOutputLogging` | `boolean` | `true` | Hosting output logging preference in configuration. |
-
 #### A365 hosting middleware setup
 
-`a365.hosting.enabled` is currently only a configuration value and does not by itself attach middleware or gate hosting middleware behavior.
+Hosting middleware is configured separately from `a365` exporter options.
 To use A365 hosting middleware, attach it to your adapter explicitly.
 
 Use the one-liner helper:

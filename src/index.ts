@@ -19,7 +19,7 @@ export type {
 
 // ── Re-exports from A365 configuration ──────────────────────────────────────
 export { A365Configuration } from "./a365/index.js";
-export type { ClusterCategory, A365BaggageOptions, A365HostingOptions } from "./a365/index.js";
+export type { ClusterCategory } from "./a365/index.js";
 export { Agent365Exporter } from "./a365/index.js";
 export type { Agent365ExporterOptions, TokenResolver } from "./a365/index.js";
 
@@ -97,14 +97,10 @@ export {
   A365_PARENT_SPAN_KEY,
   A365_AUTH_TOKEN_KEY,
   ObservabilityHostingManager,
-  AgenticTokenCache,
-  AgenticTokenCacheInstance,
   configureA365Hosting,
 } from "./a365/index.js";
 export type {
   ObservabilityHostingOptions,
-  AuthorizationLike,
-  AgenticTokenCacheOptions,
   HostingAdapterLike,
   TurnContextLike,
   ActivityLike,

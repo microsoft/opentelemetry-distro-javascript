@@ -19,7 +19,6 @@ import {
   truncateSpan,
 } from "./utils.js";
 import { getA365Logger } from "../logging.js";
-import { getExportToken } from "../context/tokenContext.js";
 
 const DEFAULT_MAX_RETRIES = 3;
 
@@ -200,15 +199,9 @@ export class Agent365Exporter implements SpanExporter {
   }
 
   private async resolveToken(agentId: string, tenantId: string): Promise<string | null> {
-    if (this.options.tokenResolver) {
-      const result = this.options.tokenResolver(agentId, tenantId, this.options.authScopes);
-      const resolved = result instanceof Promise ? await result : result;
-      if (resolved) {
-        return resolved;
-      }
-    }
-
-    return getExportToken() ?? null;
+    if (!this.options.tokenResolver) return null;
+    const result = this.options.tokenResolver(agentId, tenantId, this.options.authScopes);
+    return result instanceof Promise ? result : result;
   }
 
   private async postWithRetries(

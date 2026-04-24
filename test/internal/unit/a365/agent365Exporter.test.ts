@@ -3,8 +3,7 @@
 
 import { afterEach, assert, beforeEach, describe, it, vi } from "vitest";
 import { ExportResultCode } from "@opentelemetry/core";
-import { context as otelContext, SpanKind, SpanStatusCode, TraceFlags } from "@opentelemetry/api";
-import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
+import { SpanKind, SpanStatusCode, TraceFlags } from "@opentelemetry/api";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
 import { Agent365Exporter } from "../../../../src/a365/exporter/Agent365Exporter.js";
 import {
@@ -696,68 +695,6 @@ describe("Agent365Exporter", () => {
       assert.strictEqual(result, ExportResultCode.FAILED);
       // DEFAULT_MAX_RETRIES = 3, so 1 initial + 3 retries = 4 total
       assert.strictEqual(fetchSpy.mock.calls.length, 4);
-    });
-  });
-
-  describe("token context fallback", () => {
-    let contextManager: AsyncLocalStorageContextManager;
-
-    beforeEach(() => {
-      contextManager = new AsyncLocalStorageContextManager();
-      contextManager.enable();
-      otelContext.setGlobalContextManager(contextManager);
-    });
-
-    afterEach(() => {
-      otelContext.disable();
-    });
-
-    it("falls back to OTel context token when no tokenResolver is configured", async () => {
-      // Import inline to avoid top-level circular dependency confusion
-      const { runWithExportToken } = await import("../../../../src/a365/context/tokenContext.js");
-
-      const exporter = new Agent365Exporter({}); // no tokenResolver
-
-      let exportResult!: number;
-      await runWithExportToken("context-token-abc", async () => {
-        exportResult = await new Promise<number>((resolve) => {
-          exporter.export([makeSpan()], (r) => resolve(r.code));
-        });
-      });
-
-      assert.strictEqual(exportResult, ExportResultCode.SUCCESS);
-      // Verify the Bearer token was sourced from context
-      const authHeader: string = fetchSpy.mock.calls[0][1].headers["authorization"];
-      assert.strictEqual(authHeader, "Bearer context-token-abc");
-    });
-
-    it("prefers tokenResolver result over OTel context token", async () => {
-      const { runWithExportToken } = await import("../../../../src/a365/context/tokenContext.js");
-
-      const exporter = new Agent365Exporter({ tokenResolver: () => "resolver-token" });
-
-      await runWithExportToken("context-token-should-not-be-used", async () => {
-        await new Promise<void>((resolve) => {
-          exporter.export([makeSpan()], () => resolve());
-        });
-      });
-
-      const authHeader: string = fetchSpy.mock.calls[0][1].headers["authorization"];
-      assert.strictEqual(authHeader, "Bearer resolver-token");
-    });
-
-    it("skips export and warns when no token is available", async () => {
-      // No tokenResolver, no context token
-      const exporter = new Agent365Exporter({});
-
-      const result = await new Promise<number>((resolve) => {
-        exporter.export([makeSpan()], (r) => resolve(r.code));
-      });
-
-      // Export "succeeds" (no spans sent) but fetch was never called
-      assert.strictEqual(fetchSpy.mock.calls.length, 0);
-      // Result is still SUCCESS because the group is skipped, not an error
-      assert.strictEqual(result, ExportResultCode.SUCCESS);
     });
   });
 });
