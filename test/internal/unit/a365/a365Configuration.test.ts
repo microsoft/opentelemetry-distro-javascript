@@ -6,6 +6,10 @@ import {
   A365Configuration,
   A365_ENV_VARS,
 } from "../../../../src/a365/configuration/A365Configuration.js";
+import {
+  INTERNAL_A365_ENV_VARS,
+  resolveInternalPerRequestOptions,
+} from "../../../../src/a365/configuration/internalPerRequest.js";
 import { _resetA365LoggerForTest } from "../../../../src/a365/logging.js";
 
 describe("A365Configuration", () => {
@@ -165,6 +169,101 @@ describe("A365Configuration", () => {
       assert.strictEqual(A365_ENV_VARS.DOMAIN, "A365_OBSERVABILITY_DOMAIN_OVERRIDE");
       assert.strictEqual(A365_ENV_VARS.CLUSTER_CATEGORY, "CLUSTER_CATEGORY");
       assert.strictEqual(A365_ENV_VARS.LOG_LEVEL, "A365_OBSERVABILITY_LOG_LEVEL");
+    });
+
+    it("should not expose internal per-request env var names", () => {
+      assert.ok(!("PER_REQUEST_EXPORT_ENABLED" in A365_ENV_VARS));
+      assert.ok(!("PER_REQUEST_MAX_TRACES" in A365_ENV_VARS));
+      assert.ok(!("PER_REQUEST_MAX_SPANS_PER_TRACE" in A365_ENV_VARS));
+      assert.ok(!("PER_REQUEST_MAX_CONCURRENT_EXPORTS" in A365_ENV_VARS));
+      assert.ok(!("PER_REQUEST_FLUSH_GRACE_MS" in A365_ENV_VARS));
+      assert.ok(!("PER_REQUEST_MAX_TRACE_AGE_MS" in A365_ENV_VARS));
+    });
+  });
+
+  describe("per-request export configuration (internal helper)", () => {
+    it("should have correct per-request env var names", () => {
+      assert.strictEqual(
+        INTERNAL_A365_ENV_VARS.PER_REQUEST_EXPORT_ENABLED,
+        "ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT",
+      );
+      assert.strictEqual(
+        INTERNAL_A365_ENV_VARS.PER_REQUEST_MAX_TRACES,
+        "A365_PER_REQUEST_MAX_TRACES",
+      );
+      assert.strictEqual(
+        INTERNAL_A365_ENV_VARS.PER_REQUEST_MAX_SPANS_PER_TRACE,
+        "A365_PER_REQUEST_MAX_SPANS_PER_TRACE",
+      );
+      assert.strictEqual(
+        INTERNAL_A365_ENV_VARS.PER_REQUEST_MAX_CONCURRENT_EXPORTS,
+        "A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS",
+      );
+      assert.strictEqual(
+        INTERNAL_A365_ENV_VARS.PER_REQUEST_FLUSH_GRACE_MS,
+        "A365_PER_REQUEST_FLUSH_GRACE_MS",
+      );
+      assert.strictEqual(
+        INTERNAL_A365_ENV_VARS.PER_REQUEST_MAX_TRACE_AGE_MS,
+        "A365_PER_REQUEST_MAX_TRACE_AGE_MS",
+      );
+    });
+
+    it("should default to per-request export disabled", () => {
+      assert.strictEqual(resolveInternalPerRequestOptions().enabled, false);
+    });
+
+    it("should enable per-request export via env var", () => {
+      process.env[INTERNAL_A365_ENV_VARS.PER_REQUEST_EXPORT_ENABLED] = "true";
+      assert.strictEqual(resolveInternalPerRequestOptions().enabled, true);
+    });
+
+    it("should disable per-request export via env var false", () => {
+      process.env[INTERNAL_A365_ENV_VARS.PER_REQUEST_EXPORT_ENABLED] = "false";
+      assert.strictEqual(resolveInternalPerRequestOptions().enabled, false);
+    });
+
+    it("should have correct per-request default guard-rail values", () => {
+      const opts = resolveInternalPerRequestOptions();
+      assert.strictEqual(opts.maxTraces, 1000);
+      assert.strictEqual(opts.maxSpansPerTrace, 5000);
+      assert.strictEqual(opts.maxConcurrentExports, 20);
+      assert.strictEqual(opts.flushGraceMs, 250);
+      assert.strictEqual(opts.maxTraceAgeMs, 30 * 60 * 1000);
+    });
+
+    it("should override per-request max traces via env var", () => {
+      process.env[INTERNAL_A365_ENV_VARS.PER_REQUEST_MAX_TRACES] = "42";
+      assert.strictEqual(resolveInternalPerRequestOptions().maxTraces, 42);
+    });
+
+    it("should override per-request max spans per trace via env var", () => {
+      process.env[INTERNAL_A365_ENV_VARS.PER_REQUEST_MAX_SPANS_PER_TRACE] = "100";
+      assert.strictEqual(resolveInternalPerRequestOptions().maxSpansPerTrace, 100);
+    });
+
+    it("should override per-request max concurrent exports via env var", () => {
+      process.env[INTERNAL_A365_ENV_VARS.PER_REQUEST_MAX_CONCURRENT_EXPORTS] = "5";
+      assert.strictEqual(resolveInternalPerRequestOptions().maxConcurrentExports, 5);
+    });
+
+    it("should override per-request flush grace ms via env var", () => {
+      process.env[INTERNAL_A365_ENV_VARS.PER_REQUEST_FLUSH_GRACE_MS] = "750";
+      assert.strictEqual(resolveInternalPerRequestOptions().flushGraceMs, 750);
+    });
+
+    it("should override per-request max trace age ms via env var", () => {
+      process.env[INTERNAL_A365_ENV_VARS.PER_REQUEST_MAX_TRACE_AGE_MS] = "60000";
+      assert.strictEqual(resolveInternalPerRequestOptions().maxTraceAgeMs, 60000);
+    });
+
+    it("should ignore zero or negative per-request numeric env vars", () => {
+      process.env[INTERNAL_A365_ENV_VARS.PER_REQUEST_MAX_TRACES] = "0";
+      process.env[INTERNAL_A365_ENV_VARS.PER_REQUEST_MAX_SPANS_PER_TRACE] = "-1";
+      const opts = resolveInternalPerRequestOptions();
+      // Invalid values ignored — defaults preserved
+      assert.strictEqual(opts.maxTraces, 1000);
+      assert.strictEqual(opts.maxSpansPerTrace, 5000);
     });
   });
 });

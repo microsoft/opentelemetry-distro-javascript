@@ -30,6 +30,8 @@ import {
 } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
+import { resolveInternalPerRequestOptions } from "../a365/configuration/internalPerRequest.js";
+import { PerRequestSpanProcessor } from "../a365/processors/PerRequestSpanProcessor.js";
 import type {
   MicrosoftOpenTelemetryOptions,
   InstrumentationOptions,
@@ -151,9 +153,26 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       authScopes: a365Config.authScopes,
       tokenResolver: a365Config.tokenResolver,
     });
+    const perRequestOptions = resolveInternalPerRequestOptions();
     // A365SpanProcessor copies baggage (tenant, agent, session, etc.) to span attributes
     spanProcessors.push(new A365SpanProcessor());
     spanProcessors.push(new BatchSpanProcessor(a365Exporter));
+    if (a365Config.baggage.enrichSpans) {
+      spanProcessors.push(new A365SpanProcessor());
+    }
+    if (perRequestOptions.enabled) {
+      spanProcessors.push(
+        new PerRequestSpanProcessor(a365Exporter, {
+          maxBufferedTraces: perRequestOptions.maxTraces,
+          maxSpansPerTrace: perRequestOptions.maxSpansPerTrace,
+          maxConcurrentExports: perRequestOptions.maxConcurrentExports,
+          flushGraceMs: perRequestOptions.flushGraceMs,
+          maxTraceAgeMs: perRequestOptions.maxTraceAgeMs,
+        }),
+      );
+    } else {
+      spanProcessors.push(new BatchSpanProcessor(a365Exporter));
+    }
   } else if (a365ConsoleExportFallback) {
     // A365 options provided but exporter disabled — fall back to console export
     // so developers can validate spans locally (matches upstream A365 SDK behavior
