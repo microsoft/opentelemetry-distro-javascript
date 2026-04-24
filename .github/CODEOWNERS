@@ -5,4 +5,4 @@
 /src/microsoft/opentelemetry/a365/ @fpfp100
 
 # LangChain instrumentation co-owners
-/src/microsoft/opentelemetry/_genai/_langchain/ fpfp100
+/src/genai/instrumentations/langchain/ @fpfp100
