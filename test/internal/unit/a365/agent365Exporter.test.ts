@@ -714,9 +714,7 @@ describe("Agent365Exporter", () => {
 
     it("falls back to OTel context token when no tokenResolver is configured", async () => {
       // Import inline to avoid top-level circular dependency confusion
-      const { runWithExportToken } = await import(
-        "../../../../src/a365/context/tokenContext.js"
-      );
+      const { runWithExportToken } = await import("../../../../src/a365/context/tokenContext.js");
 
       const exporter = new Agent365Exporter({}); // no tokenResolver
 
@@ -734,9 +732,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("prefers tokenResolver result over OTel context token", async () => {
-      const { runWithExportToken } = await import(
-        "../../../../src/a365/context/tokenContext.js"
-      );
+      const { runWithExportToken } = await import("../../../../src/a365/context/tokenContext.js");
 
       const exporter = new Agent365Exporter({ tokenResolver: () => "resolver-token" });
 

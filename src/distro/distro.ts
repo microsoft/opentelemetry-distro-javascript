@@ -29,11 +29,7 @@ import {
   validateAzureMonitorConfig,
 } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
-import {
-  A365Configuration,
-  Agent365Exporter,
-  A365SpanProcessor,
-} from "../a365/index.js";
+import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
 import { PerRequestSpanProcessor } from "../a365/processors/PerRequestSpanProcessor.js";
 import type {
   MicrosoftOpenTelemetryOptions,

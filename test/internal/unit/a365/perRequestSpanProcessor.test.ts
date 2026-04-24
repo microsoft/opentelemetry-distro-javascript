@@ -44,9 +44,10 @@ function makeMockExporter(resultCode = ExportResultCode.SUCCESS): MockExporter {
  * Build a provider that runs spans through a `PerRequestSpanProcessor`.
  * Returns the provider and its tracer for span creation.
  */
-function buildProvider(
-  processor: PerRequestSpanProcessor,
-): { provider: BasicTracerProvider; tracer: ReturnType<BasicTracerProvider["getTracer"]> } {
+function buildProvider(processor: PerRequestSpanProcessor): {
+  provider: BasicTracerProvider;
+  tracer: ReturnType<BasicTracerProvider["getTracer"]>;
+} {
   const provider = new BasicTracerProvider({ spanProcessors: [processor] });
   return { provider, tracer: provider.getTracer("test") };
 }
