@@ -1,9 +1,18 @@
 # Release History
 
-## [0.1.0-alpha.6]
+## [0.1.0-alpha.6] - 2026-04-24
+
+### Breaking Changes
+- Remove undocumented A365 config options that were stored but never consumed: `a365.baggage.propagationEnabled`, `a365.baggage.enrichSpans`, `a365.hosting.enabled`, `a365.hosting.adapter`, and `a365.hosting.enableOutputLogging`. This aligns the distro A365 surface with `@microsoft/agents-a365-observability`. ([#66](https://github.com/microsoft/opentelemetry-distro-javascript/pull/66))
 
 ### Features Added
 - Add `configureA365Hosting(adapter, options?)` helper for one-line A365 hosting middleware setup. ([#55](https://github.com/microsoft/opentelemetry-distro-javascript/pull/55))
+- Add built-in `AgenticTokenCache` support for A365 hosting token exchange, including expiry-aware caching, retries, eviction, a default singleton instance, and public re-exports from hosting, A365, and top-level entrypoints. ([#68](https://github.com/microsoft/opentelemetry-distro-javascript/pull/68))
+- Add an internal per-request export compatibility path via `ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT`, migrating buffered trace export and context token fallback behavior for A365 scenarios without re-exposing `PerRequestSpanProcessor` in the public API. ([#70](https://github.com/microsoft/opentelemetry-distro-javascript/pull/70))
+
+### Other Changes
+- Always register `A365SpanProcessor` when A365 export is enabled and remove obsolete tests/docs tied to the deleted undocumented config options. ([#66](https://github.com/microsoft/opentelemetry-distro-javascript/pull/66))
+- Extend A365 migration guidance with self-service instructions for reproducing per-request export behavior through supported public APIs. ([#70](https://github.com/microsoft/opentelemetry-distro-javascript/pull/70))
 
 
 ## [0.1.0-alpha.5] - 2026-04-24 
