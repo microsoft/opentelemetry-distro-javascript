@@ -39,10 +39,7 @@ export class ObservabilityHostingManager {
    * Registers observability middleware on the adapter.
    * Subsequent calls are ignored.
    */
-  configure(
-    adapter: HostingAdapterLike,
-    options: ObservabilityHostingOptions,
-  ): void {
+  configure(adapter: HostingAdapterLike, options: ObservabilityHostingOptions): void {
     if (this._configured) {
       Logger.getInstance().warn(
         "[ObservabilityHostingManager] Already configured. Subsequent configure() calls are ignored.",
