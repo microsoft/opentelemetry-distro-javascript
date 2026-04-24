@@ -209,11 +209,7 @@ describe("AgenticTokenCache", () => {
 
     await cache.refreshObservabilityToken("a", "t", makeTurnContext(), auth, undefined, "custom");
 
-    expect(auth.exchangeToken).toHaveBeenCalledWith(
-      expect.anything(),
-      "custom",
-      expect.anything(),
-    );
+    expect(auth.exchangeToken).toHaveBeenCalledWith(expect.anything(), "custom", expect.anything());
   });
 
   it('defaults authHandlerName to "agentic"', async () => {
@@ -324,11 +320,9 @@ describe("AgenticTokenCache", () => {
 
     await customCache.refreshObservabilityToken("a", "t", makeTurnContext(), auth);
 
-    expect(auth.exchangeToken).toHaveBeenCalledWith(
-      expect.anything(),
-      "agentic",
-      { scopes: ["custom://scope"] },
-    );
+    expect(auth.exchangeToken).toHaveBeenCalledWith(expect.anything(), "agentic", {
+      scopes: ["custom://scope"],
+    });
   });
 
   it("uses default scope (powerplatform) when no options provided", async () => {
@@ -337,11 +331,9 @@ describe("AgenticTokenCache", () => {
 
     await cache.refreshObservabilityToken("a", "t", makeTurnContext(), auth);
 
-    expect(auth.exchangeToken).toHaveBeenCalledWith(
-      expect.anything(),
-      "agentic",
-      { scopes: ["https://api.powerplatform.com/.default"] },
-    );
+    expect(auth.exchangeToken).toHaveBeenCalledWith(expect.anything(), "agentic", {
+      scopes: ["https://api.powerplatform.com/.default"],
+    });
   });
 
   // ── Static helper ────────────────────────────────────────────────────────

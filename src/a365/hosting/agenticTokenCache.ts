@@ -55,9 +55,7 @@ export class AgenticTokenCache {
     if (envScopes) {
       this._authScopes = envScopes.split(/\s+/).filter(Boolean);
     } else {
-      this._authScopes = options?.authScopes ?? [
-        "https://api.powerplatform.com/.default",
-      ];
+      this._authScopes = options?.authScopes ?? ["https://api.powerplatform.com/.default"];
     }
   }
 
@@ -106,8 +104,7 @@ export class AgenticTokenCache {
     return this.withKeyLock<void>(key, async () => {
       let entry = this._map.get(key);
       if (!entry) {
-        const effectiveScopes =
-          scopes && scopes.length > 0 ? [...scopes] : [...this._authScopes];
+        const effectiveScopes = scopes && scopes.length > 0 ? [...scopes] : [...this._authScopes];
         if (!Array.isArray(effectiveScopes) || effectiveScopes.length === 0) {
           getA365Logger().error("[AgenticTokenCache] No valid scopes");
           return;
@@ -145,11 +142,9 @@ export class AgenticTokenCache {
           `[AgenticTokenCache] Exchanging token attempt ${attempt + 1}/${maxRetries + 1}`,
         );
         try {
-          const tokenResponse = await authorization.exchangeToken(
-            turnContext,
-            authHandlerName,
-            { scopes: entry.scopes },
-          );
+          const tokenResponse = await authorization.exchangeToken(turnContext, authHandlerName, {
+            scopes: entry.scopes,
+          });
           if (!tokenResponse?.token) {
             getA365Logger().error("[AgenticTokenCache] Undefined token returned");
             entry.token = undefined;
@@ -250,7 +245,11 @@ export class AgenticTokenCache {
     // Chain onto any existing promise for this key so that concurrent
     // callers are serialised rather than racing after the same await.
     const previous = this._keyLocks.get(key) ?? Promise.resolve();
-    const next = previous.catch(() => {/* swallow */}).then(fn);
+    const next = previous
+      .catch(() => {
+        /* swallow */
+      })
+      .then(fn);
     this._keyLocks.set(key, next);
     // Clean up the lock when the chain settles and hasn't been extended.
     next.finally(() => {
