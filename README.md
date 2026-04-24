@@ -129,6 +129,40 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 |---|---|---|---|
 | `enabled` | `boolean` | `false` | Enable hosting middleware integration (baggage middleware, output logging, etc.) |
 
+#### A365 hosting middleware setup
+
+`a365.hosting.enabled` controls hosting-related configuration, but middleware still needs to be attached to your adapter.
+
+Use the one-liner helper:
+
+```typescript
+import { configureA365Hosting } from "@microsoft/opentelemetry";
+
+configureA365Hosting(adapter);
+```
+
+By default this registers both `BaggageMiddleware` and `OutputLoggingMiddleware`.
+
+If you need explicit flags:
+
+```typescript
+configureA365Hosting(adapter, {
+  enableBaggage: true,
+  enableOutputLogging: true,
+});
+```
+
+For previously published package versions that do not include `configureA365Hosting`, use:
+
+```typescript
+import { ObservabilityHostingManager } from "@microsoft/opentelemetry";
+
+new ObservabilityHostingManager().configure(adapter as unknown as { use(...m: unknown[]): void }, {
+  enableBaggage: true,
+  enableOutputLogging: true,
+});
+```
+
 #### A365 environment variables
 
 A365 options can also be set via environment variables (highest precedence):

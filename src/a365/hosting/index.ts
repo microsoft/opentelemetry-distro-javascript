@@ -19,6 +19,8 @@ export {
 } from "./outputLoggingMiddleware.js";
 export { ObservabilityHostingManager } from "./observabilityHostingManager.js";
 export type { ObservabilityHostingOptions } from "./observabilityHostingManager.js";
+export { configureA365Hosting } from "./configureA365Hosting.js";
+export type { HostingAdapterLike } from "./configureA365Hosting.js";
 export type {
   TurnContextLike,
   ActivityLike,
