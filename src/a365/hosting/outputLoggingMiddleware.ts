@@ -9,6 +9,7 @@
 
 import { OutputScope } from "../scopes/index.js";
 import { ScopeUtils } from "./scopeUtils.js";
+import { ensureAgenticActivityHelpers } from "./activityCompat.js";
 import { Logger } from "../../shared/logging/index.js";
 import type {
   AgentDetails,
@@ -46,6 +47,8 @@ export const A365_AUTH_TOKEN_KEY = "A365AuthToken";
  */
 export class OutputLoggingMiddleware implements MiddlewareLike {
   async onTurn(context: TurnContextLike, next: () => Promise<void>): Promise<void> {
+    ensureAgenticActivityHelpers(context.activity);
+
     const authToken = (context.turnState.get(A365_AUTH_TOKEN_KEY) as string) ?? "";
     const agentDetails = ScopeUtils.deriveAgentDetails(context, authToken);
 

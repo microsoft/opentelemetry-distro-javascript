@@ -233,6 +233,54 @@ describe("OutputLoggingMiddleware", () => {
     expect(outputSpan!.attributes[OpenTelemetryConstants.CHANNEL_NAME_KEY]).toBe("teams");
   });
 
+  it("should create OutputScope when activity helper methods are missing", async () => {
+    const middleware = new OutputLoggingMiddleware();
+    const ctx = makeMockTurnContext({ text: "Hello" });
+    ctx.turnState.set(A365_AUTH_TOKEN_KEY, "");
+
+    const activity = ctx.activity as TurnContextLike["activity"] & {
+      recipient?: {
+        tenantId?: string;
+        agenticAppId?: string;
+        role?: string;
+      };
+      conversation?: {
+        id?: string;
+        tenantId?: string;
+      };
+    };
+
+    delete (activity as { getAgenticTenantId?: () => string }).getAgenticTenantId;
+    delete (activity as { getAgenticInstanceId?: () => string }).getAgenticInstanceId;
+    delete (activity as { isAgenticRequest?: () => boolean }).isAgenticRequest;
+
+    activity.recipient = {
+      ...activity.recipient,
+      role: "agenticUser",
+      tenantId: "tenant-from-recipient",
+      agenticAppId: "agent-from-recipient",
+    };
+    activity.conversation = {
+      ...activity.conversation,
+      tenantId: "tenant-from-conversation",
+    };
+
+    await middleware.onTurn(ctx, async () => {
+      await ctx.simulateSend([{ type: "message", text: "Reply" }]);
+    });
+
+    await flushProvider.forceFlush();
+    const outputSpan = exporter.getFinishedSpans().find((s) => s.name.includes("output_messages"));
+
+    expect(outputSpan).toBeDefined();
+    expect(outputSpan!.attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe(
+      "tenant-from-recipient",
+    );
+    expect(outputSpan!.attributes[OpenTelemetryConstants.GEN_AI_AGENT_ID_KEY]).toBe(
+      "agent-from-recipient",
+    );
+  });
+
   it("should link OutputScope to parent when parentSpanRef is set", async () => {
     const middleware = new OutputLoggingMiddleware();
     const ctx = makeMockTurnContext({ text: "Hello" });
