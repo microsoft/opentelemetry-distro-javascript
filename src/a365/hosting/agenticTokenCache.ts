@@ -56,7 +56,7 @@ export class AgenticTokenCache {
       this._authScopes = envScopes.split(/\s+/).filter(Boolean);
     } else {
       this._authScopes = options?.authScopes ?? [
-        "api://9b975845-388f-4429-889e-eab1ef63949c/.default",
+        "https://api.powerplatform.com/.default",
       ];
     }
   }
@@ -68,6 +68,11 @@ export class AgenticTokenCache {
   public getObservabilityToken(agentId: string, tenantId: string): string | null {
     const key = AgenticTokenCache.makeKey(agentId, tenantId);
     const entry = this._map.get(key);
+    // Touch entry for LRU recency
+    if (entry) {
+      this._map.delete(key);
+      this._map.set(key, entry);
+    }
     if (!entry) {
       getA365Logger().error(`[AgenticTokenCache] No cache entry for ${key}`);
       return null;
@@ -102,19 +107,28 @@ export class AgenticTokenCache {
       let entry = this._map.get(key);
       if (!entry) {
         const effectiveScopes =
-          scopes && scopes.length > 0 ? scopes : [...this._authScopes];
+          scopes && scopes.length > 0 ? [...scopes] : [...this._authScopes];
         if (!Array.isArray(effectiveScopes) || effectiveScopes.length === 0) {
           getA365Logger().error("[AgenticTokenCache] No valid scopes");
           return;
         }
         entry = { scopes: effectiveScopes };
         if (this._map.size >= this._maxCacheSize) {
-          const oldest = this._map.keys().next().value;
-          if (oldest !== undefined) {
-            this._map.delete(oldest);
+          // Evict least-recently-used (first key in Map insertion order)
+          const lruKey = this._map.keys().next().value;
+          if (lruKey !== undefined) {
+            this._map.delete(lruKey);
           }
         }
         this._map.set(key, entry);
+      } else {
+        // Touch for LRU recency
+        this._map.delete(key);
+        this._map.set(key, entry);
+        // Update scopes if caller provided new ones
+        if (scopes && scopes.length > 0) {
+          entry.scopes = [...scopes];
+        }
       }
       if (!Array.isArray(entry.scopes) || entry.scopes.length === 0) {
         getA365Logger().error("[AgenticTokenCache] Entry has invalid scopes");
@@ -232,25 +246,19 @@ export class AgenticTokenCache {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private async withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    const previous = this._keyLocks.get(key);
-    if (previous) {
-      try {
-        await previous;
-      } catch (err) {
-        getA365Logger().warn(
-          `[AgenticTokenCache] previous promise for ${key} rejected:`,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }
-    const currentPromise: Promise<T> = fn().finally(() => {
-      if (this._keyLocks.get(key) === currentPromise) {
+  private withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    // Chain onto any existing promise for this key so that concurrent
+    // callers are serialised rather than racing after the same await.
+    const previous = this._keyLocks.get(key) ?? Promise.resolve();
+    const next = previous.catch(() => {/* swallow */}).then(fn);
+    this._keyLocks.set(key, next);
+    // Clean up the lock when the chain settles and hasn't been extended.
+    next.finally(() => {
+      if (this._keyLocks.get(key) === next) {
         this._keyLocks.delete(key);
       }
     });
-    this._keyLocks.set(key, currentPromise);
-    return currentPromise;
+    return next;
   }
 }
 
