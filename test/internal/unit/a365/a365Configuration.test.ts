@@ -190,5 +190,97 @@ describe("A365Configuration", () => {
       assert.strictEqual(A365_ENV_VARS.CLUSTER_CATEGORY, "CLUSTER_CATEGORY");
       assert.strictEqual(A365_ENV_VARS.LOG_LEVEL, "A365_OBSERVABILITY_LOG_LEVEL");
     });
+
+    it("should have correct per-request env var names", () => {
+      assert.strictEqual(
+        A365_ENV_VARS.PER_REQUEST_EXPORT_ENABLED,
+        "ENABLE_A365_OBSERVABILITY_PER_REQUEST_EXPORT",
+      );
+      assert.strictEqual(A365_ENV_VARS.PER_REQUEST_MAX_TRACES, "A365_PER_REQUEST_MAX_TRACES");
+      assert.strictEqual(
+        A365_ENV_VARS.PER_REQUEST_MAX_SPANS_PER_TRACE,
+        "A365_PER_REQUEST_MAX_SPANS_PER_TRACE",
+      );
+      assert.strictEqual(
+        A365_ENV_VARS.PER_REQUEST_MAX_CONCURRENT_EXPORTS,
+        "A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS",
+      );
+      assert.strictEqual(
+        A365_ENV_VARS.PER_REQUEST_FLUSH_GRACE_MS,
+        "A365_PER_REQUEST_FLUSH_GRACE_MS",
+      );
+      assert.strictEqual(
+        A365_ENV_VARS.PER_REQUEST_MAX_TRACE_AGE_MS,
+        "A365_PER_REQUEST_MAX_TRACE_AGE_MS",
+      );
+    });
+  });
+
+  describe("per-request export configuration (internal)", () => {
+    it("should default to per-request export disabled", () => {
+      const config = new A365Configuration();
+      assert.strictEqual(config.isPerRequestExportEnabled(), false);
+    });
+
+    it("should enable per-request export via env var", () => {
+      process.env[A365_ENV_VARS.PER_REQUEST_EXPORT_ENABLED] = "true";
+      const config = new A365Configuration();
+      assert.strictEqual(config.isPerRequestExportEnabled(), true);
+    });
+
+    it("should disable per-request export via env var false", () => {
+      process.env[A365_ENV_VARS.PER_REQUEST_EXPORT_ENABLED] = "false";
+      const config = new A365Configuration();
+      assert.strictEqual(config.isPerRequestExportEnabled(), false);
+    });
+
+    it("should have correct per-request default guard-rail values", () => {
+      const config = new A365Configuration();
+      const opts = config.getPerRequestOptions();
+      assert.strictEqual(opts.maxTraces, 1000);
+      assert.strictEqual(opts.maxSpansPerTrace, 5000);
+      assert.strictEqual(opts.maxConcurrentExports, 20);
+      assert.strictEqual(opts.flushGraceMs, 250);
+      assert.strictEqual(opts.maxTraceAgeMs, 30 * 60 * 1000);
+    });
+
+    it("should override per-request max traces via env var", () => {
+      process.env[A365_ENV_VARS.PER_REQUEST_MAX_TRACES] = "42";
+      const config = new A365Configuration();
+      assert.strictEqual(config.getPerRequestOptions().maxTraces, 42);
+    });
+
+    it("should override per-request max spans per trace via env var", () => {
+      process.env[A365_ENV_VARS.PER_REQUEST_MAX_SPANS_PER_TRACE] = "100";
+      const config = new A365Configuration();
+      assert.strictEqual(config.getPerRequestOptions().maxSpansPerTrace, 100);
+    });
+
+    it("should override per-request max concurrent exports via env var", () => {
+      process.env[A365_ENV_VARS.PER_REQUEST_MAX_CONCURRENT_EXPORTS] = "5";
+      const config = new A365Configuration();
+      assert.strictEqual(config.getPerRequestOptions().maxConcurrentExports, 5);
+    });
+
+    it("should override per-request flush grace ms via env var", () => {
+      process.env[A365_ENV_VARS.PER_REQUEST_FLUSH_GRACE_MS] = "750";
+      const config = new A365Configuration();
+      assert.strictEqual(config.getPerRequestOptions().flushGraceMs, 750);
+    });
+
+    it("should override per-request max trace age ms via env var", () => {
+      process.env[A365_ENV_VARS.PER_REQUEST_MAX_TRACE_AGE_MS] = "60000";
+      const config = new A365Configuration();
+      assert.strictEqual(config.getPerRequestOptions().maxTraceAgeMs, 60000);
+    });
+
+    it("should ignore zero or negative per-request numeric env vars", () => {
+      process.env[A365_ENV_VARS.PER_REQUEST_MAX_TRACES] = "0";
+      process.env[A365_ENV_VARS.PER_REQUEST_MAX_SPANS_PER_TRACE] = "-1";
+      const config = new A365Configuration();
+      // Invalid values ignored — defaults preserved
+      assert.strictEqual(config.getPerRequestOptions().maxTraces, 1000);
+      assert.strictEqual(config.getPerRequestOptions().maxSpansPerTrace, 5000);
+    });
   });
 });
