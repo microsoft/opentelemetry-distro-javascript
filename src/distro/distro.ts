@@ -45,6 +45,7 @@ process.env["MICROSOFT_OPENTELEMETRY_VERSION"] = MICROSOFT_OPENTELEMETRY_VERSION
 
 let sdk: NodeSDK;
 let disposeAzureMonitor: (() => void) | undefined;
+let isShutdown = false;
 
 /**
  * Initialize Microsoft OpenTelemetry distribution.
@@ -62,7 +63,6 @@ let disposeAzureMonitor: (() => void) | undefined;
 export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOptions): void {
   const config = new InternalConfig(options);
   patchOpenTelemetryInstrumentationEnable();
-  initializeGenAIInstrumentations(options?.instrumentationOptions);
 
   // Azure Monitor is enabled when configured programmatically or via JSON config.
   // An explicit `enabled: false` always wins, even if a connection string is present.
@@ -213,16 +213,22 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   };
   sdk = new NodeSDK(sdkConfig);
   // TODO: Enable auto-attach warning — see autoAttach.ts
+  isShutdown = false;
   sdk.start();
+
+  // Initialize GenAI instrumentations after providers are registered so any
+  // tracer they capture is backed by the active SDK provider.
+  initializeGenAIInstrumentations(options?.instrumentationOptions);
 }
 
 /**
  * Shutdown Microsoft OpenTelemetry distribution.
  */
 export function shutdownMicrosoftOpenTelemetry(): Promise<void> {
+  isShutdown = true;
   disposeAzureMonitor?.();
-  void resetGenAIInstrumentations();
-  return sdk?.shutdown();
+  const sdkShutdown = sdk?.shutdown() ?? Promise.resolve();
+  return sdkShutdown.finally(() => resetGenAIInstrumentations());
 }
 
 /**
@@ -246,12 +252,20 @@ function initializeGenAIInstrumentations(options?: InstrumentationOptions): void
   }
 }
 
+/**
+ * @internal Exposed for testing — true after shutdown, false after init.
+ */
+export function _isShutdown(): boolean {
+  return isShutdown;
+}
+
 async function initializeOpenAIAgentsInstrumentation(
   options: OpenAIAgentsInstrumentationConfig,
 ): Promise<void> {
   try {
     const { OpenAIAgentsTraceInstrumentor } =
       await import("../genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js");
+    if (isShutdown) return;
     OpenAIAgentsTraceInstrumentor.instrument(options);
   } catch (error) {
     Logger.getInstance().warn(
@@ -270,6 +284,7 @@ async function initializeLangChainInstrumentation(
       import("../genai/instrumentations/langchain/langchainTraceInstrumentor.js"),
       import("@langchain/core/callbacks/manager"),
     ]);
+    if (isShutdown) return;
     LangChainTraceInstrumentor.instrument(callbackManagerModule, options);
   } catch (error) {
     Logger.getInstance().warn(

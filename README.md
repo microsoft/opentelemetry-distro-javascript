@@ -193,9 +193,53 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | `boolean` | `false` | Enable hosting middleware integration (baggage middleware, output logging, etc.) |
-| `adapter` | `{ use(...middlewares): void }` | — | Adapter instance where middleware is auto-registered when `enabled` is true |
-| `enableOutputLogging` | `boolean` | `true` | Enable output logging middleware auto-registration |
+| `enabled` | `boolean` | `false` | Currently does not auto-attach, enable, or disable hosting middleware by itself; attach hosting middleware explicitly as described below. |
+| `adapter` | `{ use(...middlewares): void }` | — | Adapter reference for hosting integration configuration. |
+| `enableOutputLogging` | `boolean` | `true` | Hosting output logging preference in configuration. |
+
+#### A365 hosting middleware setup
+
+`a365.hosting.enabled` is currently only a configuration value and does not by itself attach middleware or gate hosting middleware behavior.
+To use A365 hosting middleware, attach it to your adapter explicitly.
+
+Use the one-liner helper:
+
+```typescript
+import { configureA365Hosting } from "@microsoft/opentelemetry";
+
+configureA365Hosting(adapter);
+```
+
+By default this registers both `BaggageMiddleware` and `OutputLoggingMiddleware`.
+
+`OutputLoggingMiddleware` captures outgoing message content as span attributes. If your responses may contain sensitive content, disable output logging:
+
+```typescript
+configureA365Hosting(adapter, {
+  enableBaggage: true,
+  enableOutputLogging: false,
+});
+```
+
+If you need explicit flags:
+
+```typescript
+configureA365Hosting(adapter, {
+  enableBaggage: true,
+  enableOutputLogging: true,
+});
+```
+
+For previously published package versions that do not include `configureA365Hosting`, use:
+
+```typescript
+import { ObservabilityHostingManager } from "@microsoft/opentelemetry";
+
+new ObservabilityHostingManager().configure(adapter as unknown as { use(...m: unknown[]): void }, {
+  enableBaggage: true,
+  enableOutputLogging: true,
+});
+```
 
 
 | `httpRequestTimeoutMilliseconds` | `number` | `30000` | HTTP request timeout (ms) when sending spans to A365 service |

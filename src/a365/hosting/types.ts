@@ -60,3 +60,8 @@ export type SendActivitiesHandler = (
 export interface MiddlewareLike {
   onTurn(context: TurnContextLike, next: () => Promise<void>): Promise<void>;
 }
+
+/** Minimal adapter contract for registering hosting middleware. */
+export interface HostingAdapterLike {
+  use(...middlewares: Array<MiddlewareLike>): void;
+}

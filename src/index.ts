@@ -99,11 +99,13 @@ export {
   ObservabilityHostingManager,
   AgenticTokenCache,
   AgenticTokenCacheInstance,
+  configureA365Hosting,
 } from "./a365/index.js";
 export type {
   ObservabilityHostingOptions,
   AuthorizationLike,
   AgenticTokenCacheOptions,
+  HostingAdapterLike,
   TurnContextLike,
   ActivityLike,
   MiddlewareLike,

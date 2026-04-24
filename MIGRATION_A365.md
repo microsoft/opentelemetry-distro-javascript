@@ -142,6 +142,18 @@ All A365 observability options are available through `a365`:
 | `baggage.enrichSpans` | `boolean` | `true` | Copy baggage values onto span attributes via `A365SpanProcessor` |
 | `hosting.enabled` | `boolean` | `false` | Enables hosting middleware auto-registration when `hosting.adapter` is provided |
 
+## Hosting Middleware Setup
+
+If your app uses `@microsoft/agents-hosting` and expects hosting-layer middleware (`BaggageMiddleware`, `OutputLoggingMiddleware`), attach middleware to the adapter explicitly.
+
+### Current one-liner
+
+```typescript
+import { configureA365Hosting } from "@microsoft/opentelemetry";
+
+configureA365Hosting(adapter);
+```
+
 ## Environment Variables
 
 Environment variable names are **unchanged** from Agent365-nodejs:

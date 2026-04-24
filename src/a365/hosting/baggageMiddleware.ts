@@ -17,6 +17,7 @@ import {
   getChannelBaggagePairs,
   getConversationIdAndItemLinkPairs,
 } from "./turnContextUtils.js";
+import { ensureAgenticActivityHelpers } from "./activityCompat.js";
 
 /**
  * Middleware that propagates OpenTelemetry baggage context derived from TurnContext.
@@ -24,6 +25,8 @@ import {
  */
 export class BaggageMiddleware implements MiddlewareLike {
   async onTurn(context: TurnContextLike, next: () => Promise<void>): Promise<void> {
+    ensureAgenticActivityHelpers(context.activity);
+
     const isAsyncReply =
       context.activity?.type === "event" && context.activity?.name === "ContinueConversation";
 

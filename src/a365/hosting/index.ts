@@ -24,7 +24,9 @@ export {
   AgenticTokenCacheInstance,
 } from "./agenticTokenCache.js";
 export type { AuthorizationLike, AgenticTokenCacheOptions } from "./agenticTokenCache.js";
+export { configureA365Hosting } from "./configureA365Hosting.js";
 export type {
+  HostingAdapterLike,
   TurnContextLike,
   ActivityLike,
   MiddlewareLike,

@@ -1,5 +1,11 @@
 # Release History
 
+## [0.1.0-alpha.6]
+
+### Features Added
+- Add `configureA365Hosting(adapter, options?)` helper for one-line A365 hosting middleware setup. ([#55](https://github.com/microsoft/opentelemetry-distro-javascript/pull/55))
+
+
 ## [0.1.0-alpha.5] - 2026-04-24 
 
 ### Breaking Changes

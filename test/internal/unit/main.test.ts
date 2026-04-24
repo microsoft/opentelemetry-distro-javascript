@@ -27,6 +27,8 @@ import type { LogRecordProcessor, SdkLogRecord } from "@opentelemetry/sdk-logs";
 import { getInstance } from "../../../src/azureMonitor/utils/statsbeat.js";
 import type { Instrumentation, InstrumentationConfig } from "@opentelemetry/instrumentation";
 import { describe, it, beforeEach, afterEach, expect, assert, vi, afterAll } from "vitest";
+import { OpenAIAgentsTraceInstrumentor } from "../../../src/genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js";
+import { LangChainTraceInstrumentor } from "../../../src/genai/instrumentations/langchain/langchainTraceInstrumentor.js";
 
 const testInstrumentation: Instrumentation = {
   instrumentationName: "@opentelemetry/instrumentation-fs",
@@ -981,6 +983,87 @@ describe("Main functions", () => {
 
     assert.isDefined(batchProcessor, "Expected an Agent365 BatchSpanProcessor");
     assert.strictEqual(batchProcessor["_exportTimeoutMillis"], 30000);
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("initializes OpenAI Agents instrumentation when enabled", async () => {
+    const instrumentSpy = vi.spyOn(OpenAIAgentsTraceInstrumentor, "instrument");
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      instrumentationOptions: {
+        openaiAgents: {
+          enabled: true,
+          tracerName: "openai-agent-auto-instrumentation",
+          tracerVersion: "1.0.0",
+          isContentRecordingEnabled: true,
+        },
+        langchain: { enabled: false },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(instrumentSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enabled: true,
+          tracerName: "openai-agent-auto-instrumentation",
+          tracerVersion: "1.0.0",
+          isContentRecordingEnabled: true,
+        }),
+      );
+    });
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("initializes LangChain instrumentation when enabled", async () => {
+    const instrumentSpy = vi.spyOn(LangChainTraceInstrumentor, "instrument");
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      instrumentationOptions: {
+        openaiAgents: { enabled: false },
+        langchain: {
+          enabled: true,
+          isContentRecordingEnabled: true,
+        },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(instrumentSpy).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          enabled: true,
+          isContentRecordingEnabled: true,
+        }),
+      );
+    });
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("does not initialize GenAI instrumentations when explicitly disabled", async () => {
+    const openaiSpy = vi.spyOn(OpenAIAgentsTraceInstrumentor, "instrument");
+    const langchainSpy = vi.spyOn(LangChainTraceInstrumentor, "instrument");
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      instrumentationOptions: {
+        openaiAgents: { enabled: false },
+        langchain: { enabled: false },
+      },
+    });
+
+    // GenAI initialization is kicked off asynchronously; flush microtasks before assertions.
+    await Promise.resolve();
+
+    expect(openaiSpy).not.toHaveBeenCalled();
+    expect(langchainSpy).not.toHaveBeenCalled();
 
     await shutdownMicrosoftOpenTelemetry();
   });
