@@ -166,4 +166,51 @@ describe("BaggageMiddleware", () => {
     // Should still set baggage for non-ContinueConversation events
     expect(Object.keys(capturedBaggage).length).toBeGreaterThan(0);
   });
+
+  it("should populate tenant and agent baggage from plain activity fields", async () => {
+    const middleware = new BaggageMiddleware();
+    const ctx = makeMockTurnContext();
+    const activity = ctx.activity as TurnContextLike["activity"] & {
+      recipient?: {
+        tenantId?: string;
+        agenticAppId?: string;
+        role?: string;
+      };
+      conversation?: {
+        id?: string;
+        tenantId?: string;
+      };
+    };
+
+    delete (activity as { getAgenticTenantId?: () => string }).getAgenticTenantId;
+    delete (activity as { getAgenticInstanceId?: () => string }).getAgenticInstanceId;
+    delete (activity as { isAgenticRequest?: () => boolean }).isAgenticRequest;
+
+    activity.recipient = {
+      ...activity.recipient,
+      role: "agenticUser",
+      tenantId: "tenant-from-recipient",
+      agenticAppId: "agent-from-recipient",
+    };
+    activity.conversation = {
+      ...activity.conversation,
+      tenantId: "tenant-from-conversation",
+    };
+
+    const capturedBaggage: Record<string, string> = {};
+
+    await middleware.onTurn(ctx, async () => {
+      const bag = propagation.getBaggage(otelContext.active());
+      if (bag) {
+        for (const [key, entry] of bag.getAllEntries()) {
+          capturedBaggage[key] = entry.value;
+        }
+      }
+    });
+
+    expect(capturedBaggage[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-from-recipient");
+    expect(capturedBaggage[OpenTelemetryConstants.GEN_AI_AGENT_ID_KEY]).toBe(
+      "agent-from-recipient",
+    );
+  });
 });

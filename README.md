@@ -179,6 +179,49 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 | `clusterCategory` | `ClusterCategory` | `"prod"` | Cluster category for endpoint resolution (`local`, `dev`, `test`, `preprod`, `firstrelease`, `prod`, `gov`, `high`, `dod`, `mooncake`, `ex`, `rx`) |
 | `domainOverride` | `string` | — | Override the A365 observability service domain |
 | `authScopes` | `string[]` | `["https://api.powerplatform.com/.default"]` | OAuth scopes for A365 service authentication |
+#### A365 hosting middleware setup
+
+Hosting middleware is configured separately from `a365` exporter options.
+To use A365 hosting middleware, attach it to your adapter explicitly.
+
+Use the one-liner helper:
+
+```typescript
+import { configureA365Hosting } from "@microsoft/opentelemetry";
+
+configureA365Hosting(adapter);
+```
+
+By default this registers both `BaggageMiddleware` and `OutputLoggingMiddleware`.
+
+`OutputLoggingMiddleware` captures outgoing message content as span attributes. If your responses may contain sensitive content, disable output logging:
+
+```typescript
+configureA365Hosting(adapter, {
+  enableBaggage: true,
+  enableOutputLogging: false,
+});
+```
+
+If you need explicit flags:
+
+```typescript
+configureA365Hosting(adapter, {
+  enableBaggage: true,
+  enableOutputLogging: true,
+});
+```
+
+For previously published package versions that do not include `configureA365Hosting`, use:
+
+```typescript
+import { ObservabilityHostingManager } from "@microsoft/opentelemetry";
+
+new ObservabilityHostingManager().configure(adapter as unknown as { use(...m: unknown[]): void }, {
+  enableBaggage: true,
+  enableOutputLogging: true,
+});
+```
 
 
 | `httpRequestTimeoutMilliseconds` | `number` | `30000` | HTTP request timeout (ms) when sending spans to A365 service |

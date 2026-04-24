@@ -1,8 +1,2 @@
 # Default owners for all files
 * @hectorhdzg @JacksonWeber @lzchen @MSNev @rads-1996
-
-# A365 co-owners
-/src/a365/ @fpfp100
-
-# LangChain instrumentation co-owners
-/src/genai/instrumentations/langchain/ @fpfp100
