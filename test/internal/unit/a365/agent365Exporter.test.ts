@@ -18,6 +18,7 @@ import {
   MAX_SPAN_SIZE_BYTES,
 } from "../../../../src/a365/exporter/utils.js";
 import { ResolvedExporterOptions } from "../../../../src/a365/exporter/Agent365ExporterOptions.js";
+import { configureA365Logger, _resetA365LoggerForTest } from "../../../../src/a365/logging.js";
 
 const TENANT_ID = "tenant-11111111-1111-1111-1111-111111111111";
 const AGENT_ID = "agent-22222222-2222-2222-2222-222222222222";
@@ -93,6 +94,7 @@ describe("Agent365Exporter", () => {
   });
 
   afterEach(() => {
+    _resetA365LoggerForTest();
     vi.restoreAllMocks();
   });
 
@@ -467,6 +469,74 @@ describe("Agent365Exporter", () => {
 
       assert.ok(timeoutSpy.mock.calls.some((call) => call[0] === customTimeout));
       timeoutSpy.mockRestore();
+    });
+
+    it("should emit exporter and group success event logs", async () => {
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+
+      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      await new Promise<void>((resolve) => {
+        exporter.export([makeSpan()], () => resolve());
+      });
+
+      const infoLines = customLogger.info.mock.calls.map((call) => String(call[0]));
+      assert.ok(
+        infoLines.some(
+          (line) =>
+            line.includes("[EVENT]: export-group succeeded in") &&
+            line.includes("Spans exported successfully") &&
+            line.includes(`"tenantId":"${TENANT_ID}"`) &&
+            line.includes(`"agentId":"${AGENT_ID}"`),
+        ),
+      );
+      assert.ok(
+        infoLines.some(
+          (line) =>
+            line.includes("[EVENT]: agent365-export succeeded in") &&
+            line.includes("All spans exported successfully"),
+        ),
+      );
+    });
+
+    it("should emit exporter and group failure event logs", async () => {
+      fetchSpy.mockResolvedValue({
+        status: 400,
+        headers: new Map([["x-ms-correlation-id", "corr-failure"]]),
+      });
+
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+
+      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const result = await new Promise<number>((resolve) => {
+        exporter.export([makeSpan()], (r) => resolve(r.code));
+      });
+
+      assert.strictEqual(result, ExportResultCode.FAILED);
+      const errorLines = customLogger.error.mock.calls.map((call) => String(call[0]));
+      assert.ok(
+        errorLines.some(
+          (line) =>
+            line.includes("[EVENT]: export-group failed in") &&
+            line.includes(`"correlationId":"corr-failure"`),
+        ),
+      );
+      assert.ok(
+        errorLines.some(
+          (line) =>
+            line.includes("[EVENT]: agent365-export failed in") &&
+            line.includes("One or more export groups failed"),
+        ),
+      );
     });
   });
 

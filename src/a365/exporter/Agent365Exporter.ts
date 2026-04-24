@@ -7,6 +7,7 @@ import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace-base";
 
 import type { Agent365ExporterOptions } from "./Agent365ExporterOptions.js";
 import { ResolvedExporterOptions } from "./Agent365ExporterOptions.js";
+import { ExporterEventNames } from "./ExporterEventNames.js";
 import {
   partitionByIdentity,
   parseIdentityKey,
@@ -94,10 +95,17 @@ export class Agent365Exporter implements SpanExporter {
     }
 
     try {
+      const exportStart = Date.now();
       this.logger.info(`[Agent365Exporter] Exporting ${spans.length} spans`);
       const groups = partitionByIdentity(spans);
 
       if (groups.size === 0) {
+        this.logExporterEvent(
+          ExporterEventNames.EXPORT,
+          true,
+          Date.now() - exportStart,
+          "No eligible spans to export",
+        );
         resultCallback({ code: ExportResultCode.SUCCESS });
         return;
       }
@@ -114,16 +122,29 @@ export class Agent365Exporter implements SpanExporter {
       }
 
       await Promise.all(promises);
+      this.logExporterEvent(
+        ExporterEventNames.EXPORT,
+        !anyFailure,
+        Date.now() - exportStart,
+        anyFailure ? "One or more export groups failed" : "All spans exported successfully",
+      );
       resultCallback({
         code: anyFailure ? ExportResultCode.FAILED : ExportResultCode.SUCCESS,
       });
     } catch (err) {
       this.logger.error("[Agent365Exporter] Export failed:", err);
+      this.logExporterEvent(
+        ExporterEventNames.EXPORT,
+        false,
+        0,
+        `Export failed with error: ${String(err)}`,
+      );
       resultCallback({ code: ExportResultCode.FAILED });
     }
   }
 
   private async exportGroup(identityKey: string, spans: ReadableSpan[]): Promise<void> {
+    const start = Date.now();
     const { tenantId, agentId } = parseIdentityKey(identityKey);
 
     const payload = this.buildExportRequest(spans);
@@ -147,14 +168,34 @@ export class Agent365Exporter implements SpanExporter {
       this.logger.warn(
         `[Agent365Exporter] Skipping export for ${tenantId}/${agentId}: no token available`,
       );
+      this.logExporterEvent(
+        ExporterEventNames.EXPORT_GROUP,
+        false,
+        Date.now() - start,
+        "skip exporting: no token available",
+        { tenantId, agentId },
+      );
       return;
     }
     headers["authorization"] = `Bearer ${token}`;
 
-    const { ok } = await this.postWithRetries(url, body, headers);
+    const { ok, correlationId } = await this.postWithRetries(url, body, headers);
     if (!ok) {
+      this.logExporterEvent(ExporterEventNames.EXPORT_GROUP, false, Date.now() - start, undefined, {
+        tenantId,
+        agentId,
+        correlationId,
+      });
       throw new Error(`Failed to export spans for ${tenantId}/${agentId}`);
     }
+
+    this.logExporterEvent(
+      ExporterEventNames.EXPORT_GROUP,
+      true,
+      Date.now() - start,
+      "Spans exported successfully",
+      { tenantId, agentId, correlationId },
+    );
   }
 
   private async resolveToken(agentId: string, tenantId: string): Promise<string | null> {
@@ -323,6 +364,27 @@ export class Agent365Exporter implements SpanExporter {
 
   async forceFlush(): Promise<void> {
     // No-op — spans are exported immediately on export() call
+  }
+
+  private logExporterEvent(
+    eventType: ExporterEventNames,
+    isSuccess: boolean,
+    durationMs: number,
+    message?: string,
+    details?: Record<string, string>,
+  ): void {
+    const status = isSuccess ? "succeeded" : "failed";
+    const messageInfo = message ? ` - ${message}` : "";
+    const detailsInfo =
+      details && Object.keys(details).length > 0 ? ` ${JSON.stringify(details)}` : "";
+    const line = `[EVENT]: ${eventType} ${status} in ${durationMs}ms${messageInfo}${detailsInfo}`;
+
+    if (isSuccess) {
+      this.logger.info(line);
+      return;
+    }
+
+    this.logger.error(line);
   }
 }
 
