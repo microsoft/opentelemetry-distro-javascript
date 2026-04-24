@@ -490,8 +490,8 @@ describe("Agent365Exporter", () => {
           (line) =>
             line.includes("[EVENT]: export-group succeeded in") &&
             line.includes("Spans exported successfully") &&
-            line.includes(`\"tenantId\":\"${TENANT_ID}\"`) &&
-            line.includes(`\"agentId\":\"${AGENT_ID}\"`),
+            line.includes(`"tenantId":"${TENANT_ID}"`) &&
+            line.includes(`"agentId":"${AGENT_ID}"`),
         ),
       );
       assert.ok(
@@ -527,7 +527,7 @@ describe("Agent365Exporter", () => {
         errorLines.some(
           (line) =>
             line.includes("[EVENT]: export-group failed in") &&
-            line.includes(`\"correlationId\":\"corr-failure\"`),
+            line.includes(`"correlationId":"corr-failure"`),
         ),
       );
       assert.ok(

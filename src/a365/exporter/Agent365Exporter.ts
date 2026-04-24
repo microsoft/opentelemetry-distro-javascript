@@ -181,13 +181,11 @@ export class Agent365Exporter implements SpanExporter {
 
     const { ok, correlationId } = await this.postWithRetries(url, body, headers);
     if (!ok) {
-      this.logExporterEvent(
-        ExporterEventNames.EXPORT_GROUP,
-        false,
-        Date.now() - start,
-        undefined,
-        { tenantId, agentId, correlationId },
-      );
+      this.logExporterEvent(ExporterEventNames.EXPORT_GROUP, false, Date.now() - start, undefined, {
+        tenantId,
+        agentId,
+        correlationId,
+      });
       throw new Error(`Failed to export spans for ${tenantId}/${agentId}`);
     }
 
@@ -377,7 +375,8 @@ export class Agent365Exporter implements SpanExporter {
   ): void {
     const status = isSuccess ? "succeeded" : "failed";
     const messageInfo = message ? ` - ${message}` : "";
-    const detailsInfo = details && Object.keys(details).length > 0 ? ` ${JSON.stringify(details)}` : "";
+    const detailsInfo =
+      details && Object.keys(details).length > 0 ? ` ${JSON.stringify(details)}` : "";
     const line = `[EVENT]: ${eventType} ${status} in ${durationMs}ms${messageInfo}${detailsInfo}`;
 
     if (isSuccess) {
