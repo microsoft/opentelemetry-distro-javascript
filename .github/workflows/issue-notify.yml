@@ -21,8 +21,9 @@ jobs:
 
             // Map issue labels to the CODEOWNERS path that defines their owners.
             const labelToPath = {
-              'a365': '/src/microsoft/opentelemetry/a365/',
-              'langchain': '/src/microsoft/opentelemetry/_genai/_langchain/',
+              'a365': '/src/a365/',
+              'langchain': '/src/genai/instrumentations/langchain/',
+              'agent-framework': '/src/a365/',
             };
 
             // Parse .github/CODEOWNERS into [{ pattern, owners }] (skip blanks/comments).
@@ -42,10 +43,39 @@ jobs:
             const labels = context.payload.issue.labels.map(l => l.name.toLowerCase());
             const mentions = new Set(defaultOwners);
 
+            // Only add label-specific owners for matching labels
+            let hasMatchingLabel = false;
             for (const [label, path] of Object.entries(labelToPath)) {
               if (!labels.includes(label)) continue;
+              hasMatchingLabel = true;
               const rule = rules.find(r => r.pattern === path);
               if (rule) rule.owners.forEach(o => mentions.add(o));
+            }
+
+            // Skip commenting if no recognized labels and this is a label event
+            if (!hasMatchingLabel && context.payload.action === 'labeled') return;
+
+            // Check for an existing notification comment to avoid duplicates
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.data.find(
+              c => c.user.login === 'github-actions[bot]' && c.body.startsWith('cc ')
+            );
+            if (botComment) {
+              // Update existing comment if new owners were added
+              const mentionList = [...mentions].map(u => `@${u}`).join(' ');
+              if (botComment.body !== `cc ${mentionList}`) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: `cc ${mentionList}`,
+                });
+              }
+              return;
             }
 
             // Ping owners via a comment so they get a GitHub notification email
