@@ -62,7 +62,6 @@ let disposeAzureMonitor: (() => void) | undefined;
 export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOptions): void {
   const config = new InternalConfig(options);
   patchOpenTelemetryInstrumentationEnable();
-  initializeGenAIInstrumentations(options?.instrumentationOptions);
 
   // Azure Monitor is enabled when configured programmatically or via JSON config.
   // An explicit `enabled: false` always wins, even if a connection string is present.
@@ -214,6 +213,10 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   sdk = new NodeSDK(sdkConfig);
   // TODO: Enable auto-attach warning — see autoAttach.ts
   sdk.start();
+
+  // Initialize GenAI instrumentations after providers are registered so any
+  // tracer they capture is backed by the active SDK provider.
+  initializeGenAIInstrumentations(options?.instrumentationOptions);
 }
 
 /**
@@ -221,8 +224,8 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
  */
 export function shutdownMicrosoftOpenTelemetry(): Promise<void> {
   disposeAzureMonitor?.();
-  void resetGenAIInstrumentations();
-  return sdk?.shutdown();
+  const sdkShutdown = sdk?.shutdown() ?? Promise.resolve();
+  return sdkShutdown.finally(() => resetGenAIInstrumentations());
 }
 
 /**
