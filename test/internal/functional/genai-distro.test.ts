@@ -11,10 +11,7 @@ import {
 import { trace } from "@opentelemetry/api";
 import { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } from "../../../src/index.js";
 import { LangChainTraceInstrumentor } from "../../../src/genai/instrumentations/langchain/langchainTraceInstrumentor.js";
-import {
-  ATTR_GEN_AI_OPERATION_NAME,
-  GEN_AI_OPERATION_CHAT,
-} from "../../../src/genai/index.js";
+import { ATTR_GEN_AI_OPERATION_NAME, GEN_AI_OPERATION_CHAT } from "../../../src/genai/index.js";
 
 function makeLangChainRun(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -102,7 +99,9 @@ describe("GenAI distro integration", () => {
 
     const spans = exporter.getFinishedSpans();
     expect(spans.length).toBeGreaterThan(0);
-    const chatSpan = spans.find((s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_CHAT);
+    const chatSpan = spans.find(
+      (s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_CHAT,
+    );
     expect(chatSpan).toBeDefined();
     expect(chatSpan?.instrumentationScope.name).toBe("microsoft-otel-langchain");
   });

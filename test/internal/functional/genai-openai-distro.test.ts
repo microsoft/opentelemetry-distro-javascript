@@ -11,10 +11,7 @@ import { trace } from "@opentelemetry/api";
 import * as OpenAIAgents from "@openai/agents";
 import { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } from "../../../src/index.js";
 import { OpenAIAgentsTraceInstrumentor } from "../../../src/genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js";
-import {
-  ATTR_GEN_AI_OPERATION_NAME,
-  GEN_AI_OPERATION_CHAT,
-} from "../../../src/genai/index.js";
+import { ATTR_GEN_AI_OPERATION_NAME, GEN_AI_OPERATION_CHAT } from "../../../src/genai/index.js";
 
 async function flushGlobalTracerProvider(): Promise<void> {
   const provider = (trace.getTracerProvider() as any).getDelegate?.() as BasicTracerProvider;
