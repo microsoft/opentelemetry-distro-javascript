@@ -34,6 +34,7 @@ import {
   ATTR_GEN_AI_USAGE_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
   ATTR_MICROSOFT_SESSION_ID,
+  ATTR_GEN_AI_CONVERSATION_ID,
   GEN_AI_OPERATION_CHAT,
   GEN_AI_OPERATION_EXECUTE_TOOL,
   GEN_AI_OPERATION_INVOKE_AGENT,
@@ -227,9 +228,9 @@ describe("setInputMessagesAttribute", () => {
     const msgCall = calls.find((c: unknown[]) => c[0] === ATTR_GEN_AI_INPUT_MESSAGES);
     assert.ok(msgCall, "should set input messages");
     const parsed = JSON.parse(msgCall![1] as string);
-    assert.ok(parsed.includes("Hello"));
-    // Assistant messages should be filtered out for input
-    assert.ok(!parsed.includes("Hi there"));
+    assert.ok(JSON.stringify(parsed).includes("Hello"));
+    // Both messages should be included in structured input
+    assert.ok(JSON.stringify(parsed).includes("Hi there"));
   });
 
   it("extracts LangChain lc_kwargs format", () => {
@@ -244,7 +245,7 @@ describe("setInputMessagesAttribute", () => {
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     const msgCall = calls.find((c: unknown[]) => c[0] === ATTR_GEN_AI_INPUT_MESSAGES);
     assert.ok(msgCall);
-    assert.ok(JSON.parse(msgCall![1] as string).includes("What is 2+2?"));
+    assert.ok(JSON.stringify(JSON.parse(msgCall![1] as string)).includes("What is 2+2?"));
   });
 
   it("extracts messages using id array-based type detection", () => {
@@ -268,7 +269,7 @@ describe("setInputMessagesAttribute", () => {
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     const msgCall = calls.find((c: unknown[]) => c[0] === ATTR_GEN_AI_INPUT_MESSAGES);
     assert.ok(msgCall);
-    assert.ok(JSON.parse(msgCall![1] as string).includes("Build this"));
+    assert.ok(JSON.stringify(JSON.parse(msgCall![1] as string)).includes("Build this"));
   });
 
   it("does nothing when messages is not an array", () => {
@@ -292,7 +293,7 @@ describe("setOutputMessagesAttribute", () => {
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     const msgCall = calls.find((c: unknown[]) => c[0] === ATTR_GEN_AI_OUTPUT_MESSAGES);
     assert.ok(msgCall);
-    assert.ok(JSON.parse(msgCall![1] as string).includes("Here is the answer"));
+    assert.ok(JSON.stringify(JSON.parse(msgCall![1] as string)).includes("Here is the answer"));
   });
 
   it("extracts output from generations format", () => {
@@ -313,7 +314,7 @@ describe("setOutputMessagesAttribute", () => {
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     const msgCall = calls.find((c: unknown[]) => c[0] === ATTR_GEN_AI_OUTPUT_MESSAGES);
     assert.ok(msgCall);
-    assert.ok(JSON.parse(msgCall![1] as string).includes("Generated text"));
+    assert.ok(JSON.stringify(JSON.parse(msgCall![1] as string)).includes("Generated text"));
   });
 
   it("extracts output from single message object", () => {
@@ -327,7 +328,7 @@ describe("setOutputMessagesAttribute", () => {
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     const msgCall = calls.find((c: unknown[]) => c[0] === ATTR_GEN_AI_OUTPUT_MESSAGES);
     assert.ok(msgCall);
-    assert.ok(JSON.parse(msgCall![1] as string).includes("Single response"));
+    assert.ok(JSON.stringify(JSON.parse(msgCall![1] as string)).includes("Single response"));
   });
 
   it("does nothing when outputs is undefined", () => {
@@ -420,13 +421,13 @@ describe("setSessionIdAttribute", () => {
     );
   });
 
-  it("falls back to conversation_id", () => {
+  it("sets conversation_id as separate attribute", () => {
     const span = makeSpan();
     const run = makeRun({ extra: { metadata: { conversation_id: "conv-456" } } });
     setSessionIdAttribute(run, span);
     assert.ok(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_MICROSOFT_SESSION_ID && c[1] === "conv-456",
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_CONVERSATION_ID && c[1] === "conv-456",
       ),
     );
   });

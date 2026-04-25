@@ -79,9 +79,7 @@ describe("OpenAIAgentsTraceProcessor", () => {
   beforeEach(() => {
     mockSpan = makeMockOtelSpan();
     tracer = makeMockTracer(mockSpan);
-    processor = new OpenAIAgentsTraceProcessor(tracer, {
-      isContentRecordingEnabled: true,
-    });
+    processor = new OpenAIAgentsTraceProcessor(tracer);
   });
 
   describe("start / shutdown", () => {
@@ -155,7 +153,7 @@ describe("OpenAIAgentsTraceProcessor", () => {
       await processor.onSpanStart(span);
       await processor.onSpanEnd(span);
 
-      assert.strictEqual(mockSpan.attrs["graph_node_id"], "MyAgent");
+      assert.strictEqual(mockSpan.attrs["gen_ai.agent.name"], "MyAgent");
       assert.strictEqual(mockSpan.attrs["gen_ai.operation.name"], "invoke_agent");
     });
   });
@@ -241,32 +239,28 @@ describe("OpenAIAgentsTraceProcessor", () => {
       const agentOtelSpan = tracer.spans[tracer.spans.length - 1] as OtelSpan & {
         attrs: Record<string, unknown>;
       };
-      assert.strictEqual(agentOtelSpan.attrs["graph_node_parent_id"], "AgentA");
+      assert.strictEqual(agentOtelSpan.attrs["microsoft.a365.caller.agent.name"], "AgentA");
     });
   });
 
   describe("content recording", () => {
-    it("does not record content when disabled", async () => {
-      const noContentProcessor = new OpenAIAgentsTraceProcessor(tracer, {
-        isContentRecordingEnabled: false,
-      });
-
+    it("always records content", async () => {
       const span = makeAgentsSpan({
         spanData: {
           type: "generation",
           model: "gpt-4o",
-          input: "secret input",
-          output: "secret output",
+          input: "some input",
+          output: "some output",
         },
       });
-      await noContentProcessor.onSpanStart(span);
-      await noContentProcessor.onSpanEnd(span);
+      await processor.onSpanStart(span);
+      await processor.onSpanEnd(span);
 
-      // Model should still be set
+      // Model should be set
       assert.strictEqual(mockSpan.attrs["gen_ai.request.model"], "gpt-4o");
-      // Content should NOT be set
-      assert.strictEqual(mockSpan.attrs["gen_ai.input.messages"], undefined);
-      assert.strictEqual(mockSpan.attrs["gen_ai.output.messages"], undefined);
+      // Content should also be set (always recorded now)
+      assert.ok(mockSpan.attrs["gen_ai.input.messages"] !== undefined);
+      assert.ok(mockSpan.attrs["gen_ai.output.messages"] !== undefined);
     });
   });
 

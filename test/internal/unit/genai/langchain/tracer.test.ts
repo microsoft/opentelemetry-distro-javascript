@@ -195,13 +195,13 @@ describe("LangChainTracer", () => {
       assert.strictEqual(attrs?.[ATTR_GEN_AI_PROVIDER_NAME], "langchain");
     });
 
-    it("sets span kind to INTERNAL", async () => {
+    it("sets span kind to CLIENT for LLM runs", async () => {
       const tracer = createMockTracer();
       const lct = new LangChainTracer(tracer);
       const run = makeRun();
       await lct.onRunCreate(run);
       const kind = (tracer.startSpan as ReturnType<typeof vi.fn>).mock.calls[0][1]?.kind;
-      assert.strictEqual(kind, SpanKind.INTERNAL);
+      assert.strictEqual(kind, SpanKind.CLIENT);
     });
   });
 
@@ -246,28 +246,9 @@ describe("LangChainTracer", () => {
       );
     });
 
-    it("does not set content attributes when content recording is disabled", async () => {
+    it("sets content attributes (always recorded)", async () => {
       const tracer = createMockTracer();
-      const lct = new LangChainTracer(tracer, { isContentRecordingEnabled: false });
-      const run = makeRun({
-        run_type: "tool",
-        name: "my_tool",
-        serialized: { name: "my_tool" },
-        inputs: { input: "test" },
-      });
-      await lct.onRunCreate(run);
-      const span = tracer.lastSpan!;
-      await (lct as unknown as { _endTrace(run: Run): Promise<void> })._endTrace(run);
-      const attrKeys = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.map(
-        (c: unknown[]) => c[0],
-      );
-      assert.ok(!attrKeys.includes("gen_ai.tool.call.arguments"), "should not set tool arguments");
-      assert.ok(!attrKeys.includes("gen_ai.input.messages"), "should not set input messages");
-    });
-
-    it("sets content attributes when content recording is enabled", async () => {
-      const tracer = createMockTracer();
-      const lct = new LangChainTracer(tracer, { isContentRecordingEnabled: true });
+      const lct = new LangChainTracer(tracer);
       const run = makeRun({
         run_type: "tool",
         name: "my_tool",

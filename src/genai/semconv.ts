@@ -47,6 +47,12 @@ export const ATTR_GEN_AI_TOOL_CALL_ARGUMENTS = "gen_ai.tool.call.arguments" as c
 export const ATTR_GEN_AI_TOOL_CALL_RESULT = "gen_ai.tool.call.result" as const;
 export const ATTR_GEN_AI_TOOL_TYPE = "gen_ai.tool.type" as const;
 
+// GenAI agent-to-agent caller
+export const ATTR_GEN_AI_CALLER_AGENT_NAME = "microsoft.a365.caller.agent.name" as const;
+
+// GenAI conversation
+export const ATTR_GEN_AI_CONVERSATION_ID = "gen_ai.conversation.id" as const;
+
 // Microsoft-specific (not in OTel semconv)
 export const ATTR_MICROSOFT_SESSION_ID = "microsoft.session.id" as const;
 export const ATTR_MICROSOFT_TENANT_ID = "microsoft.tenant.id" as const;

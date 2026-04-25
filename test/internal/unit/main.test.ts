@@ -1028,7 +1028,6 @@ describe("Main functions", () => {
         openaiAgents: { enabled: false },
         langchain: {
           enabled: true,
-          isContentRecordingEnabled: true,
         },
       },
     });
@@ -1036,10 +1035,6 @@ describe("Main functions", () => {
     await vi.waitFor(() => {
       expect(instrumentSpy).toHaveBeenCalledWith(
         expect.any(Object),
-        expect.objectContaining({
-          enabled: true,
-          isContentRecordingEnabled: true,
-        }),
       );
     });
 

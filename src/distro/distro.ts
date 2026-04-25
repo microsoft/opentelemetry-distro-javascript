@@ -277,7 +277,7 @@ async function initializeOpenAIAgentsInstrumentation(
 }
 
 async function initializeLangChainInstrumentation(
-  options: LangChainInstrumentationConfig,
+  _options: LangChainInstrumentationConfig,
 ): Promise<void> {
   try {
     const [{ LangChainTraceInstrumentor }, callbackManagerModule] = await Promise.all([
@@ -285,7 +285,7 @@ async function initializeLangChainInstrumentation(
       import("@langchain/core/callbacks/manager"),
     ]);
     if (isShutdown) return;
-    LangChainTraceInstrumentor.instrument(callbackManagerModule, options);
+    LangChainTraceInstrumentor.instrument(callbackManagerModule);
   } catch (error) {
     Logger.getInstance().warn(
       "[GenAI] Failed to initialize LangChain instrumentation. " +

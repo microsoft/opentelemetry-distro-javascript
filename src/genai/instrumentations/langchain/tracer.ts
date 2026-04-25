@@ -6,7 +6,12 @@ import { context, trace, Span, SpanKind, SpanStatusCode, Tracer } from "@opentel
 import { BaseTracer, Run } from "@langchain/core/tracers/base";
 import { isTracingSuppressed } from "@opentelemetry/core";
 import { diag } from "@opentelemetry/api";
-import { ATTR_ERROR_MESSAGE, ATTR_GEN_AI_PROVIDER_NAME } from "../../index.js";
+import {
+  ATTR_ERROR_MESSAGE,
+  ATTR_ERROR_TYPE,
+  ATTR_GEN_AI_CALLER_AGENT_NAME,
+  ATTR_GEN_AI_PROVIDER_NAME,
+} from "../../index.js";
 import * as Utils from "./utils.js";
 
 type RunWithSpan = { run: Run; span: Span; startTime: number; lastAccessTime: number };
@@ -26,23 +31,21 @@ type RunWithSpan = { run: Run; span: Span; startTime: number; lastAccessTime: nu
  * - Skips LangChain-internal runs (tagged `langsmith:hidden`, `Branch*`, or
  *   unmapped run types) to avoid noisy traces.
  * - Guards against unbounded memory with a hard cap of {@link MAX_RUNS}.
- * - Content-sensitive attributes (messages, tool args, system instructions)
- *   are only recorded when `isContentRecordingEnabled` is true.
+ * - Content attributes (messages, tool args) are always recorded
+ *   (aligned with Python/.NET SDKs).
  */
 export class LangChainTracer extends BaseTracer {
   /** Hard cap on concurrent tracked runs to prevent memory leaks. */
   private static readonly MAX_RUNS = 10_000;
   private tracer: Tracer;
-  private isContentRecordingEnabled: boolean;
   /** Active runs keyed by LangChain run ID. */
   private runs = new Map<string, RunWithSpan>();
   /** Maps each run ID → its parent run ID for parent-span-context lookup. */
   private parentByRunId = new Map<string, string | undefined>();
 
-  constructor(tracer: Tracer, options?: { isContentRecordingEnabled?: boolean }) {
+  constructor(tracer: Tracer) {
     super();
     this.tracer = tracer;
-    this.isContentRecordingEnabled = options?.isContentRecordingEnabled ?? false;
   }
 
   name = "OpenTelemetryLangChainTracer";
@@ -93,12 +96,16 @@ export class LangChainTracer extends BaseTracer {
 
     // Build span name: "<operation> <name|model>"
     let spanName = run.name;
+    let kind: SpanKind = SpanKind.INTERNAL;
     if (operation === "invoke_agent") {
       spanName = `${operation} ${run.name}`;
+      kind = SpanKind.SERVER;
     } else if (operation === "execute_tool") {
       spanName = `${operation} ${run.name}`;
+      kind = SpanKind.CLIENT;
     } else if (operation === "chat") {
       spanName = `${operation} ${Utils.getModel(run) || run.name}`.trim();
+      kind = SpanKind.CLIENT;
     }
 
     if (this.runs.size >= LangChainTracer.MAX_RUNS) {
@@ -111,7 +118,7 @@ export class LangChainTracer extends BaseTracer {
     const span = this.tracer.startSpan(
       spanName,
       {
-        kind: SpanKind.INTERNAL,
+        kind,
         startTime,
         attributes: { [ATTR_GEN_AI_PROVIDER_NAME]: "langchain" },
       },
@@ -123,8 +130,7 @@ export class LangChainTracer extends BaseTracer {
 
   /**
    * Called by LangChain when a run finishes. Sets status, enriches the span
-   * with GenAI attributes, and ends it. If content recording is enabled,
-   * message bodies, tool arguments, and system instructions are also attached.
+   * with GenAI attributes, and ends it.
    */
   protected async _endTrace(run: Run) {
     if (isTracingSuppressed(context.active())) {
@@ -162,6 +168,12 @@ export class LangChainTracer extends BaseTracer {
       if (run.error) {
         span.setStatus({ code: SpanStatusCode.ERROR });
         span.setAttribute(ATTR_ERROR_MESSAGE, String(run.error));
+        const errorType =
+          (run.error as { name?: string })?.name ??
+          (run.error as { constructor?: { name?: string } })?.constructor?.name;
+        if (typeof errorType === "string" && errorType.length > 0) {
+          span.setAttribute(ATTR_ERROR_TYPE, errorType);
+        }
       } else {
         span.setStatus({ code: SpanStatusCode.OK });
       }
@@ -169,18 +181,22 @@ export class LangChainTracer extends BaseTracer {
       // Always-on attributes: operation type, agent info, model, provider, session, tokens
       Utils.setOperationTypeAttribute(operation, span);
       Utils.setAgentAttributes(run, span);
+      if (operation === "invoke_agent") {
+        const callerName = this.findCallerAgentName(run);
+        if (callerName) {
+          span.setAttribute(ATTR_GEN_AI_CALLER_AGENT_NAME, callerName);
+        }
+      }
       Utils.setModelAttribute(run, span);
       Utils.setProviderNameAttribute(run, span);
       Utils.setSessionIdAttribute(run, span);
       Utils.setTokenAttributes(run, span);
 
-      // Opt-in content attributes (may contain PII / large payloads)
-      if (this.isContentRecordingEnabled) {
-        Utils.setToolAttributes(run, span);
-        Utils.setInputMessagesAttribute(run, span);
-        Utils.setOutputMessagesAttribute(run, span);
-        Utils.setSystemInstructionsAttribute(run, span);
-      }
+      // Content attributes — always recorded (aligned with Python/.NET SDKs)
+      Utils.setToolAttributes(run, span);
+      Utils.setInputMessagesAttribute(run, span);
+      Utils.setOutputMessagesAttribute(run, span);
+      Utils.setSystemInstructionsAttribute(run, span);
     } catch (error) {
       diag.error(
         `[LangChainTracer] Error setting span attributes for run ${run.name}: ${error instanceof Error ? error.message : String(error)}`,
@@ -205,6 +221,22 @@ export class LangChainTracer extends BaseTracer {
     while (pid) {
       const entry = this.runs.get(pid);
       if (entry) return entry.span.spanContext();
+      pid = this.parentByRunId.get(pid);
+    }
+    return undefined;
+  }
+
+  /**
+   * Walk up the parent run chain to find the nearest ancestor that is an
+   * invoke_agent run, returning its name as the caller agent name.
+   */
+  private findCallerAgentName(run: Run): string | undefined {
+    let pid = run.parent_run_id;
+    while (pid) {
+      const entry = this.runs.get(pid);
+      if (entry && Utils.getOperationType(entry.run) === "invoke_agent") {
+        return entry.run.name;
+      }
       pid = this.parentByRunId.get(pid);
     }
     return undefined;
