@@ -87,6 +87,8 @@ useMicrosoftOpenTelemetry({
 });
 ```
 
+For A365 scenarios, scope APIs, baggage, hosting middleware, and official terminology alignment, see [A365_DOCUMENTATION.md](./A365_DOCUMENTATION.md).
+
 ### Azure Monitor
 
 ```typescript
@@ -100,6 +102,8 @@ useMicrosoftOpenTelemetry({
   },
 });
 ```
+
+For Azure Monitor-specific configuration patterns and troubleshooting, see [AZURE_MONITOR_DOCUMENTATION.md](./AZURE_MONITOR_DOCUMENTATION.md).
 
 ### OTLP only (no Azure Monitor)
 

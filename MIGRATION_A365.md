@@ -1,13 +1,12 @@
 # Migrating from `@microsoft/agents-a365-observability` to `@microsoft/opentelemetry`
 
-This guide is for **existing Agent365 observability customers** migrating from the previous packages in Agent365-nodejs to `@microsoft/opentelemetry`.
+Migration guide for existing Agent365 observability customers moving to the production-ready distro.
 
-It focuses only on migration deltas:
+For A365 documentation (scopes, baggage, scenarios), see [A365_DOCUMENTATION.md](./A365_DOCUMENTATION.md).
 
-- package/import changes
-- initialization replacement
-- middleware migration
-- logging-level migration
+Reference docs: https://learn.microsoft.com/en-us/microsoft-agent-365/developer/observability?tabs=nodejs
+
+---
 
 ## 1) Package and import changes
 
@@ -16,15 +15,17 @@ It focuses only on migration deltas:
 | `npm install @microsoft/agents-a365-observability` | `npm install @microsoft/opentelemetry` |
 | `import { ... } from "@microsoft/agents-a365-observability"` | `import { ... } from "@microsoft/opentelemetry"` |
 
-If you also used hosting helpers, migrate those imports too:
+If you used hosting helpers:
 
 | Before | After |
 |---|---|
 | `@microsoft/agents-a365-observability-hosting` | `@microsoft/opentelemetry` |
 
+---
+
 ## 2) Initialization migration
 
-### Before (Agent365-nodejs)
+### Before
 
 ```typescript
 import { Builder } from "@microsoft/agents-a365-observability";
@@ -35,7 +36,7 @@ new Builder({
 }).build();
 ```
 
-### After (`@microsoft/opentelemetry`)
+### After
 
 ```typescript
 import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
@@ -49,21 +50,108 @@ useMicrosoftOpenTelemetry({
 });
 ```
 
-## 3) API rename map
+---
 
-Most A365 APIs keep the same names after import-path migration. The main type/class renames are:
+## 3) API renames
 
-| Before (`@microsoft/agents-a365-observability`) | After (`@microsoft/opentelemetry`) |
+| Before | After |
 |---|---|
 | `Request` | `A365Request` |
 | `SpanDetails` | `A365SpanDetails` |
 | `SpanProcessor` (A365 class) | `A365SpanProcessor` |
 
-## 4) Middleware migration (new example)
+---
 
-If your app previously used hosting middleware with `@microsoft/agents-hosting`, migrate as follows.
+## 4) Token management: `AgenticTokenCache`
 
-### Before (Agent365-nodejs hosting package)
+New built-in token cache for per-agent-per-tenant token acquisition and refresh.
+
+### Using the shared singleton
+
+```typescript
+import {
+  useMicrosoftOpenTelemetry,
+  AgenticTokenCacheInstance,
+} from "@microsoft/opentelemetry";
+
+// Register token once per agent+tenant
+AgenticTokenCacheInstance.register(agentId, tenantId, {
+  authorization: AGENT_APP.auth,
+  turnContext: context,
+  scopes: ["https://api.powerplatform.com/.default"],
+});
+
+useMicrosoftOpenTelemetry({
+  a365: {
+    enabled: true,
+    tokenResolver: (agentId, tenantId) =>
+      AgenticTokenCacheInstance.getObservabilityToken(agentId, tenantId),
+  },
+});
+```
+
+### Custom instance
+
+```typescript
+import { AgenticTokenCache } from "@microsoft/opentelemetry";
+
+const tokenCache = new AgenticTokenCache({
+  authScopes: ["https://api.powerplatform.com/.default"],
+});
+```
+
+---
+
+## 5) Scopes and baggage
+
+If you use A365 scopes or baggage propagation, see [A365_DOCUMENTATION.md](./A365_DOCUMENTATION.md) for pattern details.
+
+Quick example:
+
+```typescript
+import { BaggageScope } from "@microsoft/opentelemetry";
+
+const baggage = new BaggageScope({
+  tenantId: "my-tenant",
+  channelId: "my-channel",
+});
+
+baggage.run(() => {
+  // Baggage automatically propagated to child spans
+  invokeAgent();
+});
+```
+
+---
+
+## 6) Custom span export
+
+Use `Agent365Exporter` with standard OTel `SpanProcessor`:
+
+```typescript
+import { useMicrosoftOpenTelemetry, Agent365Exporter } from "@microsoft/opentelemetry";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+
+useMicrosoftOpenTelemetry({
+  a365: {
+    enabled: true,
+    tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId),
+  },
+  spanProcessors: [
+    new BatchSpanProcessor(
+      new Agent365Exporter({
+        tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId),
+      })
+    ),
+  ],
+});
+```
+
+---
+
+## 7) Middleware migration
+
+### Before
 
 ```typescript
 import { ObservabilityHostingManager } from "@microsoft/agents-a365-observability-hosting";
@@ -75,7 +163,7 @@ manager.configure(adapter, {
 });
 ```
 
-### After (`@microsoft/opentelemetry` one-liner)
+### After (one-liner)
 
 ```typescript
 import { configureA365Hosting } from "@microsoft/opentelemetry";
@@ -86,7 +174,7 @@ configureA365Hosting(adapter, {
 });
 ```
 
-### Equivalent explicit form (also valid)
+### Or explicit form
 
 ```typescript
 import { ObservabilityHostingManager } from "@microsoft/opentelemetry";
@@ -97,61 +185,69 @@ new ObservabilityHostingManager().configure(adapter, {
 });
 ```
 
-## 5) Logging-level migration (new example)
+---
 
-### What changed
+## 8) Logging level migration
 
-- A365 SDK logging used `A365_OBSERVABILITY_LOG_LEVEL` (`none`, `info`, `warn`, `error`, including pipe combinations like `info|warn|error`).
-- New distro diagnostics use OpenTelemetry/Azure logger levels:
-  - `OTEL_LOG_LEVEL` (recommended)
-  - `APPLICATIONINSIGHTS_INSTRUMENTATION_LOGGING_LEVEL` (also supported)
-  - `AZURE_LOG_LEVEL` (Azure SDK logger fallback)
-
-### Migration map
-
-| A365 SDK setting | New setting |
+| Old | New |
 |---|---|
 | `A365_OBSERVABILITY_LOG_LEVEL=none` | `OTEL_LOG_LEVEL=NONE` |
 | `A365_OBSERVABILITY_LOG_LEVEL=info` | `OTEL_LOG_LEVEL=INFO` |
 | `A365_OBSERVABILITY_LOG_LEVEL=warn` | `OTEL_LOG_LEVEL=WARN` |
 | `A365_OBSERVABILITY_LOG_LEVEL=error` | `OTEL_LOG_LEVEL=ERROR` |
 
-> `A365_OBSERVABILITY_LOG_LEVEL` is still supported for A365 internal logger filtering, but migration validation should set `OTEL_LOG_LEVEL` for distro diagnostics. If you also need Azure SDK logger alignment, set `AZURE_LOG_LEVEL` explicitly.
-
-### Before/after example
-
-Before (A365 SDK):
+Before:
 
 ```bash
 set A365_OBSERVABILITY_LOG_LEVEL=info|warn|error
 ```
 
-After (new distro):
+After:
 
 ```bash
 set OTEL_LOG_LEVEL=INFO
 set AZURE_LOG_LEVEL=info
 ```
 
-## 6) A365 environment variables
+---
 
-Core A365 export variables continue to work:
+## 9) Environment variables
 
-| Environment Variable | Description |
+A365 core variables:
+
+| Variable | Description |
 |---|---|
-| `ENABLE_A365_OBSERVABILITY_EXPORTER` | Enable/disable A365 exporter (`true`, `1`, `yes`, `on`) |
+| `ENABLE_A365_OBSERVABILITY_EXPORTER` | Enable/disable A365 export |
 | `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated OAuth scopes |
 | `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override A365 service domain |
-| `CLUSTER_CATEGORY` | Cluster category (`prod`, `dev`, `test`, etc.) |
-| `A365_OBSERVABILITY_LOG_LEVEL` | A365 internal log filter (`none`, `info`, `warn`, `error`, pipe combinations) |
+| `CLUSTER_CATEGORY` | Cluster category: `prod`, `dev`, `test` |
+| `A365_OBSERVABILITY_LOG_LEVEL` | A365 log filter: `none`, `info`, `warn`, `error` |
 
-## 7) Migration checklist
+---
 
+## 10) Migration checklist
+
+**Packages & initialization:**
 - [ ] Replace `@microsoft/agents-a365-observability` with `@microsoft/opentelemetry`
-- [ ] If used, replace `@microsoft/agents-a365-observability-hosting` imports with `@microsoft/opentelemetry`
+- [ ] Replace hosting imports: `@microsoft/agents-a365-observability-hosting` → `@microsoft/opentelemetry`
 - [ ] Replace `new Builder(...).build()` with `useMicrosoftOpenTelemetry({ a365: { ... } })`
-- [ ] Rename `Request` to `A365Request`
-- [ ] Rename `SpanDetails` to `A365SpanDetails`
-- [ ] Rename A365 `SpanProcessor` usage to `A365SpanProcessor`
-- [ ] Migrate middleware setup to `configureA365Hosting(adapter, ...)` (or `ObservabilityHostingManager`)
-- [ ] Set new diagnostics logging variables for rollout validation (`OTEL_LOG_LEVEL`; optionally `AZURE_LOG_LEVEL`)
+
+**API renames:**
+- [ ] `Request` → `A365Request`
+- [ ] `SpanDetails` → `A365SpanDetails`
+- [ ] A365 `SpanProcessor` → `A365SpanProcessor`
+
+**Token management:**
+- [ ] Consider using `AgenticTokenCache` or `AgenticTokenCacheInstance` for token caching
+
+**Middleware:**
+- [ ] Migrate to `configureA365Hosting(adapter, ...)` or `ObservabilityHostingManager`
+
+**Logging:**
+- [ ] Set `OTEL_LOG_LEVEL` for distro diagnostics
+- [ ] Optionally set `AZURE_LOG_LEVEL` for Azure SDK alignment
+
+**Verification:**
+- [ ] Run unit tests to confirm API usage
+- [ ] Validate A365 export in logs or telemetry backend
+- [ ] Test token refresh with long-running agents
