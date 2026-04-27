@@ -42,3 +42,11 @@ The distro package itself can include instrumentation implementations, but those
 2. Missing target SDKs remain non-fatal and log a clear warning.
 3. Startup/shutdown ordering is deterministic and validated with functional tests for both LangChain and OpenAI Agents.
 4. Public config semantics for `instrumentationOptions.langchain` and `instrumentationOptions.openaiAgents` remain unchanged.
+
+---
+
+## A365 + Azure Monitor Mixed-Exporter Instrumentation Defaults
+
+Currently, when A365 is enabled without Azure Monitor, non-GenAI instrumentations (http, azureSdk, mongoDb, etc.) are disabled by default so that only GenAI telemetry is collected. When both A365 and Azure Monitor are active, instrumentations are left enabled so Azure Monitor receives the infra/log data it expects. OTLP does not affect this behavior.
+
+**Pending:** Define a more granular strategy for the A365 + Azure Monitor scenario — for example, routing infra spans only to Azure Monitor while sending GenAI spans to both A365 and Azure Monitor. This may involve per-exporter span filtering or separate instrumentation pipelines.

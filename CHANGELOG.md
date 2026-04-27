@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+- When A365 export is enabled (`a365.enabled=true` or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`), non-GenAI instrumentations are now disabled by default unless explicitly enabled in `instrumentationOptions`.
+
 ## [0.1.0-alpha.6] - 2026-04-24
 
 ### Breaking Changes

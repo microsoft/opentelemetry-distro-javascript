@@ -135,9 +135,10 @@ That's it — traces, metrics, and logs are collected automatically with built-i
 
 Most instrumentations use `InstrumentationConfig` shape (`{ enabled?: boolean, ... }`).
 
-- Built-in infra instrumentations (`http`, `azureSdk`, `azureFunctions`, `mongoDb`, `mySql`, `postgreSql`, `redis`, `redis4`) are enabled by default.
+- Built-in infra instrumentations (`http`, `azureSdk`, `mongoDb`, `mySql`, `postgreSql`, `redis`, `redis4`) are enabled by default.
 - Logging instrumentations (`bunyan`, `winston`) are disabled by default.
 - GenAI instrumentations (`openaiAgents`, `langchain`) are enabled by default.
+- When `a365.enabled` is `true`, non-GenAI instrumentations (`http`, `azureSdk`, DB/cache, and logging) are disabled by default unless explicitly set in `instrumentationOptions`.
 
 Set `enabled: true` or `enabled: false` explicitly for predictable behavior.
 
@@ -240,6 +241,29 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 | `clusterCategory` | `ClusterCategory` | `"prod"` | Cluster category for endpoint resolution (`local`, `dev`, `test`, `preprod`, `firstrelease`, `prod`, `gov`, `high`, `dod`, `mooncake`, `ex`, `rx`) |
 | `domainOverride` | `string` | — | Override the A365 observability service domain |
 | `authScopes` | `string[]` | `["https://api.powerplatform.com/.default"]` | OAuth scopes for A365 service authentication |
+
+When A365 export is enabled, the distro defaults to GenAI-focused telemetry. To opt back into non-GenAI auto-instrumentation, set explicit overrides:
+
+```typescript
+useMicrosoftOpenTelemetry({
+  a365: {
+    enabled: true,
+    tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId),
+  },
+  instrumentationOptions: {
+    http: { enabled: true },
+    azureSdk: { enabled: true },
+    mongoDb: { enabled: true },
+    mySql: { enabled: true },
+    postgreSql: { enabled: true },
+    redis: { enabled: true },
+    redis4: { enabled: true },
+    bunyan: { enabled: true },
+    winston: { enabled: true },
+  },
+});
+```
+
 #### A365 hosting middleware setup
 
 Hosting middleware is configured separately from `a365` exporter options.

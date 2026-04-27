@@ -9,6 +9,7 @@ import {
   useMicrosoftOpenTelemetry,
   shutdownMicrosoftOpenTelemetry,
   _getSdkInstance,
+  _applyA365InstrumentationDefaults,
 } from "../../../src/distro/distro.js";
 import type { MeterProvider, ViewOptions } from "@opentelemetry/sdk-metrics";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
@@ -1028,6 +1029,85 @@ describe("Main functions", () => {
 
     delete process.env.ENABLE_A365_OBSERVABILITY_EXPORTER;
     await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("disables non-GenAI instrumentations by default when A365 is enabled", () => {
+    const instrumentationOptions = {
+      http: { enabled: true },
+      azureSdk: { enabled: true },
+      mongoDb: { enabled: true },
+      mySql: { enabled: true },
+      postgreSql: { enabled: true },
+      redis: { enabled: true },
+      redis4: { enabled: true },
+      openaiAgents: { enabled: true },
+      langchain: { enabled: true },
+    };
+
+    _applyA365InstrumentationDefaults(instrumentationOptions, undefined, true);
+
+    assert.strictEqual(instrumentationOptions.http.enabled, false);
+    assert.strictEqual(instrumentationOptions.azureSdk.enabled, false);
+    assert.strictEqual(instrumentationOptions.mongoDb.enabled, false);
+    assert.strictEqual(instrumentationOptions.mySql.enabled, false);
+    assert.strictEqual(instrumentationOptions.postgreSql.enabled, false);
+    assert.strictEqual(instrumentationOptions.redis.enabled, false);
+    assert.strictEqual(instrumentationOptions.redis4.enabled, false);
+    assert.strictEqual(instrumentationOptions.openaiAgents.enabled, true);
+    assert.strictEqual(instrumentationOptions.langchain.enabled, true);
+  });
+
+  it("preserves explicit instrumentation overrides when A365 is enabled", () => {
+    const instrumentationOptions = {
+      http: { enabled: true },
+      azureSdk: { enabled: true },
+      mongoDb: { enabled: true },
+      mySql: { enabled: true },
+      postgreSql: { enabled: true },
+      redis: { enabled: false },
+      redis4: { enabled: true },
+      openaiAgents: { enabled: true },
+      langchain: { enabled: true },
+    };
+    const userOverrides = {
+      http: { enabled: true },
+      redis: { enabled: false },
+    };
+
+    _applyA365InstrumentationDefaults(instrumentationOptions, userOverrides, true);
+
+    assert.strictEqual(instrumentationOptions.http.enabled, true);
+    assert.strictEqual(instrumentationOptions.redis.enabled, false);
+    assert.strictEqual(instrumentationOptions.azureSdk.enabled, false);
+    assert.strictEqual(instrumentationOptions.mongoDb.enabled, false);
+    assert.strictEqual(instrumentationOptions.openaiAgents.enabled, true);
+    assert.strictEqual(instrumentationOptions.langchain.enabled, true);
+  });
+
+  it("preserves a redis4-only explicit override when A365 is enabled", () => {
+    const instrumentationOptions = {
+      http: { enabled: true },
+      azureSdk: { enabled: true },
+      mongoDb: { enabled: true },
+      mySql: { enabled: true },
+      postgreSql: { enabled: true },
+      redis: { enabled: true },
+      redis4: { enabled: true },
+      openaiAgents: { enabled: true },
+      langchain: { enabled: true },
+    };
+    const userOverrides = {
+      redis4: { enabled: true },
+    };
+
+    _applyA365InstrumentationDefaults(instrumentationOptions, userOverrides, true);
+
+    // redis and redis4 are a linked pair — configuring either preserves both
+    assert.strictEqual(instrumentationOptions.redis.enabled, true);
+    assert.strictEqual(instrumentationOptions.redis4.enabled, true);
+    assert.strictEqual(instrumentationOptions.azureSdk.enabled, false);
+    assert.strictEqual(instrumentationOptions.openaiAgents.enabled, true);
+    assert.strictEqual(instrumentationOptions.langchain.enabled, true);
   });
 
   it("preserves BatchSpanProcessor defaults when A365 exporter tuning is omitted", async () => {
