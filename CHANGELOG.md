@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.1.0-beta.1] - 2026-04-27
+
+First beta release. Promotes all functionality from the 0.1.0-alpha series.
+
 ## [0.1.0-alpha.6] - 2026-04-24
 
 ### Breaking Changes
