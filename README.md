@@ -15,7 +15,7 @@ npm install @microsoft/opentelemetry
 
 ### ESM Support
 
-> **Note:** ESM support requires Node.js 18.19.0 or later. For background on why startup ordering matters, see the [OpenTelemetry ESM Support documentation](https://github.com/open-telemetry/opentelemetry-js/blob/main/doc/esm-support.md).
+> **Note:** ESM support requires Node.js 20.6.0 or later. This package's ESM loader flow relies on `--import` and `node:module.register()`, which are not available on older Node.js releases. For background on why startup ordering matters, see the [OpenTelemetry ESM Support documentation](https://github.com/open-telemetry/opentelemetry-js/blob/main/doc/esm-support.md).
 
 For ESM applications, instrumentation hooks must be registered before any instrumented modules (for example `http`, `express`, `axios`, or loggers) are loaded. This is a fundamental ESM constraint: modules cannot be instrumented after they are already loaded.
 

@@ -3,8 +3,8 @@
 
 /**
  * Simple ESM sample that exercises the Microsoft OpenTelemetry distro loader.
- * This file is run by the ESM loader integration test to verify that
- * module.register() is called properly when importing the package.
+ * This file is run by the ESM loader integration test to verify that the
+ * loader subpath can be imported under ESM without throwing.
  */
 
 // Import the loader subpath to trigger registration

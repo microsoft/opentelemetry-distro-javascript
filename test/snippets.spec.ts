@@ -34,9 +34,9 @@ describe("snippets", () => {
     // Your application code follows...
   });
 
-  it("ReadmeSampleESMPreloadBootstrap", () => {
+  it("ReadmeSampleESMPreloadBootstrap", async () => {
     // This snippet mirrors the README guidance for Node ESM preload bootstrapping.
-    void import("@microsoft/opentelemetry/loader");
+    await import("@microsoft/opentelemetry/loader");
     useMicrosoftOpenTelemetry({
       instrumentationOptions: {
         bunyan: { enabled: true },
