@@ -987,6 +987,49 @@ describe("Main functions", () => {
     await shutdownMicrosoftOpenTelemetry();
   });
 
+  it("registers A365SpanProcessor when A365 exporter is disabled but a365 options are provided", async () => {
+    process.env.ENABLE_A365_OBSERVABILITY_EXPORTER = "false";
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: false,
+        tokenResolver: () => "token",
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const a365SpanProcessor = registeredProcessors.find(
+      (processor: any) => processor.constructor?.name === "A365SpanProcessor",
+    );
+
+    assert.isDefined(
+      a365SpanProcessor,
+      "Expected A365SpanProcessor to be registered even when A365 exporter is disabled",
+    );
+
+    // Should also have a ConsoleSpanExporter fallback
+    const consoleProcessor = registeredProcessors.find(
+      (processor: any) =>
+        processor.constructor?.name === "SimpleSpanProcessor" &&
+        processor["_exporter"]?.constructor?.name === "ConsoleSpanExporter",
+    );
+
+    assert.isDefined(
+      consoleProcessor,
+      "Expected ConsoleSpanExporter fallback when A365 exporter is disabled",
+    );
+
+    delete process.env.ENABLE_A365_OBSERVABILITY_EXPORTER;
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
   it("preserves BatchSpanProcessor defaults when A365 exporter tuning is omitted", async () => {
     useMicrosoftOpenTelemetry({
       azureMonitor: { enabled: false },
