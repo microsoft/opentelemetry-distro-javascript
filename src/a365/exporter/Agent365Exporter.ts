@@ -79,7 +79,10 @@ interface OTLPStatus {
 export class Agent365Exporter implements SpanExporter {
   private closed = false;
   private readonly options: ResolvedExporterOptions;
-  private readonly logger = getA365Logger();
+
+  private get logger() {
+    return getA365Logger();
+  }
 
   constructor(options?: Agent365ExporterOptions) {
     this.options = new ResolvedExporterOptions(options);
