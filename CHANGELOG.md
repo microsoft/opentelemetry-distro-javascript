@@ -3,12 +3,29 @@
 ## [Unreleased]
 
 ### Breaking Changes
-- Remove `A365BaggageOptions` and `A365HostingOptions` configuration types and the `a365.baggage` and `a365.hosting` configuration options. These options were never hooked up to runtime behavior and do not exist in the baseline package. `A365SpanProcessor` is now unconditionally enabled whenever A365 export is enabled. See the [A365 migration guide](./MIGRATION_A365.md) for details.
+- When A365 export is enabled (`a365.enabled=true` or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`), non-GenAI instrumentations are now disabled by default unless explicitly enabled in `instrumentationOptions`.
 
-## [0.1.0-alpha.6]
+### Bugs Fixed
+- Fix `Agent365Exporter` not emitting `[EVENT]:` export outcome logs to a logger configured via `configureA365Logger` after the exporter was constructed. The exporter previously cached the logger snapshot at construction time, so the distro-bootstrapped exporter never picked up partner-supplied loggers. ([#50](https://github.com/microsoft/opentelemetry-distro-javascript/issues/50))
+
+## [0.1.0-alpha.6] - 2026-04-24
+
+### Breaking Changes
+- Remove `A365BaggageOptions` and `A365HostingOptions` configuration types and the `a365.baggage` and `a365.hosting` configuration options. These options were never hooked up to runtime behavior and do not exist in the baseline package. `A365SpanProcessor` is now unconditionally enabled whenever A365 export is enabled. See the [A365 migration guide](./MIGRATION_A365.md) for details. ([#66](https://github.com/microsoft/opentelemetry-distro-javascript/pull/66))
 
 ### Features Added
 - Add `configureA365Hosting(adapter, options?)` helper for one-line A365 hosting middleware setup. ([#55](https://github.com/microsoft/opentelemetry-distro-javascript/pull/55))
+- Add `AgenticTokenCache` for built-in token caching support. ([#68](https://github.com/microsoft/opentelemetry-distro-javascript/pull/68))
+- Migrate `PerRequestSpanProcessor` from Agent365-nodejs. ([#70](https://github.com/microsoft/opentelemetry-distro-javascript/pull/70))
+
+### Bugs Fixed
+- Fix hosting middleware for plain CloudAdapter activities. ([#64](https://github.com/microsoft/opentelemetry-distro-javascript/pull/64))
+- Restore A365 exporter event logs for export outcomes. ([#67](https://github.com/microsoft/opentelemetry-distro-javascript/pull/67))
+
+### Other Changes
+- Unify GenAI init order and add distro integration coverage. ([#63](https://github.com/microsoft/opentelemetry-distro-javascript/pull/63))
+- Temporarily remove co-code owners. ([#65](https://github.com/microsoft/opentelemetry-distro-javascript/pull/65))
+- Update A365 migration guide. ([#69](https://github.com/microsoft/opentelemetry-distro-javascript/pull/69))
 
 ## [0.1.0-alpha.5] - 2026-04-24 
 

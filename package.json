@@ -1,7 +1,7 @@
 {
   "name": "@microsoft/opentelemetry",
   "author": "Microsoft Corporation",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.6",
   "description": "Microsoft OpenTelemetry distribution for JavaScript/TypeScript",
   "main": "./dist/commonjs/index.js",
   "module": "./dist/esm/index.js",
@@ -61,12 +61,12 @@
     },
     "./loader": {
       "import": {
-        "types": "./dist/esm/azureMonitor/loader.d.ts",
-        "default": "./dist/esm/azureMonitor/loader.js"
+        "types": "./dist/esm/distro/loader.d.ts",
+        "default": "./dist/esm/distro/loader.js"
       },
       "require": {
-        "types": "./dist/commonjs/azureMonitor/loader.d.ts",
-        "default": "./dist/commonjs/azureMonitor/loader.js"
+        "types": "./dist/commonjs/distro/loader.d.ts",
+        "default": "./dist/commonjs/distro/loader.js"
       }
     }
   },

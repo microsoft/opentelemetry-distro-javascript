@@ -2,18 +2,12 @@
 // Licensed under the MIT License.
 
 /**
- * Simple ESM sample that exercises the Azure Monitor OpenTelemetry loader.
- * This file is run by the ESM loader integration test to verify that
- * module.register() is called properly when importing the package.
+ * Simple ESM sample that exercises the Microsoft OpenTelemetry distro loader.
+ * This file is run by the ESM loader integration test to verify that the
+ * loader subpath can be imported under ESM without throwing.
  */
 
-// Import the main package to trigger the loader registration
-import { useAzureMonitor } from "@azure/monitor-opentelemetry";
-
-// Basic check that the main export is available
-if (typeof useAzureMonitor !== "function") {
-  console.error("useAzureMonitor should be a function");
-  process.exit(1);
-}
+// Import the loader subpath to trigger registration
+import "@microsoft/opentelemetry/loader";
 
 console.log("ESM loader integration test passed");

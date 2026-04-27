@@ -543,6 +543,41 @@ describe("Agent365Exporter", () => {
     });
   });
 
+  describe("late-configured logger", () => {
+    it("should emit event logs when logger is configured after exporter construction", async () => {
+      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+
+      await new Promise<void>((resolve) => {
+        exporter.export([makeSpan()], () => resolve());
+      });
+
+      const infoLines = customLogger.info.mock.calls.map((call) => String(call[0]));
+      assert.ok(
+        infoLines.some(
+          (line) =>
+            line.includes("[EVENT]: export-group succeeded in") &&
+            line.includes("chunk(s) exported successfully"),
+        ),
+        "Expected export-group success event log",
+      );
+      assert.ok(
+        infoLines.some(
+          (line) =>
+            line.includes("[EVENT]: agent365-export succeeded in") &&
+            line.includes("All spans exported successfully"),
+        ),
+        "Expected agent365-export success event log",
+      );
+    });
+  });
+
   describe("retry", () => {
     it("should retry on 500 errors", async () => {
       let callCount = 0;
