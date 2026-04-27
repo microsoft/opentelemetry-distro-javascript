@@ -207,7 +207,7 @@ Comparison of our in-repo A365 code against the full `agent365-nodejs` SDK. Item
 | `utils/BaggageBuilderUtils.ts` | Baggage builder utilities | ❌ Missing |
 | `utils/ScopeUtils.ts` | Scope utility helpers | ❌ Missing |
 | `utils/TurnContextUtils.ts` | Turn context utilities | ❌ Missing |
-| `caching/AgenticTokenCache.ts` | Agentic token cache | ❌ Missing |
+| `caching/AgenticTokenCache.ts` | Agentic token cache | ✅ Done |
 
 ### agents-a365-runtime (entire package missing)
 

@@ -13,5 +13,3 @@ export const GEN_AI_SPAN_KIND_CHAT = "chat" as const;
 export const GEN_AI_REQUEST_CONTENT_KEY = "gen_ai.request.content" as const;
 export const GEN_AI_RESPONSE_CONTENT_KEY = "gen_ai.response.content" as const;
 export const GEN_AI_EXECUTION_PAYLOAD_KEY = "gen_ai.execution.payload" as const;
-export const GEN_AI_GRAPH_NODE_ID = "graph_node_id" as const;
-export const GEN_AI_GRAPH_NODE_PARENT_ID = "graph_node_parent_id" as const;

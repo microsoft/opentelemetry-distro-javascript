@@ -89,7 +89,6 @@ class OpenAIAgentsTraceInstrumentorImpl extends InstrumentationBase<OpenAIAgents
 
     this.processor = new OpenAIAgentsTraceProcessor(this.otelTracer, {
       suppressInvokeAgentInput: this._config.suppressInvokeAgentInput ?? false,
-      isContentRecordingEnabled: this._config.isContentRecordingEnabled ?? false,
     });
 
     try {

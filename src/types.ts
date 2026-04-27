@@ -128,18 +128,11 @@ export interface OpenAIAgentsInstrumentationConfig extends InstrumentationConfig
    * @default false
    */
   suppressInvokeAgentInput?: boolean;
-  /**
-   * Enable recording of message content (input/output messages, tool args, etc.) in spans.
-   * @default false
-   */
-  isContentRecordingEnabled?: boolean;
 }
 
 /** Configuration for LangChain instrumentation. */
-export interface LangChainInstrumentationConfig extends InstrumentationConfig {
-  /** Enable recording of message content in spans. */
-  isContentRecordingEnabled?: boolean;
-}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface LangChainInstrumentationConfig extends InstrumentationConfig {}
 
 /**
  * Statsbeat Features Configuration interface

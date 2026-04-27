@@ -23,7 +23,6 @@ async function main(): Promise<void> {
     instrumentationOptions: {
       openaiAgents: {
         enabled: true,
-        isContentRecordingEnabled: true,
       },
     },
   });

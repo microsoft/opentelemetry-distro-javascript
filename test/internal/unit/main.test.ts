@@ -9,6 +9,7 @@ import {
   useMicrosoftOpenTelemetry,
   shutdownMicrosoftOpenTelemetry,
   _getSdkInstance,
+  _applyA365InstrumentationDefaults,
 } from "../../../src/distro/distro.js";
 import type { MeterProvider, ViewOptions } from "@opentelemetry/sdk-metrics";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
@@ -987,6 +988,128 @@ describe("Main functions", () => {
     await shutdownMicrosoftOpenTelemetry();
   });
 
+  it("registers A365SpanProcessor when A365 exporter is disabled but a365 options are provided", async () => {
+    process.env.ENABLE_A365_OBSERVABILITY_EXPORTER = "false";
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: false,
+        tokenResolver: () => "token",
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const a365SpanProcessor = registeredProcessors.find(
+      (processor: any) => processor.constructor?.name === "A365SpanProcessor",
+    );
+
+    assert.isDefined(
+      a365SpanProcessor,
+      "Expected A365SpanProcessor to be registered even when A365 exporter is disabled",
+    );
+
+    // Should also have a ConsoleSpanExporter fallback
+    const consoleProcessor = registeredProcessors.find(
+      (processor: any) =>
+        processor.constructor?.name === "SimpleSpanProcessor" &&
+        processor["_exporter"]?.constructor?.name === "ConsoleSpanExporter",
+    );
+
+    assert.isDefined(
+      consoleProcessor,
+      "Expected ConsoleSpanExporter fallback when A365 exporter is disabled",
+    );
+
+    delete process.env.ENABLE_A365_OBSERVABILITY_EXPORTER;
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("disables non-GenAI instrumentations by default when A365 is enabled", () => {
+    const instrumentationOptions = {
+      http: { enabled: true },
+      azureSdk: { enabled: true },
+      mongoDb: { enabled: true },
+      mySql: { enabled: true },
+      postgreSql: { enabled: true },
+      redis: { enabled: true },
+      redis4: { enabled: true },
+      openaiAgents: { enabled: true },
+      langchain: { enabled: true },
+    };
+
+    _applyA365InstrumentationDefaults(instrumentationOptions, undefined, true);
+
+    assert.strictEqual(instrumentationOptions.http.enabled, false);
+    assert.strictEqual(instrumentationOptions.azureSdk.enabled, false);
+    assert.strictEqual(instrumentationOptions.mongoDb.enabled, false);
+    assert.strictEqual(instrumentationOptions.mySql.enabled, false);
+    assert.strictEqual(instrumentationOptions.postgreSql.enabled, false);
+    assert.strictEqual(instrumentationOptions.redis.enabled, false);
+    assert.strictEqual(instrumentationOptions.redis4.enabled, false);
+    assert.strictEqual(instrumentationOptions.openaiAgents.enabled, true);
+    assert.strictEqual(instrumentationOptions.langchain.enabled, true);
+  });
+
+  it("preserves explicit instrumentation overrides when A365 is enabled", () => {
+    const instrumentationOptions = {
+      http: { enabled: true },
+      azureSdk: { enabled: true },
+      mongoDb: { enabled: true },
+      mySql: { enabled: true },
+      postgreSql: { enabled: true },
+      redis: { enabled: false },
+      redis4: { enabled: true },
+      openaiAgents: { enabled: true },
+      langchain: { enabled: true },
+    };
+    const userOverrides = {
+      http: { enabled: true },
+      redis: { enabled: false },
+    };
+
+    _applyA365InstrumentationDefaults(instrumentationOptions, userOverrides, true);
+
+    assert.strictEqual(instrumentationOptions.http.enabled, true);
+    assert.strictEqual(instrumentationOptions.redis.enabled, false);
+    assert.strictEqual(instrumentationOptions.azureSdk.enabled, false);
+    assert.strictEqual(instrumentationOptions.mongoDb.enabled, false);
+    assert.strictEqual(instrumentationOptions.openaiAgents.enabled, true);
+    assert.strictEqual(instrumentationOptions.langchain.enabled, true);
+  });
+
+  it("preserves a redis4-only explicit override when A365 is enabled", () => {
+    const instrumentationOptions = {
+      http: { enabled: true },
+      azureSdk: { enabled: true },
+      mongoDb: { enabled: true },
+      mySql: { enabled: true },
+      postgreSql: { enabled: true },
+      redis: { enabled: true },
+      redis4: { enabled: true },
+      openaiAgents: { enabled: true },
+      langchain: { enabled: true },
+    };
+    const userOverrides = {
+      redis4: { enabled: true },
+    };
+
+    _applyA365InstrumentationDefaults(instrumentationOptions, userOverrides, true);
+
+    // redis and redis4 are a linked pair — configuring either preserves both
+    assert.strictEqual(instrumentationOptions.redis.enabled, true);
+    assert.strictEqual(instrumentationOptions.redis4.enabled, true);
+    assert.strictEqual(instrumentationOptions.azureSdk.enabled, false);
+    assert.strictEqual(instrumentationOptions.openaiAgents.enabled, true);
+    assert.strictEqual(instrumentationOptions.langchain.enabled, true);
+  });
+
   it("preserves BatchSpanProcessor defaults when A365 exporter tuning is omitted", async () => {
     useMicrosoftOpenTelemetry({
       azureMonitor: { enabled: false },
@@ -1057,19 +1180,12 @@ describe("Main functions", () => {
         openaiAgents: { enabled: false },
         langchain: {
           enabled: true,
-          isContentRecordingEnabled: true,
         },
       },
     });
 
     await vi.waitFor(() => {
-      expect(instrumentSpy).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({
-          enabled: true,
-          isContentRecordingEnabled: true,
-        }),
-      );
+      expect(instrumentSpy).toHaveBeenCalledWith(expect.any(Object));
     });
 
     await shutdownMicrosoftOpenTelemetry();

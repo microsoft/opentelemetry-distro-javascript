@@ -15,6 +15,9 @@ import {
   statusName,
   resolveAgent365Endpoint,
   truncateSpan,
+  estimateSpanBytes,
+  estimateValueBytes,
+  chunkBySize,
   MAX_SPAN_SIZE_BYTES,
 } from "../../../../src/a365/exporter/utils.js";
 import { ResolvedExporterOptions } from "../../../../src/a365/exporter/Agent365ExporterOptions.js";
@@ -39,6 +42,7 @@ function makeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
     attributes: {
       "microsoft.tenant.id": TENANT_ID,
       "gen_ai.agent.id": AGENT_ID,
+      "gen_ai.operation.name": "invoke_agent",
     },
     events: [],
     links: [],
@@ -69,6 +73,7 @@ async function exportAndGetPayload(
     attributes: {
       "microsoft.tenant.id": TENANT_ID,
       "gen_ai.agent.id": AGENT_ID,
+      "gen_ai.operation.name": "invoke_agent",
       ...attrs,
     },
   });
@@ -143,6 +148,7 @@ describe("Agent365Exporter", () => {
         attributes: {
           "microsoft.tenant.id": TENANT_ID,
           "gen_ai.agent.id": AGENT_ID,
+          "gen_ai.operation.name": "invoke_agent",
           "gen_ai.caller.client_ip": "10.0.0.5",
         },
       });
@@ -374,10 +380,18 @@ describe("Agent365Exporter", () => {
       });
 
       const span1 = makeSpan({
-        attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1" },
+        attributes: {
+          "microsoft.tenant.id": "t1",
+          "gen_ai.agent.id": "a1",
+          "gen_ai.operation.name": "invoke_agent",
+        },
       });
       const span2 = makeSpan({
-        attributes: { "microsoft.tenant.id": "t2", "gen_ai.agent.id": "a2" },
+        attributes: {
+          "microsoft.tenant.id": "t2",
+          "gen_ai.agent.id": "a2",
+          "gen_ai.operation.name": "invoke_agent",
+        },
       });
 
       await new Promise<void>((resolve) => {
@@ -489,7 +503,7 @@ describe("Agent365Exporter", () => {
         infoLines.some(
           (line) =>
             line.includes("[EVENT]: export-group succeeded in") &&
-            line.includes("Spans exported successfully") &&
+            line.includes("chunk(s) exported successfully") &&
             line.includes(`"tenantId":"${TENANT_ID}"`) &&
             line.includes(`"agentId":"${AGENT_ID}"`),
         ),
@@ -536,6 +550,41 @@ describe("Agent365Exporter", () => {
             line.includes("[EVENT]: agent365-export failed in") &&
             line.includes("One or more export groups failed"),
         ),
+      );
+    });
+  });
+
+  describe("late-configured logger", () => {
+    it("should emit event logs when logger is configured after exporter construction", async () => {
+      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+
+      await new Promise<void>((resolve) => {
+        exporter.export([makeSpan()], () => resolve());
+      });
+
+      const infoLines = customLogger.info.mock.calls.map((call) => String(call[0]));
+      assert.ok(
+        infoLines.some(
+          (line) =>
+            line.includes("[EVENT]: export-group succeeded in") &&
+            line.includes("chunk(s) exported successfully"),
+        ),
+        "Expected export-group success event log",
+      );
+      assert.ok(
+        infoLines.some(
+          (line) =>
+            line.includes("[EVENT]: agent365-export succeeded in") &&
+            line.includes("All spans exported successfully"),
+        ),
+        "Expected agent365-export success event log",
       );
     });
   });
@@ -703,9 +752,27 @@ describe("Exporter utils", () => {
   describe("partitionByIdentity", () => {
     it("should group spans by tenant:agent key", () => {
       const spans = [
-        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1" } }),
-        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1" } }),
-        makeSpan({ attributes: { "microsoft.tenant.id": "t2", "gen_ai.agent.id": "a2" } }),
+        makeSpan({
+          attributes: {
+            "microsoft.tenant.id": "t1",
+            "gen_ai.agent.id": "a1",
+            "gen_ai.operation.name": "invoke_agent",
+          },
+        }),
+        makeSpan({
+          attributes: {
+            "microsoft.tenant.id": "t1",
+            "gen_ai.agent.id": "a1",
+            "gen_ai.operation.name": "chat",
+          },
+        }),
+        makeSpan({
+          attributes: {
+            "microsoft.tenant.id": "t2",
+            "gen_ai.agent.id": "a2",
+            "gen_ai.operation.name": "execute_tool",
+          },
+        }),
       ];
       const groups = partitionByIdentity(spans);
       assert.strictEqual(groups.size, 2);
@@ -715,8 +782,10 @@ describe("Exporter utils", () => {
 
     it("should skip spans without identity attributes", () => {
       const spans = [
-        makeSpan({ attributes: {} }),
-        makeSpan({ attributes: { "microsoft.tenant.id": "t1" } }),
+        makeSpan({ attributes: { "gen_ai.operation.name": "invoke_agent" } }),
+        makeSpan({
+          attributes: { "microsoft.tenant.id": "t1", "gen_ai.operation.name": "invoke_agent" },
+        }),
       ];
       const groups = partitionByIdentity(spans);
       assert.strictEqual(groups.size, 0);
@@ -729,11 +798,52 @@ describe("Exporter utils", () => {
 
     it("should handle spans with same tenant but different agents", () => {
       const spans = [
-        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1" } }),
-        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a2" } }),
+        makeSpan({
+          attributes: {
+            "microsoft.tenant.id": "t1",
+            "gen_ai.agent.id": "a1",
+            "gen_ai.operation.name": "invoke_agent",
+          },
+        }),
+        makeSpan({
+          attributes: {
+            "microsoft.tenant.id": "t1",
+            "gen_ai.agent.id": "a2",
+            "gen_ai.operation.name": "invoke_agent",
+          },
+        }),
       ];
       const groups = partitionByIdentity(spans);
       assert.strictEqual(groups.size, 2);
+    });
+
+    it("should skip spans with missing or unknown gen_ai.operation.name", () => {
+      const spans = [
+        makeSpan({
+          name: "genai-span",
+          attributes: {
+            "microsoft.tenant.id": "t1",
+            "gen_ai.agent.id": "a1",
+            "gen_ai.operation.name": "invoke_agent",
+          },
+        }),
+        makeSpan({
+          name: "http-span",
+          attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1" },
+        }),
+        makeSpan({
+          name: "unknown-op",
+          attributes: {
+            "microsoft.tenant.id": "t1",
+            "gen_ai.agent.id": "a1",
+            "gen_ai.operation.name": "some_random_op",
+          },
+        }),
+      ];
+      const groups = partitionByIdentity(spans);
+      assert.strictEqual(groups.size, 1);
+      assert.strictEqual(groups.get("t1:a1")?.length, 1);
+      assert.strictEqual(groups.get("t1:a1")?.[0].name, "genai-span");
     });
   });
 
@@ -1446,6 +1556,102 @@ describe("Exporter utils", () => {
       const result = truncateSpan(span);
       const size = Buffer.byteLength(JSON.stringify(result), "utf8");
       assert.ok(size <= MAX_SPAN_SIZE_BYTES);
+    });
+  });
+
+  describe("estimateValueBytes", () => {
+    it("should estimate string values", () => {
+      const result = estimateValueBytes("hello");
+      assert.ok(result >= 40 + 5);
+    });
+
+    it("should estimate empty arrays", () => {
+      assert.strictEqual(estimateValueBytes([]), 60);
+    });
+
+    it("should estimate string arrays", () => {
+      const result = estimateValueBytes(["a", "bb"]);
+      assert.ok(result > 60);
+    });
+
+    it("should estimate numeric arrays", () => {
+      const result = estimateValueBytes([1, 2, 3]);
+      assert.strictEqual(result, 60 + 50 * 3);
+    });
+
+    it("should estimate primitives", () => {
+      assert.strictEqual(estimateValueBytes(42), 40);
+      assert.strictEqual(estimateValueBytes(true), 40);
+      assert.strictEqual(estimateValueBytes(null), 40);
+    });
+  });
+
+  describe("estimateSpanBytes", () => {
+    it("should include base overhead", () => {
+      const result = estimateSpanBytes({ name: "test", attributes: null });
+      assert.ok(result >= 2000);
+    });
+
+    it("should account for attributes", () => {
+      const small = estimateSpanBytes({ name: "test", attributes: null });
+      const large = estimateSpanBytes({
+        name: "test",
+        attributes: { key1: "value1", key2: "value2" },
+      });
+      assert.ok(large > small);
+    });
+
+    it("should account for events", () => {
+      const noEvents = estimateSpanBytes({ name: "test", attributes: null, events: null });
+      const withEvents = estimateSpanBytes({
+        name: "test",
+        attributes: null,
+        events: [{ name: "event1", attributes: null }],
+      });
+      assert.ok(withEvents > noEvents);
+    });
+  });
+
+  describe("chunkBySize", () => {
+    it("should return empty array for empty input", () => {
+      const result = chunkBySize([], () => 100, 1000);
+      assert.deepStrictEqual(result, []);
+    });
+
+    it("should keep all items in one chunk when they fit", () => {
+      const items = [1, 2, 3];
+      const result = chunkBySize(items, () => 100, 1000);
+      assert.strictEqual(result.length, 1);
+      assert.deepStrictEqual(result[0], [1, 2, 3]);
+    });
+
+    it("should split into multiple chunks when items exceed limit", () => {
+      const items = [1, 2, 3, 4, 5];
+      const result = chunkBySize(items, () => 300, 500);
+      assert.ok(result.length > 1);
+      const flat = result.flat();
+      assert.deepStrictEqual(flat, [1, 2, 3, 4, 5]);
+    });
+
+    it("should preserve order across chunks", () => {
+      const items = [10, 20, 30, 40];
+      const result = chunkBySize(items, () => 400, 500);
+      const flat = result.flat();
+      assert.deepStrictEqual(flat, [10, 20, 30, 40]);
+    });
+
+    it("should put oversized single item in its own chunk", () => {
+      const items = ["small", "HUGE"];
+      const result = chunkBySize(items, (s) => (s === "HUGE" ? 2000 : 100), 500);
+      assert.ok(result.some((chunk) => chunk.length === 1 && chunk[0] === "HUGE"));
+    });
+
+    it("should never produce empty chunks", () => {
+      const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      const result = chunkBySize(items, () => 150, 500);
+      for (const chunk of result) {
+        assert.ok(chunk.length > 0);
+      }
     });
   });
 });

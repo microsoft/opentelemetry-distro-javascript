@@ -61,12 +61,12 @@
     },
     "./loader": {
       "import": {
-        "types": "./dist/esm/azureMonitor/loader.d.ts",
-        "default": "./dist/esm/azureMonitor/loader.js"
+        "types": "./dist/esm/distro/loader.d.ts",
+        "default": "./dist/esm/distro/loader.js"
       },
       "require": {
-        "types": "./dist/commonjs/azureMonitor/loader.d.ts",
-        "default": "./dist/commonjs/azureMonitor/loader.js"
+        "types": "./dist/commonjs/distro/loader.d.ts",
+        "default": "./dist/commonjs/distro/loader.js"
       }
     }
   },

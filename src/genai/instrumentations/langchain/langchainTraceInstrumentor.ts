@@ -20,9 +20,8 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
   private _hasBeenEnabled = false;
   private _isPatched = false;
   protected otelTracer: Tracer;
-  private isContentRecordingEnabled: boolean;
 
-  private constructor(options?: { isContentRecordingEnabled?: boolean }) {
+  private constructor() {
     if (LangChainTraceInstrumentorImpl._instance !== null) {
       throw new Error("LangChainTraceInstrumentor can only be instantiated once.");
     }
@@ -32,17 +31,14 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
     });
 
     this.otelTracer = trace.getTracer("microsoft-otel-langchain", "1.0.0");
-    this.isContentRecordingEnabled = options?.isContentRecordingEnabled ?? false;
 
     LangChainTraceInstrumentorImpl._instance = this;
     diag.info("[LangChainTraceInstrumentor] Initialized and automatically enabled");
   }
 
-  static getInstance(options?: {
-    isContentRecordingEnabled?: boolean;
-  }): LangChainTraceInstrumentorImpl {
+  static getInstance(): LangChainTraceInstrumentorImpl {
     if (!LangChainTraceInstrumentorImpl._instance) {
-      LangChainTraceInstrumentorImpl._instance = new LangChainTraceInstrumentorImpl(options);
+      LangChainTraceInstrumentorImpl._instance = new LangChainTraceInstrumentorImpl();
     }
     return LangChainTraceInstrumentorImpl._instance;
   }
@@ -97,9 +93,7 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
         this: CallbackManagerModuleType,
         ...args: Parameters<(typeof CallbackManager)["_configureSync"]>
       ) {
-        args[0] = addTracerToHandlers(instrumentor.otelTracer, args[0], {
-          isContentRecordingEnabled: instrumentor.isContentRecordingEnabled,
-        });
+        args[0] = addTracerToHandlers(instrumentor.otelTracer, args[0]);
         diag.debug("[LangChainTraceInstrumentor] _configureSync wrapped to add LangChainTracer");
         return original.apply(this, args);
       };
@@ -151,11 +145,8 @@ export class LangChainTraceInstrumentor {
    * @param module The CallbackManager module to instrument
    * @param options Optional configuration options
    */
-  static instrument(
-    module: CallbackManagerModuleType,
-    options?: { isContentRecordingEnabled?: boolean },
-  ): void {
-    LangChainTraceInstrumentorImpl.getInstance(options).manuallyInstrumentImpl(module);
+  static instrument(module: CallbackManagerModuleType): void {
+    LangChainTraceInstrumentorImpl.getInstance().manuallyInstrumentImpl(module);
   }
 
   /**
@@ -189,21 +180,20 @@ export class LangChainTraceInstrumentor {
 export function addTracerToHandlers(
   tracer: Tracer,
   handlers: CallbackManagerModule.Callbacks | undefined,
-  options?: { isContentRecordingEnabled?: boolean },
 ): CallbackManagerModule.Callbacks {
   if (handlers == null) {
-    return [new LangChainTracer(tracer, options)];
+    return [new LangChainTracer(tracer)];
   }
 
   if (Array.isArray(handlers)) {
     if (!handlers.some((h) => h instanceof LangChainTracer)) {
-      handlers.push(new LangChainTracer(tracer, options));
+      handlers.push(new LangChainTracer(tracer));
     }
     return handlers;
   }
 
   if (!handlers.inheritableHandlers.some((h) => h instanceof LangChainTracer)) {
-    handlers.addHandler(new LangChainTracer(tracer, options), true);
+    handlers.addHandler(new LangChainTracer(tracer), true);
   }
   return handlers;
 }

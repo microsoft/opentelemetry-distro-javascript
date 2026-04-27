@@ -36,7 +36,7 @@ export const A365_ENV_VARS = {
   LOG_LEVEL: "A365_OBSERVABILITY_LOG_LEVEL",
 } as const;
 
-const DEFAULT_AUTH_SCOPE = "https://api.powerplatform.com/.default";
+const DEFAULT_AUTH_SCOPE = "api://9b975845-388f-4429-889e-eab1ef63949c/.default";
 
 const VALID_CLUSTER_CATEGORIES: ReadonlySet<string> = new Set([
   "local",

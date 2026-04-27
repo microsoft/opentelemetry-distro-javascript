@@ -24,7 +24,6 @@ async function main(): Promise<void> {
     instrumentationOptions: {
       langchain: {
         enabled: true,
-        isContentRecordingEnabled: true,
       },
     },
   });

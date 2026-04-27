@@ -13,9 +13,8 @@ import {
   getAttributesFromFunctionSpanData,
   getAttributesFromMCPListToolsSpanData,
   getAttributesFromResponse,
-  buildInputMessages,
-  buildOutputMessages,
-  CONTENT_KEYS,
+  buildStructuredInputMessages,
+  buildStructuredOutputMessages,
   KEY_MAPPINGS,
 } from "../../../../../src/genai/instrumentations/openai/utils.js";
 import {
@@ -167,8 +166,11 @@ describe("OpenAI Utils", () => {
         output: "world",
       } as unknown as SpanData;
       const attrs = getAttributesFromGenerationSpanData(data);
-      assert.strictEqual(attrs[GEN_AI_REQUEST_CONTENT_KEY], '"hello"');
-      assert.strictEqual(attrs[GEN_AI_RESPONSE_CONTENT_KEY], '"world"');
+      // Now serialized as structured messages
+      assert.ok(typeof attrs[GEN_AI_REQUEST_CONTENT_KEY] === "string");
+      assert.ok((attrs[GEN_AI_REQUEST_CONTENT_KEY] as string).includes("hello"));
+      assert.ok(typeof attrs[GEN_AI_RESPONSE_CONTENT_KEY] === "string");
+      assert.ok((attrs[GEN_AI_RESPONSE_CONTENT_KEY] as string).includes("world"));
     });
   });
 
@@ -187,8 +189,9 @@ describe("OpenAI Utils", () => {
         output: "test output",
       } as unknown as SpanData;
       const attrs = getAttributesFromFunctionSpanData(data);
-      assert.strictEqual(attrs[GEN_AI_REQUEST_CONTENT_KEY], "test input");
-      assert.strictEqual(attrs[GEN_AI_RESPONSE_CONTENT_KEY], "test output");
+      // Now serialized via safeSerializeToJson
+      assert.ok((attrs[GEN_AI_REQUEST_CONTENT_KEY] as string).includes("test input"));
+      assert.ok((attrs[GEN_AI_RESPONSE_CONTENT_KEY] as string).includes("test output"));
     });
 
     it("handles object input", () => {
@@ -237,58 +240,23 @@ describe("OpenAI Utils", () => {
     });
   });
 
-  describe("buildInputMessages", () => {
-    it("extracts user role content", () => {
-      const messages = [
-        { role: "system", content: "You are helpful" },
-        { role: "user", content: "Hello" },
-      ];
-      const result = buildInputMessages(messages);
-      assert.strictEqual(result, '["Hello"]');
-    });
-
-    it("falls back to full array when no user messages", () => {
-      const messages = [{ role: "system", content: "System prompt" }];
-      const result = buildInputMessages(messages);
-      assert.strictEqual(result, JSON.stringify(messages));
+  describe("buildStructuredInputMessages", () => {
+    it("wraps input messages in structured format", () => {
+      const messages = [{ role: "user", content: "Hello" }];
+      const result = buildStructuredInputMessages(messages);
+      assert.ok(result.version);
+      assert.ok(result.messages.length > 0);
     });
   });
 
-  describe("buildOutputMessages", () => {
-    it("extracts output_text content", () => {
+  describe("buildStructuredOutputMessages", () => {
+    it("wraps output messages in structured format", () => {
       const messages = [
-        {
-          role: "assistant",
-          content: [
-            { type: "output_text", text: "Hello there!" },
-            { type: "other", text: "ignored" },
-          ],
-        },
+        { role: "assistant", content: [{ type: "output_text", text: "Hello there!" }] },
       ];
-      const result = buildOutputMessages(messages);
-      assert.strictEqual(result, '["Hello there!"]');
-    });
-
-    it("falls back to full array when no output_text", () => {
-      const messages = [
-        {
-          role: "assistant",
-          content: [{ type: "tool_call", text: "" }],
-        },
-      ];
-      const result = buildOutputMessages(messages);
-      assert.strictEqual(result, JSON.stringify(messages));
-    });
-  });
-
-  describe("CONTENT_KEYS", () => {
-    it("contains expected content-sensitive keys", () => {
-      assert.ok(CONTENT_KEYS.has("gen_ai.input.messages"));
-      assert.ok(CONTENT_KEYS.has("gen_ai.output.messages"));
-      assert.ok(CONTENT_KEYS.has("gen_ai.tool.call.arguments"));
-      assert.ok(CONTENT_KEYS.has("gen_ai.tool.call.result"));
-      assert.ok(CONTENT_KEYS.has(GEN_AI_REQUEST_CONTENT_KEY));
-      assert.ok(CONTENT_KEYS.has(GEN_AI_RESPONSE_CONTENT_KEY));
+      const result = buildStructuredOutputMessages(messages);
+      assert.ok(result.version);
+      assert.ok(result.messages.length > 0);
     });
   });
 

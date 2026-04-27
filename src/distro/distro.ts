@@ -47,6 +47,76 @@ let sdk: NodeSDK;
 let disposeAzureMonitor: (() => void) | undefined;
 let isShutdown = false;
 
+const A365_DISABLED_INSTRUMENTATIONS_BY_DEFAULT: ReadonlyArray<keyof InstrumentationOptions> = [
+  "http",
+  "azureSdk",
+  "mongoDb",
+  "mySql",
+  "postgreSql",
+  "redis",
+  "redis4",
+  "bunyan",
+  "winston",
+];
+
+/**
+ * Redis and redis4 share the same underlying instrumentation. If a caller
+ * explicitly configures either key, treat both as explicitly configured so
+ * the other is not inadvertently disabled.
+ */
+const REDIS_LINKED_KEYS: ReadonlyArray<keyof InstrumentationOptions> = ["redis", "redis4"];
+
+/**
+ * When A365 export is enabled, default to GenAI-focused telemetry by disabling
+ * non-GenAI instrumentations unless callers explicitly configure them.
+ *
+ * @internal
+ */
+export function _applyA365InstrumentationDefaults(
+  instrumentationOptions: InstrumentationOptions,
+  userInstrumentationOptions: unknown,
+  a365Enabled: boolean,
+): void {
+  if (!a365Enabled) {
+    return;
+  }
+
+  const userOptionsRecord =
+    userInstrumentationOptions && typeof userInstrumentationOptions === "object"
+      ? (userInstrumentationOptions as Record<string, unknown>)
+      : undefined;
+
+  // Pre-compute whether any Redis-linked key was explicitly configured so
+  // that configuring `redis4` alone does not inadvertently disable `redis`
+  // (and vice-versa), which would break the underlying shared instrumentation.
+  const redisLinkedExplicit =
+    !!userOptionsRecord &&
+    REDIS_LINKED_KEYS.some((k) => Object.prototype.hasOwnProperty.call(userOptionsRecord, k));
+
+  for (const instrumentationKey of A365_DISABLED_INSTRUMENTATIONS_BY_DEFAULT) {
+    const isExplicitlyConfigured =
+      !!userOptionsRecord &&
+      Object.prototype.hasOwnProperty.call(userOptionsRecord, instrumentationKey);
+
+    // Treat redis/redis4 as a linked pair: if either was set by the caller,
+    // skip disabling both keys.
+    if (
+      isExplicitlyConfigured ||
+      (redisLinkedExplicit &&
+        REDIS_LINKED_KEYS.includes(instrumentationKey as (typeof REDIS_LINKED_KEYS)[number]))
+    ) {
+      continue;
+    }
+
+    const currentValue = instrumentationOptions[instrumentationKey];
+    if (currentValue && typeof currentValue === "object") {
+      (currentValue as Record<string, unknown>).enabled = false;
+    } else {
+      instrumentationOptions[instrumentationKey] = { enabled: false };
+    }
+  }
+}
+
 /**
  * Initialize Microsoft OpenTelemetry distribution.
  *
@@ -63,6 +133,7 @@ let isShutdown = false;
 export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOptions): void {
   const config = new InternalConfig(options);
   patchOpenTelemetryInstrumentationEnable();
+  const a365Config = new A365Configuration(options?.a365);
 
   // Azure Monitor is enabled when configured programmatically or via JSON config.
   // An explicit `enabled: false` always wins, even if a connection string is present.
@@ -95,6 +166,17 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   // registerGlobal() to create a fresh one with the correct version.
   const globalOpentelemetryApiKey = Symbol.for("opentelemetry.js.api.1");
   delete (globalThis as Record<symbol, unknown>)[globalOpentelemetryApiKey];
+
+  // Apply A365 instrumentation defaults (disable non-GenAI instrumentations)
+  // when A365 is enabled and Azure Monitor is not. When both A365 and Azure
+  // Monitor are active, infra instrumentations must remain enabled so Azure
+  // Monitor receives the telemetry it expects.
+  const applyA365Defaults = a365Config.enabled && !azureMonitorEnabled;
+  _applyA365InstrumentationDefaults(
+    config.instrumentationOptions,
+    options?.instrumentationOptions,
+    applyA365Defaults,
+  );
 
   // ── Instrumentations, sampler, and views (always created) ─────────
   const instrumentations = createInstrumentations(config, {
@@ -142,8 +224,13 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   }
 
   // ── A365 exporter (enabled via options.a365 or env vars) ──────────
-  const a365Config = new A365Configuration(options?.a365);
   const a365ConsoleExportFallback = !a365Config.enabled && !!options?.a365;
+  if (a365Config.enabled || a365ConsoleExportFallback) {
+    // A365SpanProcessor copies baggage (tenant, agent, session, etc.) and
+    // telemetry.sdk.* attributes to span attributes — needed regardless of
+    // whether the A365 exporter or console fallback is active.
+    spanProcessors.push(new A365SpanProcessor());
+  }
   if (a365Config.enabled) {
     const a365Exporter = new Agent365Exporter({
       clusterCategory: a365Config.clusterCategory,
@@ -151,8 +238,6 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       authScopes: a365Config.authScopes,
       tokenResolver: a365Config.tokenResolver,
     });
-    // A365SpanProcessor copies baggage (tenant, agent, session, etc.) to span attributes
-    spanProcessors.push(new A365SpanProcessor());
     spanProcessors.push(new BatchSpanProcessor(a365Exporter));
   } else if (a365ConsoleExportFallback) {
     // A365 options provided but exporter disabled — fall back to console export
@@ -216,7 +301,13 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
 
   // Initialize GenAI instrumentations after providers are registered so any
   // tracer they capture is backed by the active SDK provider.
-  initializeGenAIInstrumentations(options?.instrumentationOptions);
+  // When A365 defaults were applied, use the resolved config so GenAI
+  // instrumentations are active by default even if the caller omitted
+  // instrumentationOptions. Otherwise honour the caller's original options
+  // to avoid initializing GenAI when it was not requested.
+  initializeGenAIInstrumentations(
+    applyA365Defaults ? config.instrumentationOptions : options?.instrumentationOptions,
+  );
 }
 
 /**
@@ -275,7 +366,7 @@ async function initializeOpenAIAgentsInstrumentation(
 }
 
 async function initializeLangChainInstrumentation(
-  options: LangChainInstrumentationConfig,
+  _options: LangChainInstrumentationConfig,
 ): Promise<void> {
   try {
     const [{ LangChainTraceInstrumentor }, callbackManagerModule] = await Promise.all([
@@ -283,7 +374,7 @@ async function initializeLangChainInstrumentation(
       import("@langchain/core/callbacks/manager"),
     ]);
     if (isShutdown) return;
-    LangChainTraceInstrumentor.instrument(callbackManagerModule, options);
+    LangChainTraceInstrumentor.instrument(callbackManagerModule);
   } catch (error) {
     Logger.getInstance().warn(
       "[GenAI] Failed to initialize LangChain instrumentation. " +

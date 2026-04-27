@@ -46,6 +46,9 @@ export interface Agent365ExporterOptions {
 
   /** Maximum number of spans per export batch. @default 512 */
   maxExportBatchSize?: number;
+
+  /** Maximum estimated payload size (bytes) per HTTP chunk. @default 900 * 1024 (900KB) */
+  maxPayloadBytes?: number;
 }
 
 /** Resolved options with defaults applied. */
@@ -60,17 +63,21 @@ export class ResolvedExporterOptions {
   public readonly exporterTimeoutMilliseconds: number;
   public readonly httpRequestTimeoutMilliseconds: number;
   public readonly maxExportBatchSize: number;
+  public readonly maxPayloadBytes: number;
 
   constructor(options?: Agent365ExporterOptions) {
     this.clusterCategory = options?.clusterCategory ?? "prod";
     this.tokenResolver = options?.tokenResolver;
     this.useS2SEndpoint = options?.useS2SEndpoint ?? false;
     this.domainOverride = options?.domainOverride;
-    this.authScopes = options?.authScopes ?? ["https://api.powerplatform.com/.default"];
+    this.authScopes = options?.authScopes ?? [
+      "api://9b975845-388f-4429-889e-eab1ef63949c/.default",
+    ];
     this.maxQueueSize = options?.maxQueueSize ?? 2048;
     this.scheduledDelayMilliseconds = options?.scheduledDelayMilliseconds ?? 5000;
     this.exporterTimeoutMilliseconds = options?.exporterTimeoutMilliseconds ?? 90000;
     this.httpRequestTimeoutMilliseconds = options?.httpRequestTimeoutMilliseconds ?? 30000;
     this.maxExportBatchSize = options?.maxExportBatchSize ?? 512;
+    this.maxPayloadBytes = options?.maxPayloadBytes ?? 900 * 1024;
   }
 }

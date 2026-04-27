@@ -20,6 +20,8 @@ import {
 import type { Span as AgentsSpan, SpanData } from "@openai/agents-core";
 import { OpenAIAgentsTraceProcessor } from "../../../src/genai/instrumentations/openai/openAIAgentsTraceProcessor.js";
 import {
+  ATTR_GEN_AI_AGENT_NAME,
+  ATTR_GEN_AI_CALLER_AGENT_NAME,
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
@@ -36,10 +38,7 @@ let provider: BasicTracerProvider;
 let exporter: InMemorySpanExporter;
 let processor: OpenAIAgentsTraceProcessor;
 
-function setup(options?: {
-  isContentRecordingEnabled?: boolean;
-  suppressInvokeAgentInput?: boolean;
-}) {
+function setup(options?: { suppressInvokeAgentInput?: boolean }) {
   exporter = new InMemorySpanExporter();
   provider = new BasicTracerProvider({
     spanProcessors: [new SimpleSpanProcessor(exporter)],
@@ -76,7 +75,7 @@ afterEach(async () => {
 describe("OpenAI Agents Instrumentation Functional Tests", () => {
   describe("single generation (LLM call)", () => {
     it("produces a span with chat operation and model attributes", async () => {
-      setup({ isContentRecordingEnabled: true });
+      setup();
 
       const span = makeSpan({
         spanId: "gen-1",
@@ -110,7 +109,7 @@ describe("OpenAI Agents Instrumentation Functional Tests", () => {
 
   describe("response span", () => {
     it("extracts model and usage from response data", async () => {
-      setup({ isContentRecordingEnabled: true });
+      setup();
 
       const span = makeSpan({
         spanId: "resp-1",
@@ -141,7 +140,7 @@ describe("OpenAI Agents Instrumentation Functional Tests", () => {
 
   describe("agent with function tool and generation children", () => {
     it("produces parent-child spans matching the agent execution flow", async () => {
-      setup({ isContentRecordingEnabled: true });
+      setup();
 
       // 1. Agent span (root)
       const agentSpan = makeSpan({
@@ -206,7 +205,7 @@ describe("OpenAI Agents Instrumentation Functional Tests", () => {
 
       // Verify agent span
       assert.ok(agentOtel!.name.includes(GEN_AI_OPERATION_INVOKE_AGENT));
-      assert.strictEqual(agentOtel!.attributes["graph_node_id"], "ResearchAgent");
+      assert.strictEqual(agentOtel!.attributes[ATTR_GEN_AI_AGENT_NAME], "ResearchAgent");
 
       // Verify tool span
       assert.ok(toolOtel!.name.includes(GEN_AI_OPERATION_EXECUTE_TOOL));
@@ -264,9 +263,9 @@ describe("OpenAI Agents Instrumentation Functional Tests", () => {
       await processor.onSpanEnd(agentB);
 
       const spans = exporter.getFinishedSpans();
-      const agentBSpan = spans.find((s) => s.attributes["graph_node_id"] === "AgentB");
+      const agentBSpan = spans.find((s) => s.attributes[ATTR_GEN_AI_AGENT_NAME] === "AgentB");
       assert.ok(agentBSpan);
-      assert.strictEqual(agentBSpan!.attributes["graph_node_parent_id"], "AgentA");
+      assert.strictEqual(agentBSpan!.attributes[ATTR_GEN_AI_CALLER_AGENT_NAME], "AgentA");
     });
   });
 
@@ -302,43 +301,9 @@ describe("OpenAI Agents Instrumentation Functional Tests", () => {
     });
   });
 
-  describe("content recording gating", () => {
-    it("does not record content when disabled", async () => {
-      setup({ isContentRecordingEnabled: false });
-
-      const span = makeSpan({
-        spanId: "gen-no-content",
-        spanData: {
-          type: "generation",
-          model: "gpt-4o",
-          input: "secret input",
-          output: "secret output",
-        },
-      });
-
-      await processor.onSpanStart(span);
-      await processor.onSpanEnd(span);
-
-      const spans = exporter.getFinishedSpans();
-      // Root span is also created since no parent
-      const genSpan = spans.find((s) => s.attributes[ATTR_GEN_AI_REQUEST_MODEL] === "gpt-4o");
-      assert.ok(genSpan);
-
-      // Content keys should be absent
-      assert.strictEqual(
-        genSpan!.attributes["gen_ai.input.messages"],
-        undefined,
-        "should not record input",
-      );
-      assert.strictEqual(
-        genSpan!.attributes["gen_ai.output.messages"],
-        undefined,
-        "should not record output",
-      );
-    });
-
-    it("records content when enabled", async () => {
-      setup({ isContentRecordingEnabled: true });
+  describe("content recording", () => {
+    it("always records content", async () => {
+      setup();
 
       const span = makeSpan({
         spanId: "gen-with-content",
@@ -385,7 +350,7 @@ describe("OpenAI Agents Instrumentation Functional Tests", () => {
 
   describe("suppressInvokeAgentInput", () => {
     it("suppresses input messages when flag is set", async () => {
-      setup({ isContentRecordingEnabled: true, suppressInvokeAgentInput: true });
+      setup({ suppressInvokeAgentInput: true });
 
       const span = makeSpan({
         spanId: "resp-suppress",
