@@ -9,8 +9,13 @@ import { ExporterEventNames } from "./ExporterEventNames.js";
 import {
   ATTR_GEN_AI_AGENT_ID,
   ATTR_GEN_AI_INPUT_MESSAGES,
+  ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_MICROSOFT_TENANT_ID,
+  GEN_AI_OPERATION_CHAT,
+  GEN_AI_OPERATION_EXECUTE_TOOL,
+  GEN_AI_OPERATION_INVOKE_AGENT,
+  GEN_AI_OPERATION_OUTPUT_MESSAGES,
 } from "../../genai/semconv.js";
 import { A365_MESSAGE_SCHEMA_VERSION } from "../contracts.js";
 
@@ -23,20 +28,43 @@ const MESSAGE_ATTR_KEYS: Set<string> = new Set([
 const MESSAGE_ROLE_SYSTEM = "system";
 
 /**
+ * Known genAI operation names produced by the SDK scopes and auto-instrumentation.
+ * Only spans whose gen_ai.operation.name matches one of these values are exported.
+ */
+const GEN_AI_OPERATION_NAMES: ReadonlySet<string> = new Set([
+  GEN_AI_OPERATION_INVOKE_AGENT, // 'invoke_agent'
+  GEN_AI_OPERATION_EXECUTE_TOOL, // 'execute_tool'
+  GEN_AI_OPERATION_OUTPUT_MESSAGES, // 'output_messages'
+  GEN_AI_OPERATION_CHAT, // 'chat'
+  "Chat", // InferenceOperationType.CHAT
+  "TextCompletion", // InferenceOperationType.TEXT_COMPLETION
+  "GenerateContent", // InferenceOperationType.GENERATE_CONTENT
+]);
+
+/**
  * Partition spans by (tenantId, agentId) identity pairs.
- * Spans missing either attribute are skipped.
+ * Only genAI spans (those with a known gen_ai.operation.name) are included.
  */
 export function partitionByIdentity(spans: ReadableSpan[]): Map<string, ReadableSpan[]> {
   const groups = new Map<string, ReadableSpan[]>();
-  let skippedCount = 0;
+
+  let nonGenAICount = 0;
+  let missingIdentityCount = 0;
 
   for (const span of spans) {
     const attrs = span.attributes || {};
+    const operationName = asStr(attrs[ATTR_GEN_AI_OPERATION_NAME]);
+
+    if (!operationName || !GEN_AI_OPERATION_NAMES.has(operationName)) {
+      nonGenAICount++;
+      continue;
+    }
+
     const tenant = asStr(attrs[ATTR_MICROSOFT_TENANT_ID]);
     const agent = asStr(attrs[ATTR_GEN_AI_AGENT_ID]);
 
     if (!tenant || !agent) {
-      skippedCount++;
+      missingIdentityCount++;
       continue;
     }
 
@@ -49,11 +77,22 @@ export function partitionByIdentity(spans: ReadableSpan[]): Map<string, Readable
     existing.push(span);
   }
 
-  if (skippedCount > 0) {
+  if (nonGenAICount > 0) {
     Logger.getInstance().info(
-      `[${ExporterEventNames.EXPORT_PARTITION_SPAN_MISSING_IDENTITY}] ${skippedCount} spans skipped (missing tenant or agent ID)`,
+      `[Agent365Exporter] ${nonGenAICount} non-genAI spans filtered out`,
     );
   }
+
+  if (missingIdentityCount > 0) {
+    Logger.getInstance().info(
+      `[${ExporterEventNames.EXPORT_PARTITION_SPAN_MISSING_IDENTITY}] ${missingIdentityCount} spans skipped (missing tenant or agent ID)`,
+    );
+  }
+
+  const skippedCount = nonGenAICount + missingIdentityCount;
+  Logger.getInstance().info(
+    `[Agent365Exporter] Partitioned into ${groups.size} identity groups (${skippedCount} spans skipped)`,
+  );
 
   return groups;
 }

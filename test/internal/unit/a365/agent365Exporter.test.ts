@@ -42,6 +42,7 @@ function makeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
     attributes: {
       "microsoft.tenant.id": TENANT_ID,
       "gen_ai.agent.id": AGENT_ID,
+      "gen_ai.operation.name": "invoke_agent",
     },
     events: [],
     links: [],
@@ -72,6 +73,7 @@ async function exportAndGetPayload(
     attributes: {
       "microsoft.tenant.id": TENANT_ID,
       "gen_ai.agent.id": AGENT_ID,
+      "gen_ai.operation.name": "invoke_agent",
       ...attrs,
     },
   });
@@ -146,6 +148,7 @@ describe("Agent365Exporter", () => {
         attributes: {
           "microsoft.tenant.id": TENANT_ID,
           "gen_ai.agent.id": AGENT_ID,
+          "gen_ai.operation.name": "invoke_agent",
           "gen_ai.caller.client_ip": "10.0.0.5",
         },
       });
@@ -377,10 +380,10 @@ describe("Agent365Exporter", () => {
       });
 
       const span1 = makeSpan({
-        attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1" },
+        attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1", "gen_ai.operation.name": "invoke_agent" },
       });
       const span2 = makeSpan({
-        attributes: { "microsoft.tenant.id": "t2", "gen_ai.agent.id": "a2" },
+        attributes: { "microsoft.tenant.id": "t2", "gen_ai.agent.id": "a2", "gen_ai.operation.name": "invoke_agent" },
       });
 
       await new Promise<void>((resolve) => {
@@ -741,9 +744,9 @@ describe("Exporter utils", () => {
   describe("partitionByIdentity", () => {
     it("should group spans by tenant:agent key", () => {
       const spans = [
-        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1" } }),
-        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1" } }),
-        makeSpan({ attributes: { "microsoft.tenant.id": "t2", "gen_ai.agent.id": "a2" } }),
+        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1", "gen_ai.operation.name": "invoke_agent" } }),
+        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1", "gen_ai.operation.name": "chat" } }),
+        makeSpan({ attributes: { "microsoft.tenant.id": "t2", "gen_ai.agent.id": "a2", "gen_ai.operation.name": "execute_tool" } }),
       ];
       const groups = partitionByIdentity(spans);
       assert.strictEqual(groups.size, 2);
@@ -753,8 +756,8 @@ describe("Exporter utils", () => {
 
     it("should skip spans without identity attributes", () => {
       const spans = [
-        makeSpan({ attributes: {} }),
-        makeSpan({ attributes: { "microsoft.tenant.id": "t1" } }),
+        makeSpan({ attributes: { "gen_ai.operation.name": "invoke_agent" } }),
+        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.operation.name": "invoke_agent" } }),
       ];
       const groups = partitionByIdentity(spans);
       assert.strictEqual(groups.size, 0);
@@ -767,11 +770,23 @@ describe("Exporter utils", () => {
 
     it("should handle spans with same tenant but different agents", () => {
       const spans = [
-        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1" } }),
-        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a2" } }),
+        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1", "gen_ai.operation.name": "invoke_agent" } }),
+        makeSpan({ attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a2", "gen_ai.operation.name": "invoke_agent" } }),
       ];
       const groups = partitionByIdentity(spans);
       assert.strictEqual(groups.size, 2);
+    });
+
+    it("should skip spans with missing or unknown gen_ai.operation.name", () => {
+      const spans = [
+        makeSpan({ name: "genai-span", attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1", "gen_ai.operation.name": "invoke_agent" } }),
+        makeSpan({ name: "http-span", attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1" } }),
+        makeSpan({ name: "unknown-op", attributes: { "microsoft.tenant.id": "t1", "gen_ai.agent.id": "a1", "gen_ai.operation.name": "some_random_op" } }),
+      ];
+      const groups = partitionByIdentity(spans);
+      assert.strictEqual(groups.size, 1);
+      assert.strictEqual(groups.get("t1:a1")?.length, 1);
+      assert.strictEqual(groups.get("t1:a1")?.[0].name, "genai-span");
     });
   });
 
