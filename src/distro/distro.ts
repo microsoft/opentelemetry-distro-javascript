@@ -144,6 +144,12 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   // ── A365 exporter (enabled via options.a365 or env vars) ──────────
   const a365Config = new A365Configuration(options?.a365);
   const a365ConsoleExportFallback = !a365Config.enabled && !!options?.a365;
+  if (a365Config.enabled || a365ConsoleExportFallback) {
+    // A365SpanProcessor copies baggage (tenant, agent, session, etc.) and
+    // telemetry.sdk.* attributes to span attributes — needed regardless of
+    // whether the A365 exporter or console fallback is active.
+    spanProcessors.push(new A365SpanProcessor());
+  }
   if (a365Config.enabled) {
     const a365Exporter = new Agent365Exporter({
       clusterCategory: a365Config.clusterCategory,
@@ -151,8 +157,6 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       authScopes: a365Config.authScopes,
       tokenResolver: a365Config.tokenResolver,
     });
-    // A365SpanProcessor copies baggage (tenant, agent, session, etc.) to span attributes
-    spanProcessors.push(new A365SpanProcessor());
     spanProcessors.push(new BatchSpanProcessor(a365Exporter));
   } else if (a365ConsoleExportFallback) {
     // A365 options provided but exporter disabled — fall back to console export
