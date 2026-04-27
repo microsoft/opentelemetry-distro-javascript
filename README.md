@@ -13,6 +13,67 @@ npm install @microsoft/opentelemetry
 
 > **Important:** Import and call `useMicrosoftOpenTelemetry()` as early as possible in your application entry point so instrumentations can patch libraries before they are loaded.
 
+### ESM Support
+
+> **Note:** ESM support requires Node.js 20.6.0 or later. This package's ESM loader flow relies on `--import` and `node:module.register()`, which are not available on older Node.js releases. For background on why startup ordering matters, see the [OpenTelemetry ESM Support documentation](https://github.com/open-telemetry/opentelemetry-js/blob/main/doc/esm-support.md).
+
+For ESM applications, instrumentation hooks must be registered before any instrumented modules (for example `http`, `express`, `axios`, or loggers) are loaded. This is a fundamental ESM constraint: modules cannot be instrumented after they are already loaded.
+
+This pattern is **not** reliable for auto-instrumentation:
+
+```typescript
+import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+useMicrosoftOpenTelemetry();
+
+import express from "express";
+```
+
+Use `--import` so the loader is registered at process startup.
+
+```bash
+node --import @microsoft/opentelemetry/loader ./app.mjs
+```
+
+For example, in `package.json`:
+
+```json
+{
+  "scripts": {
+    "start": "node --import @microsoft/opentelemetry/loader ./dist/index.js"
+  }
+}
+```
+
+If you prefer explicit telemetry configuration in a bootstrap file, preload that file instead:
+
+`telemetry.mjs`:
+
+```javascript
+import "@microsoft/opentelemetry/loader";
+import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+
+useMicrosoftOpenTelemetry({
+  azureMonitor: {
+    azureMonitorExporterOptions: {
+      connectionString: process.env.APPLICATIONINSIGHTS_CONNECTION_STRING,
+    },
+    enableLiveMetrics: false,
+  },
+  instrumentationOptions: {
+    bunyan: { enabled: true },
+    winston: { enabled: true },
+  },
+});
+```
+
+Start your app:
+
+```bash
+node --import ./telemetry.mjs ./app.mjs
+```
+
+Your application code can keep regular static ESM imports in `app.mjs`.
+
 ### A365
 
 ```typescript
