@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+- When A365 export is enabled (`a365.enabled=true` or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`), non-GenAI instrumentations are now disabled by default unless explicitly enabled in `instrumentationOptions`.
+
 ### Bugs Fixed
 - Fix `Agent365Exporter` not emitting `[EVENT]:` export outcome logs to a logger configured via `configureA365Logger` after the exporter was constructed. The exporter previously cached the logger snapshot at construction time, so the distro-bootstrapped exporter never picked up partner-supplied loggers. ([#50](https://github.com/microsoft/opentelemetry-distro-javascript/issues/50))
 
