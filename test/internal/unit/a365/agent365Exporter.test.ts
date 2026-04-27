@@ -15,6 +15,9 @@ import {
   statusName,
   resolveAgent365Endpoint,
   truncateSpan,
+  estimateSpanBytes,
+  estimateValueBytes,
+  chunkBySize,
   MAX_SPAN_SIZE_BYTES,
 } from "../../../../src/a365/exporter/utils.js";
 import { ResolvedExporterOptions } from "../../../../src/a365/exporter/Agent365ExporterOptions.js";
@@ -489,7 +492,7 @@ describe("Agent365Exporter", () => {
         infoLines.some(
           (line) =>
             line.includes("[EVENT]: export-group succeeded in") &&
-            line.includes("Spans exported successfully") &&
+            line.includes("chunk(s) exported successfully") &&
             line.includes(`"tenantId":"${TENANT_ID}"`) &&
             line.includes(`"agentId":"${AGENT_ID}"`),
         ),
@@ -1446,6 +1449,102 @@ describe("Exporter utils", () => {
       const result = truncateSpan(span);
       const size = Buffer.byteLength(JSON.stringify(result), "utf8");
       assert.ok(size <= MAX_SPAN_SIZE_BYTES);
+    });
+  });
+
+  describe("estimateValueBytes", () => {
+    it("should estimate string values", () => {
+      const result = estimateValueBytes("hello");
+      assert.ok(result >= 40 + 5);
+    });
+
+    it("should estimate empty arrays", () => {
+      assert.strictEqual(estimateValueBytes([]), 60);
+    });
+
+    it("should estimate string arrays", () => {
+      const result = estimateValueBytes(["a", "bb"]);
+      assert.ok(result > 60);
+    });
+
+    it("should estimate numeric arrays", () => {
+      const result = estimateValueBytes([1, 2, 3]);
+      assert.strictEqual(result, 60 + 50 * 3);
+    });
+
+    it("should estimate primitives", () => {
+      assert.strictEqual(estimateValueBytes(42), 40);
+      assert.strictEqual(estimateValueBytes(true), 40);
+      assert.strictEqual(estimateValueBytes(null), 40);
+    });
+  });
+
+  describe("estimateSpanBytes", () => {
+    it("should include base overhead", () => {
+      const result = estimateSpanBytes({ name: "test", attributes: null });
+      assert.ok(result >= 2000);
+    });
+
+    it("should account for attributes", () => {
+      const small = estimateSpanBytes({ name: "test", attributes: null });
+      const large = estimateSpanBytes({
+        name: "test",
+        attributes: { "key1": "value1", "key2": "value2" },
+      });
+      assert.ok(large > small);
+    });
+
+    it("should account for events", () => {
+      const noEvents = estimateSpanBytes({ name: "test", attributes: null, events: null });
+      const withEvents = estimateSpanBytes({
+        name: "test",
+        attributes: null,
+        events: [{ name: "event1", attributes: null }],
+      });
+      assert.ok(withEvents > noEvents);
+    });
+  });
+
+  describe("chunkBySize", () => {
+    it("should return empty array for empty input", () => {
+      const result = chunkBySize([], () => 100, 1000);
+      assert.deepStrictEqual(result, []);
+    });
+
+    it("should keep all items in one chunk when they fit", () => {
+      const items = [1, 2, 3];
+      const result = chunkBySize(items, () => 100, 1000);
+      assert.strictEqual(result.length, 1);
+      assert.deepStrictEqual(result[0], [1, 2, 3]);
+    });
+
+    it("should split into multiple chunks when items exceed limit", () => {
+      const items = [1, 2, 3, 4, 5];
+      const result = chunkBySize(items, () => 300, 500);
+      assert.ok(result.length > 1);
+      const flat = result.flat();
+      assert.deepStrictEqual(flat, [1, 2, 3, 4, 5]);
+    });
+
+    it("should preserve order across chunks", () => {
+      const items = [10, 20, 30, 40];
+      const result = chunkBySize(items, () => 400, 500);
+      const flat = result.flat();
+      assert.deepStrictEqual(flat, [10, 20, 30, 40]);
+    });
+
+    it("should put oversized single item in its own chunk", () => {
+      const items = ["small", "HUGE"];
+      const result = chunkBySize(items, (s) => (s === "HUGE" ? 2000 : 100), 500);
+      assert.ok(result.some((chunk) => chunk.length === 1 && chunk[0] === "HUGE"));
+    });
+
+    it("should never produce empty chunks", () => {
+      const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      const result = chunkBySize(items, () => 150, 500);
+      for (const chunk of result) {
+        assert.ok(chunk.length > 0);
+      }
     });
   });
 });

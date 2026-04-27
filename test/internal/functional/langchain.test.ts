@@ -38,14 +38,14 @@ let provider: BasicTracerProvider;
 let exporter: InMemorySpanExporter;
 let langchainTracer: LangChainTracer;
 
-function setup(options?: { isContentRecordingEnabled?: boolean }) {
+function setup() {
   exporter = new InMemorySpanExporter();
   provider = new BasicTracerProvider({
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
 
   const tracer = provider.getTracer("test-langchain", "1.0.0");
-  langchainTracer = new LangChainTracer(tracer, options);
+  langchainTracer = new LangChainTracer(tracer);
 }
 
 function makeRun(overrides: Partial<Run> = {}): Run {
@@ -108,7 +108,7 @@ describe("LangChain Instrumentation Functional Tests", () => {
 
       const span = spans[0];
       assert.ok(span.name.includes("chat"), `span name "${span.name}" should contain "chat"`);
-      assert.strictEqual(span.kind, SpanKind.INTERNAL);
+      assert.strictEqual(span.kind, SpanKind.CLIENT);
       assert.strictEqual(span.status.code, SpanStatusCode.OK);
       assert.strictEqual(span.attributes[ATTR_GEN_AI_OPERATION_NAME], GEN_AI_OPERATION_CHAT);
       assert.strictEqual(span.attributes[ATTR_GEN_AI_REQUEST_MODEL], "gpt-4o");
@@ -120,7 +120,7 @@ describe("LangChain Instrumentation Functional Tests", () => {
 
   describe("agent with tool and LLM children", () => {
     it("produces parent-child spans matching the LangGraph execution flow", async () => {
-      setup({ isContentRecordingEnabled: true });
+      setup();
 
       // 1. Agent (parent) run
       const agentRun = makeRun({
@@ -245,43 +245,9 @@ describe("LangChain Instrumentation Functional Tests", () => {
     });
   });
 
-  describe("content recording gating", () => {
-    it("does not record message content when disabled", async () => {
-      setup({ isContentRecordingEnabled: false });
-
-      const run = makeRun({
-        id: "llm-no-content",
-        name: "ChatOpenAI",
-        run_type: "llm",
-        inputs: {
-          messages: [[{ role: "user", content: "Secret question" }]],
-        },
-        outputs: {
-          generations: [[{ text: "Secret answer" }]],
-        },
-      });
-
-      await langchainTracer.onRunCreate(run);
-      await (langchainTracer as unknown as { _endTrace(r: Run): Promise<void> })._endTrace(run);
-
-      const spans = exporter.getFinishedSpans();
-      assert.strictEqual(spans.length, 1);
-
-      const span = spans[0];
-      assert.strictEqual(
-        span.attributes[ATTR_GEN_AI_INPUT_MESSAGES],
-        undefined,
-        "should not record input messages",
-      );
-      assert.strictEqual(
-        span.attributes[ATTR_GEN_AI_OUTPUT_MESSAGES],
-        undefined,
-        "should not record output messages",
-      );
-    });
-
-    it("records message content when enabled", async () => {
-      setup({ isContentRecordingEnabled: true });
+  describe("content recording", () => {
+    it("always records message content", async () => {
+      setup();
 
       const run = makeRun({
         id: "llm-with-content",

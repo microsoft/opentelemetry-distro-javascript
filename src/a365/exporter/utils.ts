@@ -419,6 +419,116 @@ function runShrinkPhase(
   return nextSize;
 }
 
+// ── Span size estimation and byte-level chunking ────────────────────────────
+
+/** Overhead constant for OTLP JSON span fixed fields. @internal */
+const SPAN_BASE_OVERHEAD = 2000;
+
+/** Overhead per attribute in OTLP JSON format. @internal */
+const ATTR_OVERHEAD = 80;
+
+/** Overhead per event in OTLP JSON. @internal */
+const EVENT_OVERHEAD = 200;
+
+/**
+ * Estimate the serialized byte size of a single attribute value in OTLP/HTTP JSON.
+ */
+export function estimateValueBytes(value: unknown): number {
+  if (typeof value === "string") {
+    return 40 + Buffer.byteLength(value, "utf8");
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return 60;
+    if (typeof value[0] === "string") {
+      let sum = 60;
+      for (const s of value) {
+        sum += 40 + Buffer.byteLength(String(s), "utf8");
+      }
+      return sum;
+    }
+    return 60 + 50 * value.length;
+  }
+  return 40; // bool/int/float/null/other
+}
+
+/**
+ * Heuristic estimator for the serialized size of an OTLP span in HTTP JSON.
+ *
+ * Uses generous constants tuned to over-estimate by ~25-50%, providing headroom
+ * for JSON serializer variance.
+ */
+export function estimateSpanBytes(span: {
+  name?: string;
+  attributes?: Record<string, unknown> | null;
+  events?: Array<{ name: string; attributes?: Record<string, unknown> | null }> | null;
+}): number {
+  let total = SPAN_BASE_OVERHEAD;
+
+  if (span.name) {
+    total += Buffer.byteLength(span.name, "utf8");
+  }
+
+  if (span.attributes) {
+    for (const [key, value] of Object.entries(span.attributes)) {
+      total += ATTR_OVERHEAD;
+      total += Buffer.byteLength(key, "utf8");
+      total += estimateValueBytes(value);
+    }
+  }
+
+  if (span.events) {
+    for (const ev of span.events) {
+      total += EVENT_OVERHEAD;
+      total += Buffer.byteLength(ev.name, "utf8");
+      if (ev.attributes) {
+        for (const [key, value] of Object.entries(ev.attributes)) {
+          total += ATTR_OVERHEAD;
+          total += Buffer.byteLength(key, "utf8");
+          total += estimateValueBytes(value);
+        }
+      }
+    }
+  }
+
+  return total;
+}
+
+/**
+ * Split items into sub-batches whose cumulative estimated size stays under maxChunkBytes.
+ *
+ * Invariants:
+ * - Input order is preserved across chunks.
+ * - Empty input produces empty output.
+ * - A single item whose size exceeds maxChunkBytes forms its own single-item chunk.
+ * - No chunk is ever empty.
+ */
+export function chunkBySize<T>(
+  items: T[],
+  getSize: (item: T) => number,
+  maxChunkBytes: number,
+): T[][] {
+  const chunks: T[][] = [];
+  let current: T[] = [];
+  let currentBytes = 0;
+
+  for (const item of items) {
+    const itemBytes = getSize(item);
+    if (current.length > 0 && currentBytes + itemBytes > maxChunkBytes) {
+      chunks.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(item);
+    currentBytes += itemBytes;
+  }
+
+  if (current.length > 0) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
 /**
  * Truncate span attributes if the serialized span exceeds MAX_SPAN_SIZE_BYTES.
  *

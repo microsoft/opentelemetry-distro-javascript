@@ -17,6 +17,8 @@ import {
   statusName,
   resolveAgent365Endpoint,
   truncateSpan,
+  estimateSpanBytes,
+  chunkBySize,
 } from "./utils.js";
 import { getA365Logger } from "../logging.js";
 
@@ -67,6 +69,13 @@ interface OTLPLink {
 interface OTLPStatus {
   code: string;
   message?: string;
+}
+
+interface MappedSpan {
+  span: OTLPSpan;
+  scopeKey: string;
+  scopeName: string;
+  scopeVersion?: string;
 }
 
 /**
@@ -147,8 +156,20 @@ export class Agent365Exporter implements SpanExporter {
     const start = Date.now();
     const { tenantId, agentId } = parseIdentityKey(identityKey);
 
-    const payload = this.buildExportRequest(spans);
-    const body = JSON.stringify(payload);
+    // Map, truncate, and chunk spans by estimated byte size
+    const mappedSpans = this.mapAndTruncateSpans(spans);
+    const resourceAttrs = this.getResourceAttributes(spans);
+    const chunks = chunkBySize(
+      mappedSpans,
+      (ms) => estimateSpanBytes(ms.span),
+      this.options.maxPayloadBytes,
+    );
+
+    if (chunks.length > 1) {
+      this.logger.info(
+        `[Agent365Exporter] Split ${spans.length} spans into ${chunks.length} chunks for ${tenantId}/${agentId}`,
+      );
+    }
 
     const servicePrefix = this.options.useS2SEndpoint ? "/observabilityService" : "/observability";
     const endpointPath = `${servicePrefix}/tenants/${encodeURIComponent(tenantId)}/otlp/agents/${encodeURIComponent(agentId)}/traces`;
@@ -179,22 +200,38 @@ export class Agent365Exporter implements SpanExporter {
     }
     headers["authorization"] = `Bearer ${token}`;
 
-    const { ok, correlationId } = await this.postWithRetries(url, body, headers);
-    if (!ok) {
-      this.logExporterEvent(ExporterEventNames.EXPORT_GROUP, false, Date.now() - start, undefined, {
-        tenantId,
-        agentId,
-        correlationId,
-      });
-      throw new Error(`Failed to export spans for ${tenantId}/${agentId}`);
+    // Send each chunk (all-or-nothing: fail on first chunk failure)
+    let lastCorrelationId = "unknown";
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const payload = this.buildEnvelope(chunk, resourceAttrs);
+      const body = JSON.stringify(payload);
+
+      this.logger.info(
+        `[Agent365Exporter] Sending chunk ${i + 1} of ${chunks.length} (${chunk.length} spans)`,
+      );
+
+      const { ok, correlationId } = await this.postWithRetries(url, body, headers);
+      lastCorrelationId = correlationId;
+
+      if (!ok) {
+        this.logExporterEvent(
+          ExporterEventNames.EXPORT_GROUP,
+          false,
+          Date.now() - start,
+          `chunk ${i + 1} of ${chunks.length} failed`,
+          { tenantId, agentId, correlationId },
+        );
+        throw new Error(`Failed to export spans (chunk ${i + 1} of ${chunks.length})`);
+      }
     }
 
     this.logExporterEvent(
       ExporterEventNames.EXPORT_GROUP,
       true,
       Date.now() - start,
-      "Spans exported successfully",
-      { tenantId, agentId, correlationId },
+      `${chunks.length} chunk(s) exported successfully`,
+      { tenantId, agentId, correlationId: lastCorrelationId },
     );
   }
 
@@ -262,32 +299,49 @@ export class Agent365Exporter implements SpanExporter {
     return { ok: false, correlationId: lastCorrelationId };
   }
 
-  private buildExportRequest(spans: ReadableSpan[]): OTLPExportRequest {
+  private mapAndTruncateSpans(spans: ReadableSpan[]): MappedSpan[] {
+    return spans.map((sp) => {
+      const scope = sp.instrumentationScope;
+      const scopeName = scope?.name ?? "unknown";
+      const scopeVersion = scope?.version ?? "";
+      return {
+        span: truncateSpan(this.mapSpan(sp)),
+        scopeKey: `${scopeName}:${scopeVersion}`,
+        scopeName,
+        scopeVersion: scopeVersion || undefined,
+      };
+    });
+  }
+
+  private getResourceAttributes(spans: ReadableSpan[]): Record<string, unknown> {
+    if (spans.length > 0 && spans[0].resource?.attributes) {
+      return { ...spans[0].resource.attributes };
+    }
+    return {};
+  }
+
+  private buildEnvelope(
+    mappedSpans: MappedSpan[],
+    resourceAttrs: Record<string, unknown>,
+  ): OTLPExportRequest {
     const scopeMap = new Map<string, OTLPSpan[]>();
 
-    for (const sp of spans) {
-      const scope = sp.instrumentationScope;
-      const scopeKey = `${scope?.name ?? "unknown"}:${scope?.version ?? ""}`;
-      let existing = scopeMap.get(scopeKey);
-      if (!existing) {
-        existing = [];
-        scopeMap.set(scopeKey, existing);
-      }
-      existing.push(truncateSpan(this.mapSpan(sp)));
+    for (const ms of mappedSpans) {
+      const existing = scopeMap.get(ms.scopeKey) || [];
+      existing.push(ms.span);
+      scopeMap.set(ms.scopeKey, existing);
     }
 
     const scopeSpans: ScopeSpan[] = [];
-    for (const [scopeKey, mappedSpans] of scopeMap) {
-      const [name, version] = scopeKey.split(":");
+    for (const [scopeKey, spans] of scopeMap) {
+      const representative = mappedSpans.find((ms) => ms.scopeKey === scopeKey)!;
       scopeSpans.push({
-        scope: { name, version: version || undefined },
-        spans: mappedSpans,
+        scope: {
+          name: representative.scopeName,
+          version: representative.scopeVersion,
+        },
+        spans,
       });
-    }
-
-    let resourceAttrs: Record<string, unknown> = {};
-    if (spans.length > 0 && spans[0].resource?.attributes) {
-      resourceAttrs = { ...spans[0].resource.attributes };
     }
 
     return {
