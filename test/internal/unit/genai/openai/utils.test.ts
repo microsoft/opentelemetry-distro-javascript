@@ -242,9 +242,7 @@ describe("OpenAI Utils", () => {
 
   describe("buildStructuredInputMessages", () => {
     it("wraps input messages in structured format", () => {
-      const messages = [
-        { role: "user", content: "Hello" },
-      ];
+      const messages = [{ role: "user", content: "Hello" }];
       const result = buildStructuredInputMessages(messages);
       assert.ok(result.version);
       assert.ok(result.messages.length > 0);

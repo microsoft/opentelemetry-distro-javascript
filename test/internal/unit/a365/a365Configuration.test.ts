@@ -27,7 +27,9 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.enabled, false);
       assert.strictEqual(config.clusterCategory, "prod");
       assert.strictEqual(config.domainOverride, undefined);
-      assert.deepStrictEqual(config.authScopes, ["api://9b975845-388f-4429-889e-eab1ef63949c/.default"]);
+      assert.deepStrictEqual(config.authScopes, [
+        "api://9b975845-388f-4429-889e-eab1ef63949c/.default",
+      ]);
       assert.strictEqual(config.tokenResolver, undefined);
     });
   });

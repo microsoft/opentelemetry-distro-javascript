@@ -70,7 +70,9 @@ export class ResolvedExporterOptions {
     this.tokenResolver = options?.tokenResolver;
     this.useS2SEndpoint = options?.useS2SEndpoint ?? false;
     this.domainOverride = options?.domainOverride;
-    this.authScopes = options?.authScopes ?? ["api://9b975845-388f-4429-889e-eab1ef63949c/.default"];
+    this.authScopes = options?.authScopes ?? [
+      "api://9b975845-388f-4429-889e-eab1ef63949c/.default",
+    ];
     this.maxQueueSize = options?.maxQueueSize ?? 2048;
     this.scheduledDelayMilliseconds = options?.scheduledDelayMilliseconds ?? 5000;
     this.exporterTimeoutMilliseconds = options?.exporterTimeoutMilliseconds ?? 90000;

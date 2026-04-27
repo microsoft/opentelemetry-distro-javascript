@@ -25,14 +25,8 @@ import {
   GEN_AI_OPERATION_EXECUTE_TOOL,
   GEN_AI_OPERATION_INVOKE_AGENT,
 } from "../../index.js";
-import {
-  serializeMessages,
-  safeSerializeToJson,
-} from "../../../a365/message-utils.js";
-import {
-  MessageRole,
-  A365_MESSAGE_SCHEMA_VERSION,
-} from "../../../a365/contracts.js";
+import { serializeMessages, safeSerializeToJson } from "../../../a365/message-utils.js";
+import { MessageRole, A365_MESSAGE_SCHEMA_VERSION } from "../../../a365/contracts.js";
 import type {
   ChatMessage,
   OutputMessage,
@@ -92,9 +86,7 @@ export function setToolAttributes(run: Run, span: Span) {
     span.setAttribute(
       ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
       safeSerializeToJson(
-        typeof argsValue === "object"
-          ? (argsValue as Record<string, unknown>)
-          : String(argsValue),
+        typeof argsValue === "object" ? (argsValue as Record<string, unknown>) : String(argsValue),
         "arguments",
       ),
     );

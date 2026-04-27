@@ -15,14 +15,8 @@ import {
   GEN_AI_OPERATION_EXECUTE_TOOL,
   GEN_AI_OPERATION_INVOKE_AGENT,
 } from "../../index.js";
-import {
-  serializeMessages,
-  safeSerializeToJson,
-} from "../../../a365/message-utils.js";
-import {
-  MessageRole,
-  A365_MESSAGE_SCHEMA_VERSION,
-} from "../../../a365/contracts.js";
+import { serializeMessages, safeSerializeToJson } from "../../../a365/message-utils.js";
+import { MessageRole, A365_MESSAGE_SCHEMA_VERSION } from "../../../a365/contracts.js";
 import type {
   ChatMessage,
   OutputMessage,
@@ -47,9 +41,10 @@ import {
  * - Chat Completions: { prompt_tokens, completion_tokens }
  * Usage may live directly on the span data, on `.output`, or inside `.output[0]`.
  */
-export function extractUsageTokens(
-  data: Record<string, unknown>,
-): { inputTokens?: number; outputTokens?: number } {
+export function extractUsageTokens(data: Record<string, unknown>): {
+  inputTokens?: number;
+  outputTokens?: number;
+} {
   const candidates: Array<Record<string, unknown> | undefined> = [];
   const direct = data.usage as Record<string, unknown> | undefined;
   candidates.push(direct);
@@ -365,10 +360,7 @@ function getToolCallId(block: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
-function wrapRawContentAsMessages(
-  raw: unknown,
-  role: MessageRole,
-): InputMessages | OutputMessages {
+function wrapRawContentAsMessages(raw: unknown, role: MessageRole): InputMessages | OutputMessages {
   const content = typeof raw === "string" ? raw : safeJsonDumps(raw);
   return {
     version: A365_MESSAGE_SCHEMA_VERSION,
@@ -444,9 +436,7 @@ function mapOutputContentBlock(block: Record<string, unknown>): MessagePart {
  * Build structured InputMessages from an OpenAI _input message array.
  * Includes all roles (system, user, assistant, tool).
  */
-export function buildStructuredInputMessages(
-  arr: OpenAIInputMessage[],
-): InputMessages {
+export function buildStructuredInputMessages(arr: OpenAIInputMessage[]): InputMessages {
   const messages: ChatMessage[] = [];
 
   for (const msg of arr) {
@@ -472,9 +462,7 @@ export function buildStructuredInputMessages(
 /**
  * Build structured OutputMessages from an OpenAI response.output array.
  */
-export function buildStructuredOutputMessages(
-  arr: OpenAIOutputItem[],
-): OutputMessages {
+export function buildStructuredOutputMessages(arr: OpenAIOutputItem[]): OutputMessages {
   const messages: OutputMessage[] = [];
 
   for (const item of arr) {

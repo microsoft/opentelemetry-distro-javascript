@@ -78,9 +78,7 @@ export function partitionByIdentity(spans: ReadableSpan[]): Map<string, Readable
   }
 
   if (nonGenAICount > 0) {
-    Logger.getInstance().info(
-      `[Agent365Exporter] ${nonGenAICount} non-genAI spans filtered out`,
-    );
+    Logger.getInstance().info(`[Agent365Exporter] ${nonGenAICount} non-genAI spans filtered out`);
   }
 
   if (missingIdentityCount > 0) {

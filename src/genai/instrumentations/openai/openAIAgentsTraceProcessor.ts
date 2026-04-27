@@ -35,10 +35,7 @@ import {
 } from "../../index.js";
 
 import { serializeMessages } from "../../../a365/message-utils.js";
-import {
-  GEN_AI_RESPONSE_CONTENT_KEY,
-  GEN_AI_EXECUTION_PAYLOAD_KEY,
-} from "./semconv.js";
+import { GEN_AI_RESPONSE_CONTENT_KEY, GEN_AI_EXECUTION_PAYLOAD_KEY } from "./semconv.js";
 import * as Utils from "./utils.js";
 
 type ContextToken = unknown;
@@ -299,17 +296,11 @@ export class OpenAIAgentsTraceProcessor implements TracingProcessor {
           const structured = Utils.buildStructuredOutputMessages(
             resp.output as Array<Record<string, unknown>>,
           );
-          otelSpan.setAttribute(
-            ATTR_GEN_AI_OUTPUT_MESSAGES,
-            serializeMessages(structured),
-          );
+          otelSpan.setAttribute(ATTR_GEN_AI_OUTPUT_MESSAGES, serializeMessages(structured));
         } else {
           // String or non-array object — wrap as raw content
           const structured = Utils.wrapRawContentAsOutputMessages(resp.output);
-          otelSpan.setAttribute(
-            ATTR_GEN_AI_OUTPUT_MESSAGES,
-            serializeMessages(structured),
-          );
+          otelSpan.setAttribute(ATTR_GEN_AI_OUTPUT_MESSAGES, serializeMessages(structured));
         }
       }
 
@@ -331,45 +322,29 @@ export class OpenAIAgentsTraceProcessor implements TracingProcessor {
           const parsed = JSON.parse(inputObj as string);
           if (Array.isArray(parsed)) {
             const structured = Utils.buildStructuredInputMessages(parsed);
-            otelSpan.setAttribute(
-              ATTR_GEN_AI_INPUT_MESSAGES,
-              serializeMessages(structured),
-            );
+            otelSpan.setAttribute(ATTR_GEN_AI_INPUT_MESSAGES, serializeMessages(structured));
             return;
           }
         } catch {
           // If parsing fails, wrap raw string in versioned envelope
         }
         const wrappedInput = Utils.wrapRawContentAsInputMessages(inputObj);
-        otelSpan.setAttribute(
-          ATTR_GEN_AI_INPUT_MESSAGES,
-          serializeMessages(wrappedInput),
-        );
+        otelSpan.setAttribute(ATTR_GEN_AI_INPUT_MESSAGES, serializeMessages(wrappedInput));
       } else if (Array.isArray(inputObj)) {
         const structured = Utils.buildStructuredInputMessages(inputObj);
-        otelSpan.setAttribute(
-          ATTR_GEN_AI_INPUT_MESSAGES,
-          serializeMessages(structured),
-        );
+        otelSpan.setAttribute(ATTR_GEN_AI_INPUT_MESSAGES, serializeMessages(structured));
       }
     }
   }
 
-  private processGenerationSpanData(
-    otelSpan: OtelSpan,
-    data: SpanData,
-    traceId: string,
-  ): void {
+  private processGenerationSpanData(otelSpan: OtelSpan, data: SpanData, traceId: string): void {
     const attrs = Utils.getAttributesFromGenerationSpanData(data);
     Object.entries(attrs).forEach(([key, value]) => {
       const shouldExcludeKey = key === GEN_AI_EXECUTION_PAYLOAD_KEY;
       if (value !== null && value !== undefined && !shouldExcludeKey) {
         const newKey = this.getNewKey(data.type, key);
         const resolvedKey = newKey || key;
-        if (
-          resolvedKey !== ATTR_GEN_AI_INPUT_MESSAGES ||
-          !this.suppressInvokeAgentInput
-        ) {
+        if (resolvedKey !== ATTR_GEN_AI_INPUT_MESSAGES || !this.suppressInvokeAgentInput) {
           otelSpan.setAttribute(resolvedKey, value as string | number | boolean);
         }
       }
@@ -383,11 +358,7 @@ export class OpenAIAgentsTraceProcessor implements TracingProcessor {
     }
   }
 
-  private processFunctionSpanData(
-    otelSpan: OtelSpan,
-    data: SpanData,
-    traceId: string,
-  ): void {
+  private processFunctionSpanData(otelSpan: OtelSpan, data: SpanData, traceId: string): void {
     const functionData = data as Record<string, unknown>;
     const attrs = Utils.getAttributesFromFunctionSpanData(data);
     Object.entries(attrs).forEach(([key, value]) => {

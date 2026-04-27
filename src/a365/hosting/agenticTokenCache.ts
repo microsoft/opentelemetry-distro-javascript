@@ -55,7 +55,9 @@ export class AgenticTokenCache {
     if (envScopes) {
       this._authScopes = envScopes.split(/\s+/).filter(Boolean);
     } else {
-      this._authScopes = options?.authScopes ?? ["api://9b975845-388f-4429-889e-eab1ef63949c/.default"];
+      this._authScopes = options?.authScopes ?? [
+        "api://9b975845-388f-4429-889e-eab1ef63949c/.default",
+      ];
     }
   }
 

@@ -145,9 +145,7 @@ export class LangChainTraceInstrumentor {
    * @param module The CallbackManager module to instrument
    * @param options Optional configuration options
    */
-  static instrument(
-    module: CallbackManagerModuleType,
-  ): void {
+  static instrument(module: CallbackManagerModuleType): void {
     LangChainTraceInstrumentorImpl.getInstance().manuallyInstrumentImpl(module);
   }
 

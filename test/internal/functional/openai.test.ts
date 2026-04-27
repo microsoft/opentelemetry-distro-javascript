@@ -38,9 +38,7 @@ let provider: BasicTracerProvider;
 let exporter: InMemorySpanExporter;
 let processor: OpenAIAgentsTraceProcessor;
 
-function setup(options?: {
-  suppressInvokeAgentInput?: boolean;
-}) {
+function setup(options?: { suppressInvokeAgentInput?: boolean }) {
   exporter = new InMemorySpanExporter();
   provider = new BasicTracerProvider({
     spanProcessors: [new SimpleSpanProcessor(exporter)],
