@@ -103,8 +103,6 @@ useMicrosoftOpenTelemetry({
 });
 ```
 
-For Azure Monitor-specific configuration patterns and troubleshooting, see [AZURE_MONITOR_DOCUMENTATION.md](./AZURE_MONITOR_DOCUMENTATION.md).
-
 ### OTLP only (no Azure Monitor)
 
 ```typescript

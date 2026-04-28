@@ -221,7 +221,7 @@ A365 core variables:
 | `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated OAuth scopes |
 | `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override A365 service domain |
 | `CLUSTER_CATEGORY` | Cluster category: `prod`, `dev`, `test` |
-| `A365_OBSERVABILITY_LOG_LEVEL` | A365 log filter: `none`, `info`, `warn`, `error` |
+| `A365_OBSERVABILITY_LOG_LEVEL` | A365 log filter: `none`, `info`, `warn`, `error`, or pipe-separated combinations such as `info\|warn\|error` |
 
 ---
 
