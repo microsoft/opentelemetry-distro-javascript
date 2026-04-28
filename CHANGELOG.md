@@ -7,13 +7,14 @@
 First beta release. Promotes all functionality from the 0.1.0-alpha series.
 
 ### Breaking Changes
-- When A365 export is enabled (`a365.enabled=true` or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`), non-GenAI instrumentations are now disabled by default unless explicitly enabled in `instrumentationOptions`. ([#79](https://github.com/microsoft/opentelemetry-distro-javascript/pull/79))
+- When A365 is enabled through configured A365 options, non-GenAI instrumentations are now disabled by default unless explicitly enabled in `instrumentationOptions`. `ENABLE_A365_OBSERVABILITY_EXPORTER` no longer activates A365 on its own; it only toggles the exporter within an already-configured A365 setup. ([#79](https://github.com/microsoft/opentelemetry-distro-javascript/pull/79))
 - Align GenAI instrumentations with A365 observability schema: use structured message format, update span kinds and attributes (`gen_ai.agent.name`, `gen_ai.conversation.id`, `error.type`), and remove `isContentRecordingEnabled` option (content is now always recorded). ([#75](https://github.com/microsoft/opentelemetry-distro-javascript/pull/75))
 
 ### Features Added
 - Add ESM loader entrypoint (`@microsoft/opentelemetry/loader`) and document ESM support. ([#74](https://github.com/microsoft/opentelemetry-distro-javascript/pull/74))
 
 ### Bugs Fixed
+- `ENABLE_A365_OBSERVABILITY_EXPORTER` environment variable no longer activates A365 on its own. A365 options must be provided in code; the env var only toggles the exporter within an already-configured A365 setup. ([#43](https://github.com/microsoft/opentelemetry-distro-javascript/issues/43))
 - Fix `Agent365Exporter` not emitting `[EVENT]:` export outcome logs to a logger configured via `configureA365Logger` after the exporter was constructed. The exporter previously cached the logger snapshot at construction time, so the distro-bootstrapped exporter never picked up partner-supplied loggers. ([#81](https://github.com/microsoft/opentelemetry-distro-javascript/pull/81))
 - Register `A365SpanProcessor` for console fallback path so `telemetry.sdk.*` attributes and baggage-to-span enrichment are present when the A365 exporter is disabled. ([#78](https://github.com/microsoft/opentelemetry-distro-javascript/pull/78))
 - Restore `AgenticTokenCache` that was accidentally removed in #66. ([#77](https://github.com/microsoft/opentelemetry-distro-javascript/pull/77))

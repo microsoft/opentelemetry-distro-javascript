@@ -217,7 +217,7 @@ A365 core variables:
 
 | Variable | Description |
 |---|---|
-| `ENABLE_A365_OBSERVABILITY_EXPORTER` | Enable/disable A365 export |
+| `ENABLE_A365_OBSERVABILITY_EXPORTER` | Secondary toggle for A365 export; only takes effect when `a365` options are provided in code. Cannot activate A365 on its own. |
 | `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated OAuth scopes |
 | `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override A365 service domain |
 | `CLUSTER_CATEGORY` | Cluster category: `prod`, `dev`, `test` |
