@@ -214,8 +214,8 @@ useMicrosoftOpenTelemetry({
 Behavior:
 
 - `enableConsoleExporters: true`: always enable console exporters (traces, metrics, logs).
-- `enableConsoleExporters: false`: do not auto-add the standard console exporters, except for the A365 span console fallback when `a365` options are provided but `a365.enabled` is `false` or omitted.
-- Omitted: console exporters auto-enable only when no other exporter path is active; if `a365` options are provided but `a365.enabled` is `false` or omitted, the A365 span console fallback can still be added.
+- `enableConsoleExporters: false`: do not auto-add the standard console exporters.
+- Omitted: console exporters auto-enable only when no other exporter path is active.
 
 ### `azureMonitor` options
 

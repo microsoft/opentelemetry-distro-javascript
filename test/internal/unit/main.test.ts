@@ -988,8 +988,7 @@ describe("Main functions", () => {
     await shutdownMicrosoftOpenTelemetry();
   });
 
-  it("registers A365SpanProcessor when A365 exporter is disabled but a365 options are provided", async () => {
-    process.env.ENABLE_A365_OBSERVABILITY_EXPORTER = "false";
+  it("does not register A365 components when a365.enabled is false", async () => {
     useMicrosoftOpenTelemetry({
       azureMonitor: { enabled: false },
       enableConsoleExporters: false,
@@ -1010,21 +1009,46 @@ describe("Main functions", () => {
       (processor: any) => processor.constructor?.name === "A365SpanProcessor",
     );
 
-    assert.isDefined(
+    assert.isUndefined(
       a365SpanProcessor,
-      "Expected A365SpanProcessor to be registered even when A365 exporter is disabled",
+      "A365SpanProcessor should not be registered when a365.enabled is false",
     );
 
-    // Should also have a ConsoleSpanExporter fallback
-    const consoleProcessor = registeredProcessors.find(
+    const a365Exporter = registeredProcessors.find(
       (processor: any) =>
-        processor.constructor?.name === "SimpleSpanProcessor" &&
-        processor["_exporter"]?.constructor?.name === "ConsoleSpanExporter",
+        processor.constructor?.name === "BatchSpanProcessor" &&
+        processor["_exporter"]?.constructor?.name === "Agent365Exporter",
     );
 
-    assert.isDefined(
-      consoleProcessor,
-      "Expected ConsoleSpanExporter fallback when A365 exporter is disabled",
+    assert.isUndefined(
+      a365Exporter,
+      "Agent365Exporter should not be registered when a365.enabled is false",
+    );
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("ENABLE_A365_OBSERVABILITY_EXPORTER env var alone does not activate A365", async () => {
+    process.env.ENABLE_A365_OBSERVABILITY_EXPORTER = "true";
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const a365SpanProcessor = registeredProcessors.find(
+      (processor: any) => processor.constructor?.name === "A365SpanProcessor",
+    );
+
+    assert.isUndefined(
+      a365SpanProcessor,
+      "A365SpanProcessor should not be registered when only env var is set without a365 options",
     );
 
     delete process.env.ENABLE_A365_OBSERVABILITY_EXPORTER;
