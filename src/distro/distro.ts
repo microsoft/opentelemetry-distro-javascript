@@ -40,7 +40,10 @@ import type {
   StatsbeatFeatures,
   StatsbeatInstrumentations,
 } from "../types.js";
-import { MICROSOFT_OPENTELEMETRY_VERSION, APPLICATIONINSIGHTS_SDKSTATS_DISABLED } from "../types.js";
+import {
+  MICROSOFT_OPENTELEMETRY_VERSION,
+  APPLICATIONINSIGHTS_SDKSTATS_DISABLED,
+} from "../types.js";
 import { createInstrumentations, createSampler, createViews } from "./instrumentations.js";
 import { Logger } from "../shared/logging/index.js";
 
@@ -167,7 +170,14 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     winston: config.instrumentationOptions?.winston?.enabled,
   };
   const statsbeatFeatures: StatsbeatFeatures = {
-    ...(azureMonitorEnabled ? getAzureMonitorStatsbeatFeatures(config) : {}),
+    ...(azureMonitorEnabled
+      ? getAzureMonitorStatsbeatFeatures(config)
+      : {
+          browserSdkLoader: false,
+          aadHandling: false,
+          diskRetry: false,
+          aksResourceDetectorPopulation: false,
+        }),
     a365: a365Config.enabled,
     otlp: otlpActive,
     customerSdkStats: process.env[APPLICATIONINSIGHTS_SDKSTATS_DISABLED]?.toLowerCase() === "true",
