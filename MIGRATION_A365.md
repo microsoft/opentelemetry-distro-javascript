@@ -149,7 +149,62 @@ useMicrosoftOpenTelemetry({
 
 ---
 
-## 7) Middleware migration
+## 7) Filtering spans with a custom SpanProcessor
+
+By default, when using `enableConsoleExporters: true` or other generic exporters, **all** spans are exported — including framework-level spans (`agents.app.*`, `agents.turn.*`, `agents.connector.*`, etc.). The A365 exporter already filters to only the supported observability scopes, but console or OTLP exporters do not.
+
+To limit output to only the 4 A365 observability scope types, register a custom `SpanProcessor` that marks non-A365 spans as unsampled so they are not exported:
+
+```typescript
+import { TraceFlags } from "@opentelemetry/api";
+import { Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+
+const A365_OPERATIONS = new Set([
+  "invoke_agent",
+  "chat",
+  "execute_tool",
+  "output_messages",
+]);
+
+class A365OnlySpanProcessor implements SpanProcessor {
+  onStart(_span: Span): void {}
+
+  onEnd(span: Span): void {
+    const op = span.attributes["gen_ai.operation.name"];
+    if (!op || !A365_OPERATIONS.has(op as string)) {
+      // Mark non-A365 spans as NONE so exporters skip them
+      span.spanContext().traceFlags = TraceFlags.NONE;
+    }
+  }
+
+  forceFlush(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  shutdown(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+```
+
+Usage:
+
+```typescript
+useMicrosoftOpenTelemetry({
+  a365: {
+    enabled: true,
+    tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId),
+  },
+  spanProcessors: [new A365OnlySpanProcessor()],
+});
+```
+
+> **Note:** The A365 exporter (`Agent365Exporter`) already filters to known `gen_ai.operation.name` values internally. This pattern is only needed when you want other exporters (console, OTLP, etc.) to show only A365 scopes.
+
+---
+
+## 8) Middleware migration
 
 ### Before
 
@@ -187,7 +242,7 @@ new ObservabilityHostingManager().configure(adapter, {
 
 ---
 
-## 8) Logging level migration
+## 9) Logging level migration
 
 | Old | New |
 |---|---|
@@ -211,7 +266,7 @@ set AZURE_LOG_LEVEL=info
 
 ---
 
-## 9) Environment variables
+## 10) Environment variables
 
 A365 core variables:
 
@@ -225,7 +280,7 @@ A365 core variables:
 
 ---
 
-## 10) Migration checklist
+## 11) Migration checklist
 
 **Packages & initialization:**
 - [ ] Replace `@microsoft/agents-a365-observability` with `@microsoft/opentelemetry`
