@@ -1249,4 +1249,39 @@ describe("Main functions", () => {
 
     await shutdownMicrosoftOpenTelemetry();
   });
+
+  it("initializes GenAI instrumentations by default when instrumentationOptions is omitted", async () => {
+    const openaiSpy = vi.spyOn(OpenAIAgentsTraceInstrumentor, "instrument");
+    const langchainSpy = vi.spyOn(LangChainTraceInstrumentor, "instrument");
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+    });
+
+    await vi.waitFor(() => {
+      expect(openaiSpy).toHaveBeenCalled();
+      expect(langchainSpy).toHaveBeenCalled();
+    });
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("initializes GenAI instrumentations by default when instrumentationOptions is empty", async () => {
+    const openaiSpy = vi.spyOn(OpenAIAgentsTraceInstrumentor, "instrument");
+    const langchainSpy = vi.spyOn(LangChainTraceInstrumentor, "instrument");
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      instrumentationOptions: {},
+    });
+
+    await vi.waitFor(() => {
+      expect(openaiSpy).toHaveBeenCalled();
+      expect(langchainSpy).toHaveBeenCalled();
+    });
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
 });

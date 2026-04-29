@@ -294,9 +294,9 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   // Initialize GenAI instrumentations after providers are registered so any
   // tracer they capture is backed by the active SDK provider.
   // When A365 defaults were applied, use the resolved config so GenAI
-  // instrumentations are active by default even if the caller omitted
-  // instrumentationOptions. Otherwise honour the caller's original options
-  // to avoid initializing GenAI when it was not requested.
+  // instrumentations honour any A365-specific overrides. Otherwise pass the
+  // caller's original options (GenAI instrumentations are enabled by default
+  // unless explicitly disabled).
   initializeGenAIInstrumentations(
     applyA365Defaults ? config.instrumentationOptions : options?.instrumentationOptions,
   );
@@ -323,13 +323,13 @@ export function _getSdkInstance(): NodeSDK | undefined {
 
 function initializeGenAIInstrumentations(options?: InstrumentationOptions): void {
   const openAIOptions = options?.openaiAgents;
-  if (openAIOptions && openAIOptions.enabled !== false) {
-    void initializeOpenAIAgentsInstrumentation(openAIOptions);
+  if (openAIOptions?.enabled !== false) {
+    void initializeOpenAIAgentsInstrumentation(openAIOptions ?? {});
   }
 
   const langChainOptions = options?.langchain;
-  if (langChainOptions && langChainOptions.enabled !== false) {
-    void initializeLangChainInstrumentation(langChainOptions);
+  if (langChainOptions?.enabled !== false) {
+    void initializeLangChainInstrumentation(langChainOptions ?? {});
   }
 }
 
