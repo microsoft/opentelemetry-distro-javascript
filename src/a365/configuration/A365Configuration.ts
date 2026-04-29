@@ -95,8 +95,12 @@ export class A365Configuration {
     }
 
     // 3. Apply environment variable overrides (highest precedence)
+    // The exporter env var is a secondary toggle that only takes effect when
+    // A365 is configured in code (options provided). It must not bootstrap
+    // A365 mode on its own — matching upstream Agent365-nodejs behavior where
+    // the env var is only read inside Builder.build().
     const envEnabled = parseEnvBoolean(process.env[A365_ENV_VARS.EXPORTER_ENABLED]);
-    if (envEnabled !== undefined) {
+    if (envEnabled !== undefined && options !== undefined) {
       enabled = envEnabled;
     }
 
@@ -141,7 +145,8 @@ export class A365Configuration {
     if (hasNonTrivialOptions) {
       getA365Logger().warn(
         "A365 configuration options are set but A365 is not enabled. " +
-          "Set `a365.enabled: true` or `ENABLE_A365_OBSERVABILITY_EXPORTER=true` to enable.",
+          "Set `a365.enabled: true` or set `ENABLE_A365_OBSERVABILITY_EXPORTER=true` " +
+          "(the env var only takes effect when a365 options are provided in code).",
       );
     }
   }
