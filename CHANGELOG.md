@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-30
+
+First stable (GA) release. Promotes all functionality from the 0.1.0-beta series.
+
+### Bugs Fixed
+- `ENABLE_A365_OBSERVABILITY_EXPORTER` environment variable now correctly acts only as a secondary toggle within an already-configured A365 setup, preventing it from silently disabling HTTP instrumentation or creating a broken exporter. ([#83](https://github.com/microsoft/opentelemetry-distro-javascript/pull/83))
+
+### Other Changes
+- Documentation updates for A365 observability. ([#82](https://github.com/microsoft/opentelemetry-distro-javascript/pull/82))
+
 ## [0.1.0-beta.1] - 2026-04-27
 
 First beta release. Promotes all functionality from the 0.1.0-alpha series.
