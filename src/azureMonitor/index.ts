@@ -8,11 +8,9 @@
  */
 
 import type { InternalConfig } from "../shared/config.js";
-import type { StatsbeatFeatures, StatsbeatInstrumentations } from "../types.js";
-import { APPLICATIONINSIGHTS_SDKSTATS_DISABLED } from "../types.js";
+import type { StatsbeatFeatures } from "../types.js";
 import { BrowserSdkLoader } from "./browserSdkLoader/browserSdkLoader.js";
 import { setSdkPrefix } from "./metrics/quickpulse/utils.js";
-import { getInstance } from "./utils/statsbeat.js";
 import { Logger } from "../shared/logging/index.js";
 import { SEMRESATTRS_K8S_CLUSTER_NAME } from "@opentelemetry/semantic-conventions";
 
@@ -55,35 +53,31 @@ export function validateAzureMonitorConfig(config: InternalConfig): boolean {
 }
 
 /**
- * Set up Azure Monitor–specific components (statsbeat, browser SDK loader,
+ * Compute Azure Monitor–specific statsbeat features from the config.
+ * Does not write to the env var — the caller consolidates all features.
+ *
+ * @internal
+ */
+export function getAzureMonitorStatsbeatFeatures(config: InternalConfig): StatsbeatFeatures {
+  const resourceAttributes = config.resource.attributes;
+  const aksResourceDetected =
+    SEMRESATTRS_K8S_CLUSTER_NAME in resourceAttributes ||
+    CLOUD_RESOURCE_ID_ATTRIBUTE in resourceAttributes;
+  return {
+    browserSdkLoader: config.browserSdkLoaderOptions.enabled,
+    aadHandling: !!config.azureMonitorExporterOptions?.credential,
+    diskRetry: !config.azureMonitorExporterOptions?.disableOfflineStorage,
+    aksResourceDetectorPopulation: aksResourceDetected,
+  };
+}
+
+/**
+ * Set up Azure Monitor–specific components (browser SDK loader,
  * live-metrics SDK prefix). Returns a dispose callback for shutdown.
  *
  * @internal
  */
 export function setupAzureMonitorComponents(config: InternalConfig): () => void {
-  // ── Statsbeat ─────────────────────────────────────────────────────
-  const statsbeatInstrumentations: StatsbeatInstrumentations = {
-    azureSdk: config.instrumentationOptions?.azureSdk?.enabled,
-    mongoDb: config.instrumentationOptions?.mongoDb?.enabled,
-    mySql: config.instrumentationOptions?.mySql?.enabled,
-    postgreSql: config.instrumentationOptions?.postgreSql?.enabled,
-    redis: config.instrumentationOptions?.redis?.enabled,
-    bunyan: config.instrumentationOptions?.bunyan?.enabled,
-    winston: config.instrumentationOptions?.winston?.enabled,
-  };
-  const resourceAttributes = config.resource.attributes;
-  const aksResourceDetected =
-    SEMRESATTRS_K8S_CLUSTER_NAME in resourceAttributes ||
-    CLOUD_RESOURCE_ID_ATTRIBUTE in resourceAttributes;
-  const statsbeatFeatures: StatsbeatFeatures = {
-    browserSdkLoader: config.browserSdkLoaderOptions.enabled,
-    aadHandling: !!config.azureMonitorExporterOptions?.credential,
-    diskRetry: !config.azureMonitorExporterOptions?.disableOfflineStorage,
-    customerSdkStats: process.env[APPLICATIONINSIGHTS_SDKSTATS_DISABLED]?.toLowerCase() === "true",
-    aksResourceDetectorPopulation: aksResourceDetected,
-  };
-  getInstance().setStatsbeatFeatures(statsbeatInstrumentations, statsbeatFeatures);
-
   // ── Browser SDK Loader ────────────────────────────────────────────
   let browserSdkLoader: BrowserSdkLoader | undefined;
   if (config.browserSdkLoaderOptions.enabled) {

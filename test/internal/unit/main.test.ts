@@ -25,7 +25,7 @@ import {
 import { getOsPrefix } from "../../../src/azureMonitor/utils/common.js";
 import type { ReadableSpan, Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordProcessor, SdkLogRecord } from "@opentelemetry/sdk-logs";
-import { getInstance } from "../../../src/azureMonitor/utils/statsbeat.js";
+import { getInstance } from "../../../src/utils/statsbeat.js";
 import type { Instrumentation, InstrumentationConfig } from "@opentelemetry/instrumentation";
 import { describe, it, beforeEach, afterEach, expect, assert, vi, afterAll } from "vitest";
 import { OpenAIAgentsTraceInstrumentor } from "../../../src/genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js";
@@ -897,13 +897,112 @@ describe("Main functions", () => {
       }
     }
 
-    // Azure Monitor statsbeat env var should not have any Azure Monitor-specific features
+    // Azure Monitor statsbeat env var should reflect OTLP-only scenario
     const statsbeatRaw = process.env["AZURE_MONITOR_STATSBEAT_FEATURES"];
     if (statsbeatRaw) {
       const statsbeat = JSON.parse(statsbeatRaw);
-      // DISTRO feature should NOT be set when Azure Monitor is not configured
-      expect(statsbeat.feature & 8).toBe(0); // 8 = StatsbeatFeature.DISTRO
+      // DISTRO feature SHOULD be set — the distro is being used regardless of backend
+      expect(statsbeat.feature & StatsbeatFeature.DISTRO).toBeTruthy();
+      // OTLP feature should be set
+      expect(statsbeat.feature & StatsbeatFeature.OTLP).toBeTruthy();
     }
+
+    void shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("should set A365 feature bit in statsbeat when A365 is enabled", () => {
+    const env = <{ [id: string]: string }>{};
+    process.env = env;
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        tokenResolver: () => "tok",
+      },
+    });
+
+    const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
+    const features = Number(output.feature);
+    assert.ok(features & StatsbeatFeature.A365, "A365 feature bit should be set");
+
+    void shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("should not set A365 feature bit when A365 is disabled", () => {
+    const env = <{ [id: string]: string }>{};
+    process.env = env;
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+    });
+
+    const raw = process.env[AZURE_MONITOR_STATSBEAT_FEATURES];
+    if (raw) {
+      const output = JSON.parse(raw);
+      const features = Number(output.feature);
+      assert.notOk(features & StatsbeatFeature.A365, "A365 feature bit should not be set");
+    }
+
+    void shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("should set OTLP feature bit in statsbeat when OTLP endpoint is configured", () => {
+    const env = <{ [id: string]: string }>{};
+    env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318";
+    process.env = env;
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+    });
+
+    const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
+    const features = Number(output.feature);
+    assert.ok(features & StatsbeatFeature.OTLP, "OTLP feature bit should be set");
+
+    void shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("should not set OTLP feature bit when no OTLP endpoint is configured", () => {
+    const env = <{ [id: string]: string }>{};
+    process.env = env;
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
+      },
+    });
+
+    const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
+    const features = Number(output.feature);
+    assert.notOk(features & StatsbeatFeature.OTLP, "OTLP feature bit should not be set");
+
+    void shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("should set both A365 and OTLP feature bits when both are active", () => {
+    const env = <{ [id: string]: string }>{};
+    env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318";
+    process.env = env;
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        tokenResolver: () => "tok",
+      },
+    });
+
+    const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
+    const features = Number(output.feature);
+    assert.ok(features & StatsbeatFeature.A365, "A365 feature bit should be set");
+    assert.ok(features & StatsbeatFeature.OTLP, "OTLP feature bit should be set");
 
     void shutdownMicrosoftOpenTelemetry();
   });

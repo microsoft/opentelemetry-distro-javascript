@@ -6,14 +6,13 @@ import type {
   StatsbeatFeatures,
   StatsbeatInstrumentations,
   StatsbeatOption,
-} from "../../types.js";
+} from "../types.js";
 import {
   AZURE_MONITOR_STATSBEAT_FEATURES,
   StatsbeatFeature,
   StatsbeatFeaturesMap,
   StatsbeatInstrumentation,
-} from "../../types.js";
-import { Logger as InternalLogger } from "../../shared/logging/index.js";
+} from "../types.js";
 
 let instance: StatsbeatConfiguration;
 
@@ -32,11 +31,8 @@ class StatsbeatConfiguration {
       ) {
         this.initializedByShim = true;
       }
-    } catch (error) {
-      InternalLogger.getInstance().error(
-        "Failed to parse statsbeat config environment variable.",
-        error,
-      );
+    } catch (_error) {
+      // Fail silently — statsbeat is best-effort
     }
   }
 
@@ -47,11 +43,9 @@ class StatsbeatConfiguration {
     let statsbeatEnv: StatsbeatEnvironmentConfig;
     try {
       statsbeatEnv = JSON.parse(process.env[AZURE_MONITOR_STATSBEAT_FEATURES] || "{}");
-    } catch (error) {
-      InternalLogger.getInstance().error(
-        "Failed to parse statsbeat config environment variable.",
-        error,
-      );
+    } catch (_error) {
+      // Fail silently — statsbeat is best-effort
+      return;
     }
     this.currentStatsbeatInstrumentations = {
       ...this.currentStatsbeatInstrumentations,
@@ -148,8 +142,8 @@ class StatsbeatConfiguration {
         instrumentation: instrumentationBitMap,
         feature: featureBitMap,
       });
-    } catch (error) {
-      InternalLogger.getInstance().error("Failed call to JSON.stringify.", error);
+    } catch (_error) {
+      // Fail silently — statsbeat is best-effort
     }
   };
 }

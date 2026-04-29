@@ -17,3 +17,5 @@ export {
   unlinkAsync,
 } from "./fileSystem.js";
 export { isFunctionApp, parseResourceDetectorsFromEnvVar } from "./common.js";
+export { getInstance } from "./statsbeat.js";
+export { patchOpenTelemetryInstrumentationEnable } from "./opentelemetryInstrumentationPatcher.js";

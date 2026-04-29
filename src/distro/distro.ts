@@ -21,12 +21,14 @@ import { MetricHandler } from "../azureMonitor/metrics/index.js";
 import { TraceHandler } from "../azureMonitor/traces/handler.js";
 import { LogHandler } from "../azureMonitor/logs/index.js";
 import { AZURE_MONITOR_OPENTELEMETRY_VERSION } from "../types.js";
-import { patchOpenTelemetryInstrumentationEnable } from "../azureMonitor/utils/opentelemetryInstrumentationPatcher.js";
+import { patchOpenTelemetryInstrumentationEnable } from "../utils/opentelemetryInstrumentationPatcher.js";
 import { parseResourceDetectorsFromEnvVar } from "../utils/common.js";
+import { getInstance as getStatsbeatInstance } from "../utils/statsbeat.js";
 import {
   setupAzureMonitorComponents,
   hasAzureMonitorConnectionString,
   validateAzureMonitorConfig,
+  getAzureMonitorStatsbeatFeatures,
 } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
@@ -35,8 +37,10 @@ import type {
   InstrumentationOptions,
   OpenAIAgentsInstrumentationConfig,
   LangChainInstrumentationConfig,
+  StatsbeatFeatures,
+  StatsbeatInstrumentations,
 } from "../types.js";
-import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
+import { MICROSOFT_OPENTELEMETRY_VERSION, APPLICATIONINSIGHTS_SDKSTATS_DISABLED } from "../types.js";
 import { createInstrumentations, createSampler, createViews } from "./instrumentations.js";
 import { Logger } from "../shared/logging/index.js";
 
@@ -151,6 +155,25 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     disposeAzureMonitor = setupAzureMonitorComponents(config);
   }
 
+  // ── Statsbeat (feature & instrumentation tracking for all paths) ──
+  const otlpActive = isOtlpEnabled();
+  const statsbeatInstrumentations: StatsbeatInstrumentations = {
+    azureSdk: config.instrumentationOptions?.azureSdk?.enabled,
+    mongoDb: config.instrumentationOptions?.mongoDb?.enabled,
+    mySql: config.instrumentationOptions?.mySql?.enabled,
+    postgreSql: config.instrumentationOptions?.postgreSql?.enabled,
+    redis: config.instrumentationOptions?.redis?.enabled,
+    bunyan: config.instrumentationOptions?.bunyan?.enabled,
+    winston: config.instrumentationOptions?.winston?.enabled,
+  };
+  const statsbeatFeatures: StatsbeatFeatures = {
+    ...(azureMonitorEnabled ? getAzureMonitorStatsbeatFeatures(config) : {}),
+    a365: a365Config.enabled,
+    otlp: otlpActive,
+    customerSdkStats: process.env[APPLICATIONINSIGHTS_SDKSTATS_DISABLED]?.toLowerCase() === "true",
+  };
+  getStatsbeatInstance().setStatsbeatFeatures(statsbeatInstrumentations, statsbeatFeatures);
+
   // ── Register global providers ─────────────────────────────────────
   // Remove global providers in OpenTelemetry, these would be overridden if present
   metrics.disable();
@@ -210,7 +233,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   ];
 
   // ── OTLP HTTP exporters (enabled via OTEL_EXPORTER_OTLP_ENDPOINT) ─
-  if (isOtlpEnabled()) {
+  if (otlpActive) {
     const otlp = createOtlpComponents();
     if (otlp.spanProcessor) {
       spanProcessors.push(otlp.spanProcessor);
@@ -259,7 +282,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     (options?.logRecordProcessors?.length ?? 0) > 0;
   const consoleEnabled =
     options?.enableConsoleExporters ??
-    (!azureMonitorEnabled && !isOtlpEnabled() && !a365Config.enabled && !hasCustomProcessors);
+    (!azureMonitorEnabled && !otlpActive && !a365Config.enabled && !hasCustomProcessors);
   if (consoleEnabled) {
     // Skip span console exporter when A365 fallback already added one
     if (!a365ConsoleExportFallback) {
