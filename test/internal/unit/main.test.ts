@@ -83,6 +83,19 @@ describe("Main functions", () => {
     logs.disable();
   });
 
+  it("sets MICROSOFT_OPENTELEMETRY_VERSION env var on import so the Azure Monitor exporter reports the 'mot' sdkVersion prefix", async () => {
+    const { MICROSOFT_OPENTELEMETRY_VERSION, AZURE_MONITOR_OPENTELEMETRY_VERSION } =
+      await import("../../../src/types.js");
+    assert.strictEqual(
+      process.env["MICROSOFT_OPENTELEMETRY_VERSION"],
+      MICROSOFT_OPENTELEMETRY_VERSION,
+    );
+    assert.strictEqual(
+      process.env["AZURE_MONITOR_DISTRO_VERSION"],
+      AZURE_MONITOR_OPENTELEMETRY_VERSION,
+    );
+  });
+
   it("useMicrosoftOpenTelemetry", () => {
     const config: MicrosoftOpenTelemetryOptions = {
       azureMonitor: {
@@ -1336,6 +1349,41 @@ describe("Main functions", () => {
 
     expect(openaiSpy).not.toHaveBeenCalled();
     expect(langchainSpy).not.toHaveBeenCalled();
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("initializes GenAI instrumentations by default when instrumentationOptions is omitted", async () => {
+    const openaiSpy = vi.spyOn(OpenAIAgentsTraceInstrumentor, "instrument");
+    const langchainSpy = vi.spyOn(LangChainTraceInstrumentor, "instrument");
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+    });
+
+    await vi.waitFor(() => {
+      expect(openaiSpy).toHaveBeenCalled();
+      expect(langchainSpy).toHaveBeenCalled();
+    });
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("initializes GenAI instrumentations by default when instrumentationOptions is empty", async () => {
+    const openaiSpy = vi.spyOn(OpenAIAgentsTraceInstrumentor, "instrument");
+    const langchainSpy = vi.spyOn(LangChainTraceInstrumentor, "instrument");
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      instrumentationOptions: {},
+    });
+
+    await vi.waitFor(() => {
+      expect(openaiSpy).toHaveBeenCalled();
+      expect(langchainSpy).toHaveBeenCalled();
+    });
 
     await shutdownMicrosoftOpenTelemetry();
   });

@@ -9,6 +9,9 @@
 ### Features Added
 - Add `a365.enableObservabilityExporter`, `a365.observabilityScopeOverride`, and `a365.logLevel` code options as equivalents of `ENABLE_A365_OBSERVABILITY_EXPORTER`, `A365_OBSERVABILITY_SCOPES_OVERRIDE`, and `A365_OBSERVABILITY_LOG_LEVEL`. Programmatic values win over env vars. ([#84](https://github.com/microsoft/opentelemetry-distro-javascript/issues/84))
 
+### Other Changes
+- Set the `MICROSOFT_OPENTELEMETRY_VERSION` environment variable on import and report `mot${MICROSOFT_OPENTELEMETRY_VERSION}` from live metrics so the Azure Monitor exporter and Quickpulse both surface the `mot` SDK version prefix on `ai.internal.sdkVersion`. See [Azure/azure-sdk-for-js#38352](https://github.com/Azure/azure-sdk-for-js/pull/38352).
+
 ## [0.1.0-beta.1] - 2026-04-27
 
 First beta release. Promotes all functionality from the 0.1.0-alpha series.
