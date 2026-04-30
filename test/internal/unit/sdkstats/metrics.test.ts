@@ -29,10 +29,7 @@ async function collectMetrics(
 ): Promise<Record<string, Array<{ value: number; attributes: Record<string, unknown> }>>> {
   // Force a collection cycle
   await meterProvider.forceFlush();
-  const result: Record<
-    string,
-    Array<{ value: number; attributes: Record<string, unknown> }>
-  > = {};
+  const result: Record<string, Array<{ value: number; attributes: Record<string, unknown> }>> = {};
   for (const resourceMetric of exporter.getMetrics()) {
     for (const scopeMetrics of resourceMetric.scopeMetrics) {
       for (const metric of scopeMetrics.metrics) {

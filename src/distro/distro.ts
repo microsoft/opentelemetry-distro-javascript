@@ -33,11 +33,7 @@ import {
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
 import { configureA365Logger } from "../a365/logging.js";
-import {
-  SdkStatsDistroFeature,
-  SdkStatsManager,
-  setSdkStatsFeature,
-} from "../sdkstats/index.js";
+import { SdkStatsDistroFeature, SdkStatsManager, setSdkStatsFeature } from "../sdkstats/index.js";
 import type {
   MicrosoftOpenTelemetryOptions,
   InstrumentationOptions,
