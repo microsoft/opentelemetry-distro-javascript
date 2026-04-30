@@ -81,6 +81,27 @@ export class A365Configuration {
   /** OAuth scopes for A365 service authentication. */
   public readonly authScopes: string[];
 
+  /** When true, use the S2S endpoint path for export. */
+  public readonly useS2SEndpoint: boolean;
+
+  /** Maximum span queue size before drops occur. */
+  public readonly maxQueueSize?: number;
+
+  /** Delay (ms) between automatic batch flush attempts. */
+  public readonly scheduledDelayMilliseconds?: number;
+
+  /** Maximum time (ms) for the entire export() call. */
+  public readonly exporterTimeoutMilliseconds?: number;
+
+  /** Timeout (ms) per individual HTTP request. */
+  public readonly httpRequestTimeoutMilliseconds?: number;
+
+  /** Maximum number of spans per export batch. */
+  public readonly maxExportBatchSize?: number;
+
+  /** Maximum estimated payload size (bytes) per HTTP chunk. */
+  public readonly maxPayloadBytes?: number;
+
   constructor(options?: A365Options) {
     // 1. Set defaults
     let enabled = false;
@@ -129,6 +150,13 @@ export class A365Configuration {
     this.clusterCategory = clusterCategory;
     this.domainOverride = domainOverride;
     this.authScopes = authScopes;
+    this.useS2SEndpoint = options?.useS2SEndpoint ?? false;
+    this.maxQueueSize = options?.maxQueueSize;
+    this.scheduledDelayMilliseconds = options?.scheduledDelayMilliseconds;
+    this.exporterTimeoutMilliseconds = options?.exporterTimeoutMilliseconds;
+    this.httpRequestTimeoutMilliseconds = options?.httpRequestTimeoutMilliseconds;
+    this.maxExportBatchSize = options?.maxExportBatchSize;
+    this.maxPayloadBytes = options?.maxPayloadBytes;
 
     // Warn when A365-scoped options are set but A365 is not enabled
     if (!this.enabled) {
