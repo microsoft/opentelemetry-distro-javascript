@@ -62,9 +62,9 @@ export function parseResourceDetectorsFromEnvVar(): Array<ResourceDetector> {
       return [resourceDetector];
     });
   } else {
-    // leaving out the process detector as that can add many resource attributes
+    // leaving out the process and host detectors as they can add many resource attributes
     // with large values. Also not enabling service instance attributes by default
     // as this is still experimental.
-    return [envDetector, hostDetector, osDetector];
+    return [envDetector, osDetector];
   }
 }
