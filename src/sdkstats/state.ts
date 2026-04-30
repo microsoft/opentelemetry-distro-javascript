@@ -29,7 +29,6 @@ export enum SdkStatsDistroFeature {
   A365_EXPORT = 512,
   OTLP_EXPORT = 1024,
   CONSOLE_EXPORT = 2048,
-  SPECTRA_EXPORT = 4096,
 }
 
 /**
