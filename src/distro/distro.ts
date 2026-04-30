@@ -32,6 +32,11 @@ import {
 } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
+import {
+  SdkStatsDistroFeature,
+  SdkStatsManager,
+  setSdkStatsFeature,
+} from "../sdkstats/index.js";
 import type {
   MicrosoftOpenTelemetryOptions,
   InstrumentationOptions,
@@ -43,6 +48,7 @@ import type {
 import {
   MICROSOFT_OPENTELEMETRY_VERSION,
   APPLICATIONINSIGHTS_SDKSTATS_DISABLED,
+  StatsbeatFeature,
 } from "../types.js";
 import { createInstrumentations, createSampler, createViews } from "./instrumentations.js";
 import { Logger } from "../shared/logging/index.js";
@@ -149,6 +155,20 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     options?.azureMonitor?.enabled !== false &&
     (!!options?.azureMonitor || hasAzureMonitorConnectionString(config));
   const azureMonitorEnabled = azureMonitorRequested && validateAzureMonitorConfig(config);
+
+  // ── SDKStats: record distro feature bits for ALL paths ──────────────────
+  // These bits are emitted via SDKStats regardless of which exporter is
+  // active. When Azure Monitor is enabled the exporter package's own
+  // Statsbeat picks them up via `AZURE_MONITOR_STATSBEAT_FEATURES`; when
+  // it is not, the standalone `SdkStatsManager` initialised below carries
+  // them to the well-known Statsbeat ingestion endpoint.
+  setSdkStatsFeature(StatsbeatFeature.DISTRO);
+  if (a365Config.enabled) {
+    setSdkStatsFeature(SdkStatsDistroFeature.A365_EXPORT);
+  }
+  if (isOtlpEnabled()) {
+    setSdkStatsFeature(SdkStatsDistroFeature.OTLP_EXPORT);
+  }
 
   // Reset dispose callback to avoid stale references from a previous initialization
   disposeAzureMonitor = undefined;
@@ -305,6 +325,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       }),
     );
     logRecordProcessors.push(new SimpleLogRecordProcessor(new ConsoleLogRecordExporter()));
+    setSdkStatsFeature(SdkStatsDistroFeature.CONSOLE_EXPORT);
   }
 
   // ── Create and start NodeSDK ──────────────────────────────────────
@@ -332,6 +353,17 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   isShutdown = false;
   sdk.start();
 
+  // ── SDKStats: standalone pipeline for non-Azure-Monitor paths ─────
+  // When Azure Monitor is enabled the exporter package emits SDKStats
+  // itself (reading bits set above via `AZURE_MONITOR_STATSBEAT_FEATURES`).
+  // For A365-only / OTLP-only / Console-only customers we spin up our
+  // own MeterProvider + AzureMonitorStatsbeatExporter pipeline so the
+  // distro feature/instrumentation bits still reach the well-known
+  // statsbeat endpoint.
+  if (!azureMonitorEnabled) {
+    void SdkStatsManager.getInstance().initialize();
+  }
+
   // Initialize GenAI instrumentations after providers are registered so any
   // tracer they capture is backed by the active SDK provider.
   // When A365 defaults were applied, use the resolved config so GenAI
@@ -350,7 +382,9 @@ export function shutdownMicrosoftOpenTelemetry(): Promise<void> {
   isShutdown = true;
   disposeAzureMonitor?.();
   const sdkShutdown = sdk?.shutdown() ?? Promise.resolve();
-  return sdkShutdown.finally(() => resetGenAIInstrumentations());
+  return sdkShutdown
+    .finally(() => SdkStatsManager.getInstance().shutdown())
+    .finally(() => resetGenAIInstrumentations());
 }
 
 /**

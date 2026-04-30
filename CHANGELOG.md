@@ -5,6 +5,23 @@
 ### Breaking Changes
 - When A365 export is enabled (`a365.enabled=true` or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`), non-GenAI instrumentations are now disabled by default unless explicitly enabled in `instrumentationOptions`.
 
+### Features Added
+- Add a standalone SDKStats pipeline (`src/sdkstats/`) that emits Feature/Instrumentation SDKStats to the Application Insights statsbeat ingestion endpoint when Azure Monitor is not the active exporter (A365-only, OTLP-only, console-only). New distro feature bits: `A365_EXPORT` (512), `OTLP_EXPORT` (1024), `CONSOLE_EXPORT` (2048), `SPECTRA_EXPORT` (4096). Long-interval (24 h) export with a 15 s initial-export delay per spec for short-running Node.js processes. Disable with `MICROSOFT_OTEL_SDKSTATS_DISABLED=true` (or the legacy `APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL`); override interval with `APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL` (seconds).
+
+### Other Changes
+- Set the `MICROSOFT_OPENTELEMETRY_VERSION` environment variable on import and report `mot${MICROSOFT_OPENTELEMETRY_VERSION}` from live metrics so the Azure Monitor exporter and Quickpulse both surface the `mot` SDK version prefix on `ai.internal.sdkVersion`. See [Azure/azure-sdk-for-js#38352](https://github.com/Azure/azure-sdk-for-js/pull/38352).
+
+## [0.1.0-beta.1] - 2026-04-27
+
+First beta release. Promotes all functionality from the 0.1.0-alpha series.
+
+### Breaking Changes
+- When A365 is enabled through configured A365 options, non-GenAI instrumentations are now disabled by default unless explicitly enabled in `instrumentationOptions`. `ENABLE_A365_OBSERVABILITY_EXPORTER` no longer activates A365 on its own; it only toggles the exporter within an already-configured A365 setup. ([#79](https://github.com/microsoft/opentelemetry-distro-javascript/pull/79))
+- Align GenAI instrumentations with A365 observability schema: use structured message format, update span kinds and attributes (`gen_ai.agent.name`, `gen_ai.conversation.id`, `error.type`), and remove `isContentRecordingEnabled` option (content is now always recorded). ([#75](https://github.com/microsoft/opentelemetry-distro-javascript/pull/75))
+
+### Features Added
+- Add ESM loader entrypoint (`@microsoft/opentelemetry/loader`) and document ESM support. ([#74](https://github.com/microsoft/opentelemetry-distro-javascript/pull/74))
+
 ### Bugs Fixed
 - Fix `Agent365Exporter` not emitting `[EVENT]:` export outcome logs to a logger configured via `configureA365Logger` after the exporter was constructed. The exporter previously cached the logger snapshot at construction time, so the distro-bootstrapped exporter never picked up partner-supplied loggers. ([#50](https://github.com/microsoft/opentelemetry-distro-javascript/issues/50))
 
