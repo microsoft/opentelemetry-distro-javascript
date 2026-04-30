@@ -8,6 +8,7 @@
 
 ### Features Added
 - Add `a365.enableObservabilityExporter`, `a365.observabilityScopeOverride`, and `a365.logLevel` code options as equivalents of `ENABLE_A365_OBSERVABILITY_EXPORTER`, `A365_OBSERVABILITY_SCOPES_OVERRIDE`, and `A365_OBSERVABILITY_LOG_LEVEL`. Programmatic values win over env vars. ([#84](https://github.com/microsoft/opentelemetry-distro-javascript/issues/84))
+- Make Statsbeat feature/instrumentation tracking universal across Azure Monitor, A365, and OTLP paths and add a standalone SDKStats pipeline (`src/sdkstats/`) that emits Feature/Instrumentation SDKStats to the Application Insights Statsbeat ingestion endpoint when Azure Monitor is not the active exporter (A365-only, OTLP-only, console-only). New distro feature bits: `A365_EXPORT` (512), `OTLP_EXPORT` (1024), `CONSOLE_EXPORT` (2048). Long-interval (24 h) export with a 15 s initial-export delay per spec for short-running Node.js processes. Disable with `MICROSOFT_OTEL_SDKSTATS_DISABLED=true` (or the legacy `APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL`); override interval with `APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL` (seconds). ([#85](https://github.com/microsoft/opentelemetry-distro-javascript/pull/85))
 
 ### Other Changes
 - Set the `MICROSOFT_OPENTELEMETRY_VERSION` environment variable on import and report `mot${MICROSOFT_OPENTELEMETRY_VERSION}` from live metrics so the Azure Monitor exporter and Quickpulse both surface the `mot` SDK version prefix on `ai.internal.sdkVersion`. See [Azure/azure-sdk-for-js#38352](https://github.com/Azure/azure-sdk-for-js/pull/38352).
