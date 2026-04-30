@@ -51,7 +51,7 @@ import type {
 } from "./types.js";
 import { QuickPulseOpenTelemetryMetricNames } from "./types.js";
 import { hrTimeToMilliseconds, suppressTracing } from "@opentelemetry/core";
-import { getInstance } from "../../utils/statsbeat.js";
+import { getInstance } from "../../../utils/statsbeat.js";
 import type { CollectionConfigurationError } from "../../generated/index.js";
 import { Filter } from "./filtering/filter.js";
 import { Validator } from "./filtering/validator.js";

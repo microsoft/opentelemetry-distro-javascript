@@ -148,6 +148,8 @@ export interface StatsbeatFeatures {
   customerSdkStats?: boolean;
   multiIkey?: boolean;
   aksResourceDetectorPopulation?: boolean;
+  a365?: boolean;
+  otlp?: boolean;
 }
 
 /**
@@ -164,6 +166,8 @@ export const StatsbeatFeaturesMap = new Map<string, number>([
   ["customerSdkStats", 64],
   ["multiIkey", 128],
   ["aksResourceDetectorPopulation", 256],
+  ["a365", 512],
+  ["otlp", 1024],
 ]);
 
 /**
@@ -280,6 +284,8 @@ export enum StatsbeatFeature {
   CUSTOMER_SDKSTATS = 64,
   MULTI_IKEY = 128,
   AKS_RESOURCE_DETECTOR_POPULATION = 256,
+  A365 = 512,
+  OTLP = 1024,
 }
 
 export enum StatsbeatInstrumentation {
