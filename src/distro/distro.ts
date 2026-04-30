@@ -238,12 +238,24 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
       authScopes: a365Config.authScopes,
       tokenResolver: a365Config.tokenResolver,
       useS2SEndpoint: a365Config.useS2SEndpoint,
-      maxQueueSize: a365Config.maxQueueSize,
-      scheduledDelayMilliseconds: a365Config.scheduledDelayMilliseconds,
-      exporterTimeoutMilliseconds: a365Config.exporterTimeoutMilliseconds,
-      httpRequestTimeoutMilliseconds: a365Config.httpRequestTimeoutMilliseconds,
-      maxExportBatchSize: a365Config.maxExportBatchSize,
-      maxPayloadBytes: a365Config.maxPayloadBytes,
+      ...(a365Config.maxQueueSize !== undefined && {
+        maxQueueSize: a365Config.maxQueueSize,
+      }),
+      ...(a365Config.scheduledDelayMilliseconds !== undefined && {
+        scheduledDelayMilliseconds: a365Config.scheduledDelayMilliseconds,
+      }),
+      ...(a365Config.exporterTimeoutMilliseconds !== undefined && {
+        exporterTimeoutMilliseconds: a365Config.exporterTimeoutMilliseconds,
+      }),
+      ...(a365Config.httpRequestTimeoutMilliseconds !== undefined && {
+        httpRequestTimeoutMilliseconds: a365Config.httpRequestTimeoutMilliseconds,
+      }),
+      ...(a365Config.maxExportBatchSize !== undefined && {
+        maxExportBatchSize: a365Config.maxExportBatchSize,
+      }),
+      ...(a365Config.maxPayloadBytes !== undefined && {
+        maxPayloadBytes: a365Config.maxPayloadBytes,
+      }),
     });
     spanProcessors.push(new BatchSpanProcessor(a365Exporter));
   }
