@@ -31,6 +31,13 @@ describe("A365Configuration", () => {
         "api://9b975845-388f-4429-889e-eab1ef63949c/.default",
       ]);
       assert.strictEqual(config.tokenResolver, undefined);
+      assert.strictEqual(config.useS2SEndpoint, false);
+      assert.strictEqual(config.maxQueueSize, undefined);
+      assert.strictEqual(config.scheduledDelayMilliseconds, undefined);
+      assert.strictEqual(config.exporterTimeoutMilliseconds, undefined);
+      assert.strictEqual(config.httpRequestTimeoutMilliseconds, undefined);
+      assert.strictEqual(config.maxExportBatchSize, undefined);
+      assert.strictEqual(config.maxPayloadBytes, undefined);
     });
   });
 
@@ -60,6 +67,60 @@ describe("A365Configuration", () => {
       const resolver = (_agentId: string, _tenantId: string) => "token";
       const config = new A365Configuration({ tokenResolver: resolver });
       assert.strictEqual(config.tokenResolver, resolver);
+    });
+
+    it("should apply useS2SEndpoint", () => {
+      const config = new A365Configuration({ useS2SEndpoint: true });
+      assert.strictEqual(config.useS2SEndpoint, true);
+    });
+
+    it("should default useS2SEndpoint to false", () => {
+      const config = new A365Configuration();
+      assert.strictEqual(config.useS2SEndpoint, false);
+    });
+
+    it("should apply maxQueueSize", () => {
+      const config = new A365Configuration({ maxQueueSize: 4096 });
+      assert.strictEqual(config.maxQueueSize, 4096);
+    });
+
+    it("should default maxQueueSize to undefined", () => {
+      const config = new A365Configuration();
+      assert.strictEqual(config.maxQueueSize, undefined);
+    });
+
+    it("should apply scheduledDelayMilliseconds", () => {
+      const config = new A365Configuration({ scheduledDelayMilliseconds: 10000 });
+      assert.strictEqual(config.scheduledDelayMilliseconds, 10000);
+    });
+
+    it("should apply exporterTimeoutMilliseconds", () => {
+      const config = new A365Configuration({ exporterTimeoutMilliseconds: 60000 });
+      assert.strictEqual(config.exporterTimeoutMilliseconds, 60000);
+    });
+
+    it("should apply httpRequestTimeoutMilliseconds", () => {
+      const config = new A365Configuration({ httpRequestTimeoutMilliseconds: 15000 });
+      assert.strictEqual(config.httpRequestTimeoutMilliseconds, 15000);
+    });
+
+    it("should apply maxExportBatchSize", () => {
+      const config = new A365Configuration({ maxExportBatchSize: 256 });
+      assert.strictEqual(config.maxExportBatchSize, 256);
+    });
+
+    it("should apply maxPayloadBytes", () => {
+      const config = new A365Configuration({ maxPayloadBytes: 500 * 1024 });
+      assert.strictEqual(config.maxPayloadBytes, 500 * 1024);
+    });
+
+    it("should leave exporter tuning options undefined when not set", () => {
+      const config = new A365Configuration({ enabled: true });
+      assert.strictEqual(config.scheduledDelayMilliseconds, undefined);
+      assert.strictEqual(config.exporterTimeoutMilliseconds, undefined);
+      assert.strictEqual(config.httpRequestTimeoutMilliseconds, undefined);
+      assert.strictEqual(config.maxExportBatchSize, undefined);
+      assert.strictEqual(config.maxPayloadBytes, undefined);
     });
   });
 
