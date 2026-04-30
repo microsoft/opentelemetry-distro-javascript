@@ -565,7 +565,7 @@ describe("Main functions", () => {
     });
   });
 
-  it("should not use process resource detector if OTEL_NODE_RESOURCE_DETECTORS not specified", () => {
+  it("should not use process or host resource detector if OTEL_NODE_RESOURCE_DETECTORS not specified", () => {
     const config: MicrosoftOpenTelemetryOptions = {
       azureMonitor: {
         azureMonitorExporterOptions: {
@@ -584,6 +584,7 @@ describe("Main functions", () => {
     assert.isDefined(resource, "Resource should be defined on tracer provider");
     Object.keys(resource || {}).forEach((attr) => {
       assert.isTrue(!attr.includes("process"));
+      assert.isTrue(!attr.startsWith("host."), `Unexpected host attribute: ${attr}`);
     });
   });
 
