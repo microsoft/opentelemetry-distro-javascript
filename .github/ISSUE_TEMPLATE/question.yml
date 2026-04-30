@@ -1,0 +1,40 @@
+name: Question
+description: Ask a question about usage, configuration, or behavior.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component or area is your question about?
+      options:
+        - general
+        - a365
+        - langchain
+        - azure-monitor
+        - distro
+        - agent-framework
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+      placeholder: Describe your question in detail...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide any relevant context — what you've tried, relevant docs, code snippets.
+      placeholder: |
+        - What I've tried: ...
+        - Relevant docs: ...
+        - Code snippet: ...
+    validations:
+      required: false
