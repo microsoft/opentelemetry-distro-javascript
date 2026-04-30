@@ -83,6 +83,19 @@ describe("Main functions", () => {
     logs.disable();
   });
 
+  it("sets MICROSOFT_OPENTELEMETRY_VERSION env var on import so the Azure Monitor exporter reports the 'mot' sdkVersion prefix", async () => {
+    const { MICROSOFT_OPENTELEMETRY_VERSION, AZURE_MONITOR_OPENTELEMETRY_VERSION } =
+      await import("../../../src/types.js");
+    assert.strictEqual(
+      process.env["MICROSOFT_OPENTELEMETRY_VERSION"],
+      MICROSOFT_OPENTELEMETRY_VERSION,
+    );
+    assert.strictEqual(
+      process.env["AZURE_MONITOR_DISTRO_VERSION"],
+      AZURE_MONITOR_OPENTELEMETRY_VERSION,
+    );
+  });
+
   it("useMicrosoftOpenTelemetry", () => {
     const config: MicrosoftOpenTelemetryOptions = {
       azureMonitor: {
@@ -1087,8 +1100,46 @@ describe("Main functions", () => {
     await shutdownMicrosoftOpenTelemetry();
   });
 
-  it("registers A365SpanProcessor when A365 exporter is disabled but a365 options are provided", async () => {
-    process.env.ENABLE_A365_OBSERVABILITY_EXPORTER = "false";
+  it("registers A365SpanProcessor but not Agent365Exporter when a365.enableObservabilityExporter is false (default)", async () => {
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        // enableObservabilityExporter omitted -> defaults to false
+        tokenResolver: () => "token",
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const a365SpanProcessor = registeredProcessors.find(
+      (processor: any) => processor.constructor?.name === "A365SpanProcessor",
+    );
+    assert.isDefined(
+      a365SpanProcessor,
+      "A365SpanProcessor should still be registered for span enrichment",
+    );
+
+    const a365Exporter = registeredProcessors.find(
+      (processor: any) =>
+        processor.constructor?.name === "BatchSpanProcessor" &&
+        processor["_exporter"]?.constructor?.name === "Agent365Exporter",
+    );
+    assert.isUndefined(
+      a365Exporter,
+      "Agent365Exporter should be suppressed when a365.enableObservabilityExporter is false",
+    );
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("does not register A365 components when a365.enabled is false", async () => {
     useMicrosoftOpenTelemetry({
       azureMonitor: { enabled: false },
       enableConsoleExporters: false,
@@ -1109,21 +1160,46 @@ describe("Main functions", () => {
       (processor: any) => processor.constructor?.name === "A365SpanProcessor",
     );
 
-    assert.isDefined(
+    assert.isUndefined(
       a365SpanProcessor,
-      "Expected A365SpanProcessor to be registered even when A365 exporter is disabled",
+      "A365SpanProcessor should not be registered when a365.enabled is false",
     );
 
-    // Should also have a ConsoleSpanExporter fallback
-    const consoleProcessor = registeredProcessors.find(
+    const a365Exporter = registeredProcessors.find(
       (processor: any) =>
-        processor.constructor?.name === "SimpleSpanProcessor" &&
-        processor["_exporter"]?.constructor?.name === "ConsoleSpanExporter",
+        processor.constructor?.name === "BatchSpanProcessor" &&
+        processor["_exporter"]?.constructor?.name === "Agent365Exporter",
     );
 
-    assert.isDefined(
-      consoleProcessor,
-      "Expected ConsoleSpanExporter fallback when A365 exporter is disabled",
+    assert.isUndefined(
+      a365Exporter,
+      "Agent365Exporter should not be registered when a365.enabled is false",
+    );
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("ENABLE_A365_OBSERVABILITY_EXPORTER env var alone does not activate A365", async () => {
+    process.env.ENABLE_A365_OBSERVABILITY_EXPORTER = "true";
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const a365SpanProcessor = registeredProcessors.find(
+      (processor: any) => processor.constructor?.name === "A365SpanProcessor",
+    );
+
+    assert.isUndefined(
+      a365SpanProcessor,
+      "A365SpanProcessor should not be registered when only env var is set without a365 options",
     );
 
     delete process.env.ENABLE_A365_OBSERVABILITY_EXPORTER;
@@ -1215,6 +1291,7 @@ describe("Main functions", () => {
       enableConsoleExporters: false,
       a365: {
         enabled: true,
+        enableObservabilityExporter: true,
         tokenResolver: () => "token",
       },
     });
@@ -1236,6 +1313,69 @@ describe("Main functions", () => {
     assert.strictEqual(batchProcessor["_exportTimeoutMillis"], 30000);
 
     await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("propagates a365.observabilityScopeOverride to the Agent365Exporter authScopes", async () => {
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        enableObservabilityExporter: true,
+        observabilityScopeOverride: "api://override-scope/.default",
+        tokenResolver: () => "token",
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const batchProcessor = registeredProcessors.find(
+      (processor: any) =>
+        processor.constructor?.name === "BatchSpanProcessor" &&
+        processor["_exporter"]?.constructor?.name === "Agent365Exporter",
+    );
+
+    assert.isDefined(batchProcessor, "Expected an Agent365 BatchSpanProcessor");
+    const exporter = batchProcessor["_exporter"];
+    assert.deepStrictEqual(exporter?.["options"]?.authScopes, ["api://override-scope/.default"]);
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("applies a365.logLevel to the A365 logger filter via configureA365Logger", async () => {
+    const { _resetA365LoggerForTest, getA365Logger } = await import("../../../src/a365/logging.js");
+    _resetA365LoggerForTest();
+
+    const customLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const { configureA365Logger } = await import("../../../src/a365/logging.js");
+    configureA365Logger({ logger: customLogger });
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        logLevel: "warn|error",
+        tokenResolver: () => "token",
+      },
+    });
+
+    const logger = getA365Logger();
+    logger.info("dropped");
+    logger.warn("kept");
+    logger.error("kept");
+
+    assert.strictEqual(customLogger.info.mock.calls.length, 0, "info should be filtered out");
+    assert.strictEqual(customLogger.warn.mock.calls.length, 1, "warn should pass the filter");
+    assert.strictEqual(customLogger.error.mock.calls.length, 1, "error should pass the filter");
+
+    await shutdownMicrosoftOpenTelemetry();
+    _resetA365LoggerForTest();
   });
 
   it("initializes OpenAI Agents instrumentation when enabled", async () => {
@@ -1308,6 +1448,41 @@ describe("Main functions", () => {
 
     expect(openaiSpy).not.toHaveBeenCalled();
     expect(langchainSpy).not.toHaveBeenCalled();
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("initializes GenAI instrumentations by default when instrumentationOptions is omitted", async () => {
+    const openaiSpy = vi.spyOn(OpenAIAgentsTraceInstrumentor, "instrument");
+    const langchainSpy = vi.spyOn(LangChainTraceInstrumentor, "instrument");
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+    });
+
+    await vi.waitFor(() => {
+      expect(openaiSpy).toHaveBeenCalled();
+      expect(langchainSpy).toHaveBeenCalled();
+    });
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("initializes GenAI instrumentations by default when instrumentationOptions is empty", async () => {
+    const openaiSpy = vi.spyOn(OpenAIAgentsTraceInstrumentor, "instrument");
+    const langchainSpy = vi.spyOn(LangChainTraceInstrumentor, "instrument");
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      instrumentationOptions: {},
+    });
+
+    await vi.waitFor(() => {
+      expect(openaiSpy).toHaveBeenCalled();
+      expect(langchainSpy).toHaveBeenCalled();
+    });
 
     await shutdownMicrosoftOpenTelemetry();
   });

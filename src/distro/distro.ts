@@ -32,6 +32,7 @@ import {
 } from "../azureMonitor/index.js";
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
+import { configureA365Logger } from "../a365/logging.js";
 import {
   SdkStatsDistroFeature,
   SdkStatsManager,
@@ -139,7 +140,9 @@ export function _applyA365InstrumentationDefaults(
  *   `APPLICATIONINSIGHTS_CONNECTION_STRING` env var is set; explicitly disable
  *   with `options.azureMonitor.enabled = false`)
  * - OTLP HTTP (when `OTEL_EXPORTER_OTLP_ENDPOINT` is set)
- * - A365 (when `options.a365.enabled` is true or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`)
+ * - A365 (when the resolved A365 config has `enabled=true`; the
+ *   `ENABLE_A365_OBSERVABILITY_EXPORTER` env var is only considered when
+ *   `options.a365` is provided)
  *
  * @param options - Microsoft OpenTelemetry configuration options
  */
@@ -147,6 +150,13 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   const config = new InternalConfig(options);
   patchOpenTelemetryInstrumentationEnable();
   const a365Config = new A365Configuration(options?.a365);
+
+  // Apply the resolved A365 log level (programmatic option > env var) so the
+  // A365 logger filter reflects user-supplied configuration instead of being
+  // pinned to whatever the env var was at module-load time.
+  if (a365Config.logLevel !== undefined) {
+    configureA365Logger({ logLevel: a365Config.logLevel });
+  }
 
   // Azure Monitor is enabled when configured programmatically or via JSON config.
   // An explicit `enabled: false` always wins, even if a connection string is present.
@@ -157,16 +167,18 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   const azureMonitorEnabled = azureMonitorRequested && validateAzureMonitorConfig(config);
 
   // ── SDKStats: record distro feature bits for ALL paths ──────────────────
+  // ── SDKStats: record distro feature bits for ALL paths ──────────────────
   // These bits are emitted via SDKStats regardless of which exporter is
   // active. When Azure Monitor is enabled the exporter package's own
   // Statsbeat picks them up via `AZURE_MONITOR_STATSBEAT_FEATURES`; when
   // it is not, the standalone `SdkStatsManager` initialised below carries
   // them to the well-known Statsbeat ingestion endpoint.
+  const otlpActive = isOtlpEnabled();
   setSdkStatsFeature(StatsbeatFeature.DISTRO);
   if (a365Config.enabled) {
     setSdkStatsFeature(SdkStatsDistroFeature.A365_EXPORT);
   }
-  if (isOtlpEnabled()) {
+  if (otlpActive) {
     setSdkStatsFeature(SdkStatsDistroFeature.OTLP_EXPORT);
   }
 
@@ -179,7 +191,6 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   }
 
   // ── Statsbeat (feature & instrumentation tracking for all paths) ──
-  const otlpActive = isOtlpEnabled();
   const statsbeatInstrumentations: StatsbeatInstrumentations = {
     azureSdk: config.instrumentationOptions?.azureSdk?.enabled,
     mongoDb: config.instrumentationOptions?.mongoDb?.enabled,
@@ -276,27 +287,43 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     }
   }
 
-  // ── A365 exporter (enabled via options.a365 or env vars) ──────────
-  const a365ConsoleExportFallback = !a365Config.enabled && !!options?.a365;
-  if (a365Config.enabled || a365ConsoleExportFallback) {
-    // A365SpanProcessor copies baggage (tenant, agent, session, etc.) and
-    // telemetry.sdk.* attributes to span attributes — needed regardless of
-    // whether the A365 exporter or console fallback is active.
-    spanProcessors.push(new A365SpanProcessor());
-  }
+  // ── A365 exporter (enabled when the resolved A365 config has enabled=true;
+  //    ENABLE_A365_OBSERVABILITY_EXPORTER is only considered when options.a365
+  //    is provided) ───────────────────────────────────────────────────────────
   if (a365Config.enabled) {
-    const a365Exporter = new Agent365Exporter({
-      clusterCategory: a365Config.clusterCategory,
-      domainOverride: a365Config.domainOverride,
-      authScopes: a365Config.authScopes,
-      tokenResolver: a365Config.tokenResolver,
-    });
-    spanProcessors.push(new BatchSpanProcessor(a365Exporter));
-  } else if (a365ConsoleExportFallback) {
-    // A365 options provided but exporter disabled — fall back to console export
-    // so developers can validate spans locally (matches upstream A365 SDK behavior
-    // when ENABLE_A365_OBSERVABILITY_EXPORTER=false).
-    spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
+    // A365SpanProcessor copies baggage (tenant, agent, session, etc.) and
+    // telemetry.sdk.* attributes to span attributes. Always registered when
+    // A365 is enabled, even if the HTTP exporter is suppressed, so downstream
+    // exporters (Azure Monitor, OTLP, …) still receive the enriched spans.
+    spanProcessors.push(new A365SpanProcessor());
+    if (a365Config.enableObservabilityExporter) {
+      const a365Exporter = new Agent365Exporter({
+        clusterCategory: a365Config.clusterCategory,
+        domainOverride: a365Config.domainOverride,
+        authScopes: a365Config.authScopes,
+        tokenResolver: a365Config.tokenResolver,
+        useS2SEndpoint: a365Config.useS2SEndpoint,
+        ...(a365Config.maxQueueSize !== undefined && {
+          maxQueueSize: a365Config.maxQueueSize,
+        }),
+        ...(a365Config.scheduledDelayMilliseconds !== undefined && {
+          scheduledDelayMilliseconds: a365Config.scheduledDelayMilliseconds,
+        }),
+        ...(a365Config.exporterTimeoutMilliseconds !== undefined && {
+          exporterTimeoutMilliseconds: a365Config.exporterTimeoutMilliseconds,
+        }),
+        ...(a365Config.httpRequestTimeoutMilliseconds !== undefined && {
+          httpRequestTimeoutMilliseconds: a365Config.httpRequestTimeoutMilliseconds,
+        }),
+        ...(a365Config.maxExportBatchSize !== undefined && {
+          maxExportBatchSize: a365Config.maxExportBatchSize,
+        }),
+        ...(a365Config.maxPayloadBytes !== undefined && {
+          maxPayloadBytes: a365Config.maxPayloadBytes,
+        }),
+      });
+      spanProcessors.push(new BatchSpanProcessor(a365Exporter));
+    }
   }
 
   // Merge views: use Azure Monitor views when available (they cover the same
@@ -312,12 +339,12 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     (options?.logRecordProcessors?.length ?? 0) > 0;
   const consoleEnabled =
     options?.enableConsoleExporters ??
-    (!azureMonitorEnabled && !otlpActive && !a365Config.enabled && !hasCustomProcessors);
+    (!azureMonitorEnabled &&
+      !otlpActive &&
+      !(a365Config.enabled && a365Config.enableObservabilityExporter) &&
+      !hasCustomProcessors);
   if (consoleEnabled) {
-    // Skip span console exporter when A365 fallback already added one
-    if (!a365ConsoleExportFallback) {
-      spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
-    }
+    spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
     metricReaders.push(
       new PeriodicExportingMetricReader({
         exporter: new ConsoleMetricExporter(),
@@ -367,9 +394,9 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   // Initialize GenAI instrumentations after providers are registered so any
   // tracer they capture is backed by the active SDK provider.
   // When A365 defaults were applied, use the resolved config so GenAI
-  // instrumentations are active by default even if the caller omitted
-  // instrumentationOptions. Otherwise honour the caller's original options
-  // to avoid initializing GenAI when it was not requested.
+  // instrumentations honour any A365-specific overrides. Otherwise pass the
+  // caller's original options (GenAI instrumentations are enabled by default
+  // unless explicitly disabled).
   initializeGenAIInstrumentations(
     applyA365Defaults ? config.instrumentationOptions : options?.instrumentationOptions,
   );
@@ -398,13 +425,13 @@ export function _getSdkInstance(): NodeSDK | undefined {
 
 function initializeGenAIInstrumentations(options?: InstrumentationOptions): void {
   const openAIOptions = options?.openaiAgents;
-  if (openAIOptions && openAIOptions.enabled !== false) {
-    void initializeOpenAIAgentsInstrumentation(openAIOptions);
+  if (openAIOptions?.enabled !== false) {
+    void initializeOpenAIAgentsInstrumentation(openAIOptions ?? {});
   }
 
   const langChainOptions = options?.langchain;
-  if (langChainOptions && langChainOptions.enabled !== false) {
-    void initializeLangChainInstrumentation(langChainOptions);
+  if (langChainOptions?.enabled !== false) {
+    void initializeLangChainInstrumentation(langChainOptions ?? {});
   }
 }
 

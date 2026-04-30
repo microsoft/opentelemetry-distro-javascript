@@ -3,10 +3,12 @@
 ## [Unreleased]
 
 ### Breaking Changes
-- When A365 export is enabled (`a365.enabled=true` or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`), non-GenAI instrumentations are now disabled by default unless explicitly enabled in `instrumentationOptions`.
+- A365: `a365.enabled: true` now registers only the `A365SpanProcessor`. Set `a365.enableObservabilityExporter: true` (or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`) to also add the A365 HTTP exporter. ([#84](https://github.com/microsoft/opentelemetry-distro-javascript/issues/84))
+- A365: `ENABLE_A365_OBSERVABILITY_EXPORTER` env var now toggles only the HTTP exporter, not the master `a365.enabled` flag.
 
 ### Features Added
-- Add a standalone SDKStats pipeline (`src/sdkstats/`) that emits Feature/Instrumentation SDKStats to the Application Insights statsbeat ingestion endpoint when Azure Monitor is not the active exporter (A365-only, OTLP-only, console-only). New distro feature bits: `A365_EXPORT` (512), `OTLP_EXPORT` (1024), `CONSOLE_EXPORT` (2048), `SPECTRA_EXPORT` (4096). Long-interval (24 h) export with a 15 s initial-export delay per spec for short-running Node.js processes. Disable with `MICROSOFT_OTEL_SDKSTATS_DISABLED=true` (or the legacy `APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL`); override interval with `APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL` (seconds).
+- Add `a365.enableObservabilityExporter`, `a365.observabilityScopeOverride`, and `a365.logLevel` code options as equivalents of `ENABLE_A365_OBSERVABILITY_EXPORTER`, `A365_OBSERVABILITY_SCOPES_OVERRIDE`, and `A365_OBSERVABILITY_LOG_LEVEL`. Programmatic values win over env vars. ([#84](https://github.com/microsoft/opentelemetry-distro-javascript/issues/84))
+- Make Statsbeat feature/instrumentation tracking universal across Azure Monitor, A365, and OTLP paths and add a standalone SDKStats pipeline (`src/sdkstats/`) that emits Feature/Instrumentation SDKStats to the Application Insights Statsbeat ingestion endpoint when Azure Monitor is not the active exporter (A365-only, OTLP-only, console-only). New distro feature bits: `A365_EXPORT` (512), `OTLP_EXPORT` (1024), `CONSOLE_EXPORT` (2048), `SPECTRA_EXPORT` (4096). Long-interval (24 h) export with a 15 s initial-export delay per spec for short-running Node.js processes. Disable with `MICROSOFT_OTEL_SDKSTATS_DISABLED=true` (or the legacy `APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL`); override interval with `APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL` (seconds). ([#85](https://github.com/microsoft/opentelemetry-distro-javascript/pull/85))
 
 ### Other Changes
 - Set the `MICROSOFT_OPENTELEMETRY_VERSION` environment variable on import and report `mot${MICROSOFT_OPENTELEMETRY_VERSION}` from live metrics so the Azure Monitor exporter and Quickpulse both surface the `mot` SDK version prefix on `ai.internal.sdkVersion`. See [Azure/azure-sdk-for-js#38352](https://github.com/Azure/azure-sdk-for-js/pull/38352).
@@ -23,7 +25,13 @@ First beta release. Promotes all functionality from the 0.1.0-alpha series.
 - Add ESM loader entrypoint (`@microsoft/opentelemetry/loader`) and document ESM support. ([#74](https://github.com/microsoft/opentelemetry-distro-javascript/pull/74))
 
 ### Bugs Fixed
-- Fix `Agent365Exporter` not emitting `[EVENT]:` export outcome logs to a logger configured via `configureA365Logger` after the exporter was constructed. The exporter previously cached the logger snapshot at construction time, so the distro-bootstrapped exporter never picked up partner-supplied loggers. ([#50](https://github.com/microsoft/opentelemetry-distro-javascript/issues/50))
+- `ENABLE_A365_OBSERVABILITY_EXPORTER` environment variable no longer activates A365 on its own. A365 options must be provided in code; the env var only toggles the exporter within an already-configured A365 setup. ([#43](https://github.com/microsoft/opentelemetry-distro-javascript/issues/43))
+- Fix `Agent365Exporter` not emitting `[EVENT]:` export outcome logs to a logger configured via `configureA365Logger` after the exporter was constructed. The exporter previously cached the logger snapshot at construction time, so the distro-bootstrapped exporter never picked up partner-supplied loggers. ([#81](https://github.com/microsoft/opentelemetry-distro-javascript/pull/81))
+- Register `A365SpanProcessor` for console fallback path so `telemetry.sdk.*` attributes and baggage-to-span enrichment are present when the A365 exporter is disabled. ([#78](https://github.com/microsoft/opentelemetry-distro-javascript/pull/78))
+- Restore `AgenticTokenCache` that was accidentally removed in #66. ([#77](https://github.com/microsoft/opentelemetry-distro-javascript/pull/77))
+
+### Other Changes
+- Bump postcss from 8.5.8 to 8.5.10. ([#72](https://github.com/microsoft/opentelemetry-distro-javascript/pull/72))
 
 ## [0.1.0-alpha.6] - 2026-04-24
 

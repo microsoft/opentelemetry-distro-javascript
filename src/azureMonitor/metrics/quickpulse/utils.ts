@@ -58,11 +58,10 @@ import { SDK_INFO, hrTimeToMilliseconds } from "@opentelemetry/core";
 import type { Histogram, ResourceMetrics } from "@opentelemetry/sdk-metrics";
 import { DataPointType } from "@opentelemetry/sdk-metrics";
 import {
-  APPLICATION_INSIGHTS_SHIM_VERSION,
   AZURE_MONITOR_AUTO_ATTACH,
-  AZURE_MONITOR_OPENTELEMETRY_VERSION,
   AZURE_MONITOR_PREFIX,
   AttachTypePrefix,
+  MICROSOFT_OPENTELEMETRY_VERSION,
 } from "../../../types.js";
 import type {
   RequestData,
@@ -95,11 +94,10 @@ export function getSdkVersion(): string {
 
 /** Get the internal SDK version type */
 export function getSdkVersionType(): string {
-  if (process.env[APPLICATION_INSIGHTS_SHIM_VERSION]) {
-    return `sha${process.env[APPLICATION_INSIGHTS_SHIM_VERSION]}`;
-  } else {
-    return `dst${AZURE_MONITOR_OPENTELEMETRY_VERSION}`;
-  }
+  // Always report the Microsoft OpenTelemetry distro version with the `mot`
+  // prefix so live metrics align with the Azure Monitor exporter's
+  // ai.internal.sdkVersion tag (see Azure/azure-sdk-for-js#38352).
+  return `mot${process.env["MICROSOFT_OPENTELEMETRY_VERSION"] ?? MICROSOFT_OPENTELEMETRY_VERSION}`;
 }
 
 /** Set the version prefix to a string in the format "{ResourceProvider}{OS}m_ */
