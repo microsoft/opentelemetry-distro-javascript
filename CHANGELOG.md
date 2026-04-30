@@ -2,16 +2,30 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-30
+
+First stable (GA) release. Promotes all functionality from the 0.1.0-beta series.
+
 ### Breaking Changes
-- A365: `a365.enabled: true` now registers only the `A365SpanProcessor`. Set `a365.enableObservabilityExporter: true` (or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`) to also add the A365 HTTP exporter. ([#84](https://github.com/microsoft/opentelemetry-distro-javascript/issues/84))
-- A365: `ENABLE_A365_OBSERVABILITY_EXPORTER` env var now toggles only the HTTP exporter, not the master `a365.enabled` flag.
+- A365: `a365.enabled: true` now registers only the `A365SpanProcessor`. Set `a365.enableObservabilityExporter: true` (or `ENABLE_A365_OBSERVABILITY_EXPORTER=true`) to also add the A365 HTTP exporter. ([#93](https://github.com/microsoft/opentelemetry-distro-javascript/pull/93))
+- A365: `ENABLE_A365_OBSERVABILITY_EXPORTER` env var now toggles only the HTTP exporter, not the master `a365.enabled` flag. ([#83](https://github.com/microsoft/opentelemetry-distro-javascript/pull/83), [#93](https://github.com/microsoft/opentelemetry-distro-javascript/pull/93))
+- Remove `hostDetector` from default resource detectors. Host attributes (`host.name`, `host.id`, etc.) are no longer added by default. Opt back in via `OTEL_NODE_RESOURCE_DETECTORS=env,host,os`. ([#97](https://github.com/microsoft/opentelemetry-distro-javascript/pull/97))
 
 ### Features Added
-- Add `a365.enableObservabilityExporter`, `a365.observabilityScopeOverride`, and `a365.logLevel` code options as equivalents of `ENABLE_A365_OBSERVABILITY_EXPORTER`, `A365_OBSERVABILITY_SCOPES_OVERRIDE`, and `A365_OBSERVABILITY_LOG_LEVEL`. Programmatic values win over env vars. ([#84](https://github.com/microsoft/opentelemetry-distro-javascript/issues/84))
-- Make Statsbeat feature/instrumentation tracking universal across Azure Monitor, A365, and OTLP paths and add a standalone SDKStats pipeline (`src/sdkstats/`) that emits Feature/Instrumentation SDKStats to the Application Insights Statsbeat ingestion endpoint when Azure Monitor is not the active exporter (A365-only, OTLP-only, console-only). New distro feature bits: `A365_EXPORT` (512), `OTLP_EXPORT` (1024), `CONSOLE_EXPORT` (2048). Long-interval (24 h) export with a 15 s initial-export delay per spec for short-running Node.js processes. Disable with `MICROSOFT_OTEL_SDKSTATS_DISABLED=true` (or the legacy `APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL`); override interval with `APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL` (seconds). ([#85](https://github.com/microsoft/opentelemetry-distro-javascript/pull/85))
+- Add `a365.enableObservabilityExporter`, `a365.observabilityScopeOverride`, and `a365.logLevel` code options as equivalents of `ENABLE_A365_OBSERVABILITY_EXPORTER`, `A365_OBSERVABILITY_SCOPES_OVERRIDE`, and `A365_OBSERVABILITY_LOG_LEVEL`. Programmatic values take precedence over env vars. ([#93](https://github.com/microsoft/opentelemetry-distro-javascript/pull/93))
+- Expose all A365 exporter/batching settings (`maxQueueSize`, `scheduledDelayMilliseconds`, `exporterTimeoutMilliseconds`, `httpRequestTimeoutMilliseconds`, `maxExportBatchSize`, `maxPayloadSizeInBytes`, `useS2SEndpoint`) in the main config through `A365Options`. ([#94](https://github.com/microsoft/opentelemetry-distro-javascript/pull/94))
+- Make Statsbeat feature/instrumentation tracking universal across Azure Monitor, A365, and OTLP paths. Add a standalone SDKStats pipeline that emits Feature/Instrumentation SDKStats to the Application Insights Statsbeat ingestion endpoint. New distro feature bits: `A365_EXPORT` (512), `OTLP_EXPORT` (1024), `CONSOLE_EXPORT` (2048). ([#85](https://github.com/microsoft/opentelemetry-distro-javascript/pull/85))
+- Report `mot` SDK version prefix to Azure Monitor and Quickpulse so `ai.internal.sdkVersion` surfaces the distro version. ([#86](https://github.com/microsoft/opentelemetry-distro-javascript/pull/86))
+
+### Bugs Fixed
+- `ENABLE_A365_OBSERVABILITY_EXPORTER` environment variable now correctly acts only as a secondary toggle within an already-configured A365 setup, preventing it from silently disabling HTTP instrumentation or creating a broken exporter. ([#83](https://github.com/microsoft/opentelemetry-distro-javascript/pull/83))
+- Enable GenAI instrumentations (OpenAI Agents, LangChain) by default for all users. Previously they were only initialized when `instrumentationOptions` explicitly included them. ([#87](https://github.com/microsoft/opentelemetry-distro-javascript/pull/87))
 
 ### Other Changes
-- Set the `MICROSOFT_OPENTELEMETRY_VERSION` environment variable on import and report `mot${MICROSOFT_OPENTELEMETRY_VERSION}` from live metrics so the Azure Monitor exporter and Quickpulse both surface the `mot` SDK version prefix on `ai.internal.sdkVersion`. See [Azure/azure-sdk-for-js#38352](https://github.com/Azure/azure-sdk-for-js/pull/38352).
+- Documentation updates for A365 observability. ([#82](https://github.com/microsoft/opentelemetry-distro-javascript/pull/82))
+- Add custom SpanProcessor filtering scenario to A365 migration guide. ([#89](https://github.com/microsoft/opentelemetry-distro-javascript/pull/89))
+- Update A365 documentation title, Learn docs links, and expand migration guide with resource config, auto-instrumentation behavior, and troubleshooting guidance. ([#96](https://github.com/microsoft/opentelemetry-distro-javascript/pull/96))
+- Add issue templates, auto-label workflow, and code owner notification action. ([#60](https://github.com/microsoft/opentelemetry-distro-javascript/pull/60), [#62](https://github.com/microsoft/opentelemetry-distro-javascript/pull/62))
 
 ## [0.1.0-beta.1] - 2026-04-27
 
