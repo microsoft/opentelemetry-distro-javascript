@@ -1,6 +1,6 @@
 # @microsoft/opentelemetry
 
-[![npm version](https://badge.fury.io/js/%40microsoft%2Fopentelemetry.svg)](https://www.npmjs.com/package/@microsoft/opentelemetry)
+[![npm version](https://img.shields.io/npm/v/%40microsoft%2Fopentelemetry)](https://www.npmjs.com/package/@microsoft/opentelemetry)
 [![license](https://img.shields.io/npm/l/%40microsoft%2Fopentelemetry)](https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/LICENSE)
 
 Microsoft OpenTelemetry distribution for Node.js — one import, one call, full observability across Azure Monitor, OTLP-compatible backends, and A365.
