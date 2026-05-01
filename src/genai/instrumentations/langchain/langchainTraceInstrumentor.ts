@@ -93,10 +93,19 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
 
     // Now that the hooks are registered and @langchain/core/callbacks/manager
     // is loaded, it is safe to load tracer.js (and its transitive
-    // @langchain/core/tracers/base dependency).
-    void import("./tracer.js").then((m) => {
-      this._tracerCtor = m.LangChainTracer;
-    });
+    // @langchain/core/tracers/base dependency). The promise resolves in the
+    // next microtask — well before any user code invokes a LangChain
+    // chain/agent/tool (which is what triggers _configureSync).
+    void import("./tracer.js").then(
+      (m) => {
+        this._tracerCtor = m.LangChainTracer;
+      },
+      (err) => {
+        diag.error(
+          `[LangChainTraceInstrumentor] Failed to load LangChainTracer: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      },
+    );
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const instrumentor = this;
@@ -109,7 +118,7 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
           args[0] = addTracerToHandlers(instrumentor.otelTracer, args[0], instrumentor._tracerCtor);
           diag.debug("[LangChainTraceInstrumentor] _configureSync wrapped to add LangChainTracer");
         } else {
-          diag.warn("[LangChainTraceInstrumentor] LangChainTracer not yet loaded, skipping");
+          diag.debug("[LangChainTraceInstrumentor] LangChainTracer not yet loaded, skipping");
         }
         return original.apply(this, args);
       };
@@ -196,21 +205,21 @@ export class LangChainTraceInstrumentor {
 export function addTracerToHandlers(
   tracer: Tracer,
   handlers: CallbackManagerModule.Callbacks | undefined,
-  TracerCtor: LangChainTracerCtor,
+  tracerCtor: LangChainTracerCtor,
 ): CallbackManagerModule.Callbacks {
   if (handlers == null) {
-    return [new TracerCtor(tracer)];
+    return [new tracerCtor(tracer)];
   }
 
   if (Array.isArray(handlers)) {
-    if (!handlers.some((h) => h instanceof TracerCtor)) {
-      handlers.push(new TracerCtor(tracer));
+    if (!handlers.some((h) => h instanceof tracerCtor)) {
+      handlers.push(new tracerCtor(tracer));
     }
     return handlers;
   }
 
-  if (!handlers.inheritableHandlers.some((h) => h instanceof TracerCtor)) {
-    handlers.addHandler(new TracerCtor(tracer), true);
+  if (!handlers.inheritableHandlers.some((h) => h instanceof tracerCtor)) {
+    handlers.addHandler(new tracerCtor(tracer), true);
   }
   return handlers;
 }

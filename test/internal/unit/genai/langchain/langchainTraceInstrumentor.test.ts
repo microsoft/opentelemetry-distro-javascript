@@ -144,7 +144,7 @@ describe("addTracerToHandlers", () => {
     assert.strictEqual(addHandlerSpy.mock.calls.length, 0, "should not add duplicate");
   });
 
-  it("passes content recording option through", () => {
+  it("accepts a custom tracer constructor", () => {
     const tracer = createMockTracer();
     const result = addTracerToHandlers(tracer, undefined, LangChainTracer);
     assert.ok(Array.isArray(result));
