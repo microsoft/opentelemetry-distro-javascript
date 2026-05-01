@@ -1,0 +1,44 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+
+exporters:
+  azuredataexplorer:
+    cluster_uri: "https://<your-cluster>.kusto.windows.net"
+    # Authentication — pick one:
+    #   Option 1: DefaultAzureCredential (Azure CLI, Managed Identity, Workload Identity)
+    use_azure_auth: true
+    #   Option 2: Service principal with client secret
+    # application_id: "<client-id>"
+    # application_key: "<client-secret>"
+    # tenant_id: "<tenant-id>"
+
+    db_name: "<yourdbname>"
+    metrics_table_name: "OTELMetrics"
+    logs_table_name: "OTELLogs"
+    traces_table_name: "OTELTraces"
+    ingestion_type: "queued"   # or "managed" for streaming
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [azuredataexplorer]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [azuredataexplorer]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [azuredataexplorer]

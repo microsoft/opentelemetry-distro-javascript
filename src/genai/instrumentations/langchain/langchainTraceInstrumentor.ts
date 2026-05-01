@@ -11,15 +11,20 @@ import {
   InstrumentationModuleDefinition,
   isWrapped,
 } from "@opentelemetry/instrumentation";
-import { LangChainTracer } from "./tracer.js";
+import type { LangChainTracer } from "./tracer.js";
 
 type CallbackManagerModuleType = typeof CallbackManagerModule;
+type LangChainTracerCtor = new (tracer: Tracer) => LangChainTracer;
 
 class LangChainTraceInstrumentorImpl extends InstrumentationBase<InstrumentationConfig> {
   private static _instance: LangChainTraceInstrumentorImpl | null = null;
   private _hasBeenEnabled = false;
   private _isPatched = false;
   protected otelTracer: Tracer;
+  /** Lazy-loaded to avoid eagerly importing @langchain/core/tracers/base
+   *  (which transitively loads @langchain/core/callbacks/manager) before
+   *  the instrumentation hooks for that module have been registered. */
+  private _tracerCtor: LangChainTracerCtor | undefined;
 
   private constructor() {
     if (LangChainTraceInstrumentorImpl._instance !== null) {
@@ -86,6 +91,22 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
       return module;
     }
 
+    // Now that the hooks are registered and @langchain/core/callbacks/manager
+    // is loaded, it is safe to load tracer.js (and its transitive
+    // @langchain/core/tracers/base dependency). The promise resolves in the
+    // next microtask — well before any user code invokes a LangChain
+    // chain/agent/tool (which is what triggers _configureSync).
+    void import("./tracer.js").then(
+      (m) => {
+        this._tracerCtor = m.LangChainTracer;
+      },
+      (err) => {
+        diag.error(
+          `[LangChainTraceInstrumentor] Failed to load LangChainTracer: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      },
+    );
+
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const instrumentor = this;
     this._wrap(CallbackManager, "_configureSync", (original) => {
@@ -93,8 +114,12 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
         this: CallbackManagerModuleType,
         ...args: Parameters<(typeof CallbackManager)["_configureSync"]>
       ) {
-        args[0] = addTracerToHandlers(instrumentor.otelTracer, args[0]);
-        diag.debug("[LangChainTraceInstrumentor] _configureSync wrapped to add LangChainTracer");
+        if (instrumentor._tracerCtor) {
+          args[0] = addTracerToHandlers(instrumentor.otelTracer, args[0], instrumentor._tracerCtor);
+          diag.debug("[LangChainTraceInstrumentor] _configureSync wrapped to add LangChainTracer");
+        } else {
+          diag.debug("[LangChainTraceInstrumentor] LangChainTracer not yet loaded, skipping");
+        }
         return original.apply(this, args);
       };
     });
@@ -180,20 +205,21 @@ export class LangChainTraceInstrumentor {
 export function addTracerToHandlers(
   tracer: Tracer,
   handlers: CallbackManagerModule.Callbacks | undefined,
+  tracerCtor: LangChainTracerCtor,
 ): CallbackManagerModule.Callbacks {
   if (handlers == null) {
-    return [new LangChainTracer(tracer)];
+    return [new tracerCtor(tracer)];
   }
 
   if (Array.isArray(handlers)) {
-    if (!handlers.some((h) => h instanceof LangChainTracer)) {
-      handlers.push(new LangChainTracer(tracer));
+    if (!handlers.some((h) => h instanceof tracerCtor)) {
+      handlers.push(new tracerCtor(tracer));
     }
     return handlers;
   }
 
-  if (!handlers.inheritableHandlers.some((h) => h instanceof LangChainTracer)) {
-    handlers.addHandler(new LangChainTracer(tracer), true);
+  if (!handlers.inheritableHandlers.some((h) => h instanceof tracerCtor)) {
+    handlers.addHandler(new tracerCtor(tracer), true);
   }
   return handlers;
 }

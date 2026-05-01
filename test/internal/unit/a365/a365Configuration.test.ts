@@ -69,6 +69,44 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.tokenResolver, resolver);
     });
 
+    it("should apply log level", () => {
+      const config = new A365Configuration({ logLevel: "warn|error" });
+      assert.strictEqual(config.logLevel, "warn|error");
+    });
+
+    it("should apply observabilityScopeOverride as a single scope", () => {
+      const config = new A365Configuration({
+        observabilityScopeOverride: "api://custom/.default",
+      });
+      assert.deepStrictEqual(config.authScopes, ["api://custom/.default"]);
+    });
+
+    it("observabilityScopeOverride wins over authScopes and env var", () => {
+      process.env[A365_ENV_VARS.AUTH_SCOPES] = "envScope1 envScope2";
+      const config = new A365Configuration({
+        authScopes: ["progScope"],
+        observabilityScopeOverride: "api://override/.default",
+      });
+      assert.deepStrictEqual(config.authScopes, ["api://override/.default"]);
+    });
+
+    it("should default enableObservabilityExporter to false", () => {
+      const config = new A365Configuration({ enabled: true });
+      assert.strictEqual(config.enableObservabilityExporter, false);
+    });
+
+    it("should apply enableObservabilityExporter=true", () => {
+      const config = new A365Configuration({ enabled: true, enableObservabilityExporter: true });
+      assert.strictEqual(config.enabled, true);
+      assert.strictEqual(config.enableObservabilityExporter, true);
+    });
+
+    it("should leave log level undefined when neither option nor env is set", () => {
+      delete process.env[A365_ENV_VARS.LOG_LEVEL];
+      const config = new A365Configuration();
+      assert.strictEqual(config.logLevel, undefined);
+    });
+
     it("should apply useS2SEndpoint", () => {
       const config = new A365Configuration({ useS2SEndpoint: true });
       assert.strictEqual(config.useS2SEndpoint, true);
@@ -125,16 +163,25 @@ describe("A365Configuration", () => {
   });
 
   describe("environment variable overrides", () => {
-    it("should override enabled from env", () => {
+    it("should set enableObservabilityExporter from env", () => {
       process.env[A365_ENV_VARS.EXPORTER_ENABLED] = "true";
-      const config = new A365Configuration({ enabled: false });
-      assert.strictEqual(config.enabled, true);
+      const config = new A365Configuration({ enabled: true });
+      assert.strictEqual(config.enableObservabilityExporter, true);
     });
 
-    it("should override enabled=false from env", () => {
+    it("should set enableObservabilityExporter=false from env", () => {
       process.env[A365_ENV_VARS.EXPORTER_ENABLED] = "false";
-      const config = new A365Configuration({ enabled: true });
+      const config = new A365Configuration({ enabled: true, enableObservabilityExporter: true });
+      // Programmatic value wins over env
+      assert.strictEqual(config.enableObservabilityExporter, true);
+    });
+
+    it("should not bootstrap A365 mode from EXPORTER_ENABLED env var alone", () => {
+      process.env[A365_ENV_VARS.EXPORTER_ENABLED] = "true";
+      // No options -> env var ignored
+      const config = new A365Configuration();
       assert.strictEqual(config.enabled, false);
+      assert.strictEqual(config.enableObservabilityExporter, false);
     });
 
     it("should override auth scopes from env (space-separated)", () => {
@@ -169,9 +216,15 @@ describe("A365Configuration", () => {
 
     it("should ignore unrecognized boolean env var values", () => {
       process.env[A365_ENV_VARS.EXPORTER_ENABLED] = "maybe";
-      const config = new A365Configuration();
+      const config = new A365Configuration({ enabled: true });
       // Unrecognized value is ignored, default stands
-      assert.strictEqual(config.enabled, false);
+      assert.strictEqual(config.enableObservabilityExporter, false);
+    });
+
+    it("should pick up log level from env when option is unset", () => {
+      process.env[A365_ENV_VARS.LOG_LEVEL] = "info|warn";
+      const config = new A365Configuration();
+      assert.strictEqual(config.logLevel, "info|warn");
     });
   });
 
@@ -192,6 +245,12 @@ describe("A365Configuration", () => {
       });
 
       assert.strictEqual(config.enabled, true);
+    });
+
+    it("programmatic log level overrides the env var", () => {
+      process.env[A365_ENV_VARS.LOG_LEVEL] = "info";
+      const config = new A365Configuration({ logLevel: "error" });
+      assert.strictEqual(config.logLevel, "error");
     });
   });
 

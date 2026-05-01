@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 import type { Instrumentation } from "@opentelemetry/instrumentation";
-import type { StatsbeatEnvironmentConfig } from "../../types.js";
-import { AZURE_MONITOR_STATSBEAT_FEATURES, StatsbeatInstrumentationMap } from "../../types.js";
-import { Logger } from "../../shared/logging/index.js";
+import type { StatsbeatEnvironmentConfig } from "../types.js";
+import { AZURE_MONITOR_STATSBEAT_FEATURES, StatsbeatInstrumentationMap } from "../types.js";
+import { Logger } from "../shared/logging/index.js";
 
 /**
  * Patch OpenTelemetry Instrumentation enablement to update the statsbeat environment variable with the enabled instrumentations
@@ -22,18 +22,20 @@ export function patchOpenTelemetryInstrumentationEnable(): void {
     // Parses the enabled instrumentations and then ammends the statsbeat instrumentation environment variable
     autoLoaderUtils.enableInstrumentations = function (instrumentations: Instrumentation[]) {
       try {
-        const statsbeatOptions: StatsbeatEnvironmentConfig = JSON.parse(
-          process.env[AZURE_MONITOR_STATSBEAT_FEATURES] || emptyStatsbeatConfig,
-        );
-        let updatedStatsbeat = {};
-        for (let i = 0; i < instrumentations.length; i++) {
-          updatedStatsbeat = {
-            instrumentation: (statsbeatOptions.instrumentation |=
-              StatsbeatInstrumentationMap.get(instrumentations[i].instrumentationName) || 0),
-            feature: statsbeatOptions.feature,
-          };
+        if (instrumentations.length > 0) {
+          const statsbeatOptions: StatsbeatEnvironmentConfig = JSON.parse(
+            process.env[AZURE_MONITOR_STATSBEAT_FEATURES] || emptyStatsbeatConfig,
+          );
+          let updatedStatsbeat = {};
+          for (let i = 0; i < instrumentations.length; i++) {
+            updatedStatsbeat = {
+              instrumentation: (statsbeatOptions.instrumentation |=
+                StatsbeatInstrumentationMap.get(instrumentations[i].instrumentationName) || 0),
+              feature: statsbeatOptions.feature,
+            };
+          }
+          process.env[AZURE_MONITOR_STATSBEAT_FEATURES] = JSON.stringify(updatedStatsbeat);
         }
-        process.env[AZURE_MONITOR_STATSBEAT_FEATURES] = JSON.stringify(updatedStatsbeat);
       } catch (_e) {
         Logger.getInstance().warn("Failed to parse the statsbeat environment variable");
       }

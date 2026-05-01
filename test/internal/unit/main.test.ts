@@ -25,7 +25,7 @@ import {
 import { getOsPrefix } from "../../../src/azureMonitor/utils/common.js";
 import type { ReadableSpan, Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordProcessor, SdkLogRecord } from "@opentelemetry/sdk-logs";
-import { getInstance } from "../../../src/azureMonitor/utils/statsbeat.js";
+import { getInstance } from "../../../src/utils/statsbeat.js";
 import type { Instrumentation, InstrumentationConfig } from "@opentelemetry/instrumentation";
 import { describe, it, beforeEach, afterEach, expect, assert, vi, afterAll } from "vitest";
 import { OpenAIAgentsTraceInstrumentor } from "../../../src/genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js";
@@ -565,7 +565,7 @@ describe("Main functions", () => {
     });
   });
 
-  it("should not use process resource detector if OTEL_NODE_RESOURCE_DETECTORS not specified", () => {
+  it("should not use process or host resource detector if OTEL_NODE_RESOURCE_DETECTORS not specified", () => {
     const config: MicrosoftOpenTelemetryOptions = {
       azureMonitor: {
         azureMonitorExporterOptions: {
@@ -584,6 +584,7 @@ describe("Main functions", () => {
     assert.isDefined(resource, "Resource should be defined on tracer provider");
     Object.keys(resource || {}).forEach((attr) => {
       assert.isTrue(!attr.includes("process"));
+      assert.isTrue(!attr.startsWith("host."), `Unexpected host attribute: ${attr}`);
     });
   });
 
@@ -910,13 +911,112 @@ describe("Main functions", () => {
       }
     }
 
-    // Azure Monitor statsbeat env var should not have any Azure Monitor-specific features
+    // Azure Monitor statsbeat env var should reflect OTLP-only scenario
     const statsbeatRaw = process.env["AZURE_MONITOR_STATSBEAT_FEATURES"];
     if (statsbeatRaw) {
       const statsbeat = JSON.parse(statsbeatRaw);
-      // DISTRO feature should NOT be set when Azure Monitor is not configured
-      expect(statsbeat.feature & 8).toBe(0); // 8 = StatsbeatFeature.DISTRO
+      // DISTRO feature SHOULD be set — the distro is being used regardless of backend
+      expect(statsbeat.feature & StatsbeatFeature.DISTRO).toBeTruthy();
+      // OTLP feature should be set
+      expect(statsbeat.feature & StatsbeatFeature.OTLP).toBeTruthy();
     }
+
+    void shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("should set A365 feature bit in statsbeat when A365 is enabled", () => {
+    const env = <{ [id: string]: string }>{};
+    process.env = env;
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        tokenResolver: () => "tok",
+      },
+    });
+
+    const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
+    const features = Number(output.feature);
+    assert.ok(features & StatsbeatFeature.A365, "A365 feature bit should be set");
+
+    void shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("should not set A365 feature bit when A365 is disabled", () => {
+    const env = <{ [id: string]: string }>{};
+    process.env = env;
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+    });
+
+    const raw = process.env[AZURE_MONITOR_STATSBEAT_FEATURES];
+    if (raw) {
+      const output = JSON.parse(raw);
+      const features = Number(output.feature);
+      assert.notOk(features & StatsbeatFeature.A365, "A365 feature bit should not be set");
+    }
+
+    void shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("should set OTLP feature bit in statsbeat when OTLP endpoint is configured", () => {
+    const env = <{ [id: string]: string }>{};
+    env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318";
+    process.env = env;
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+    });
+
+    const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
+    const features = Number(output.feature);
+    assert.ok(features & StatsbeatFeature.OTLP, "OTLP feature bit should be set");
+
+    void shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("should not set OTLP feature bit when no OTLP endpoint is configured", () => {
+    const env = <{ [id: string]: string }>{};
+    process.env = env;
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: {
+        azureMonitorExporterOptions: {
+          connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        },
+      },
+    });
+
+    const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
+    const features = Number(output.feature);
+    assert.notOk(features & StatsbeatFeature.OTLP, "OTLP feature bit should not be set");
+
+    void shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("should set both A365 and OTLP feature bits when both are active", () => {
+    const env = <{ [id: string]: string }>{};
+    env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318";
+    process.env = env;
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        tokenResolver: () => "tok",
+      },
+    });
+
+    const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
+    const features = Number(output.feature);
+    assert.ok(features & StatsbeatFeature.A365, "A365 feature bit should be set");
+    assert.ok(features & StatsbeatFeature.OTLP, "OTLP feature bit should be set");
 
     void shutdownMicrosoftOpenTelemetry();
   });
@@ -996,6 +1096,45 @@ describe("Main functions", () => {
     assert.isDefined(
       a365SpanProcessor,
       "Expected A365SpanProcessor to be registered when A365 is enabled",
+    );
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("registers A365SpanProcessor but not Agent365Exporter when a365.enableObservabilityExporter is false (default)", async () => {
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        // enableObservabilityExporter omitted -> defaults to false
+        tokenResolver: () => "token",
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const a365SpanProcessor = registeredProcessors.find(
+      (processor: any) => processor.constructor?.name === "A365SpanProcessor",
+    );
+    assert.isDefined(
+      a365SpanProcessor,
+      "A365SpanProcessor should still be registered for span enrichment",
+    );
+
+    const a365Exporter = registeredProcessors.find(
+      (processor: any) =>
+        processor.constructor?.name === "BatchSpanProcessor" &&
+        processor["_exporter"]?.constructor?.name === "Agent365Exporter",
+    );
+    assert.isUndefined(
+      a365Exporter,
+      "Agent365Exporter should be suppressed when a365.enableObservabilityExporter is false",
     );
 
     await shutdownMicrosoftOpenTelemetry();
@@ -1153,6 +1292,7 @@ describe("Main functions", () => {
       enableConsoleExporters: false,
       a365: {
         enabled: true,
+        enableObservabilityExporter: true,
         tokenResolver: () => "token",
       },
     });
@@ -1174,6 +1314,69 @@ describe("Main functions", () => {
     assert.strictEqual(batchProcessor["_exportTimeoutMillis"], 30000);
 
     await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("propagates a365.observabilityScopeOverride to the Agent365Exporter authScopes", async () => {
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        enableObservabilityExporter: true,
+        observabilityScopeOverride: "api://override-scope/.default",
+        tokenResolver: () => "token",
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const batchProcessor = registeredProcessors.find(
+      (processor: any) =>
+        processor.constructor?.name === "BatchSpanProcessor" &&
+        processor["_exporter"]?.constructor?.name === "Agent365Exporter",
+    );
+
+    assert.isDefined(batchProcessor, "Expected an Agent365 BatchSpanProcessor");
+    const exporter = batchProcessor["_exporter"];
+    assert.deepStrictEqual(exporter?.["options"]?.authScopes, ["api://override-scope/.default"]);
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("applies a365.logLevel to the A365 logger filter via configureA365Logger", async () => {
+    const { _resetA365LoggerForTest, getA365Logger } = await import("../../../src/a365/logging.js");
+    _resetA365LoggerForTest();
+
+    const customLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const { configureA365Logger } = await import("../../../src/a365/logging.js");
+    configureA365Logger({ logger: customLogger });
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        logLevel: "warn|error",
+        tokenResolver: () => "token",
+      },
+    });
+
+    const logger = getA365Logger();
+    logger.info("dropped");
+    logger.warn("kept");
+    logger.error("kept");
+
+    assert.strictEqual(customLogger.info.mock.calls.length, 0, "info should be filtered out");
+    assert.strictEqual(customLogger.warn.mock.calls.length, 1, "warn should pass the filter");
+    assert.strictEqual(customLogger.error.mock.calls.length, 1, "error should pass the filter");
+
+    await shutdownMicrosoftOpenTelemetry();
+    _resetA365LoggerForTest();
   });
 
   it("initializes OpenAI Agents instrumentation when enabled", async () => {

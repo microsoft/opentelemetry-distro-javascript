@@ -37,7 +37,7 @@ export interface ActivityLike {
     id?: string;
   };
   isAgenticRequest?: () => boolean;
-  getAgenticInstanceId?: () => string;
+  getAgenticInstanceId?: () => string | undefined;
   getAgenticTenantId?: () => string;
   getAgenticUser?: () => string;
 }

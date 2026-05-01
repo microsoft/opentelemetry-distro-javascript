@@ -1,9 +1,9 @@
-# A365
+# Agent 365 Observability — Microsoft OpenTelemetry Distro for Node.js
 
 Short guide for A365-specific APIs in this package.
 
 Use the [main README](./README.md) for configuration and environment variables.
-Use [Microsoft Learn](https://learn.microsoft.com/en-us/microsoft-agent-365/developer/observability?tabs=nodejs) for full product documentation.
+Use [Microsoft Learn](https://learn.microsoft.com/en-us/microsoft-agent-365/developer/microsoft-opentelemetry?tabs=nodejs) for full product documentation.
 
 ## What Is Here
 
