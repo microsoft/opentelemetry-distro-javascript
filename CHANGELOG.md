@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Other Changes
+- Lazy-load LangChain tracer to avoid eager import of `@langchain/core` before instrumentation hooks register. Removed noise when openai and langchain packages are not installed [#98](https://github.com/microsoft/opentelemetry-distro-javascript/pull/98)
+
 ## [1.0.0] - 2026-04-30
 
 First stable (GA) release. Promotes all functionality from the 0.1.0-beta series.
