@@ -238,11 +238,15 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | `boolean` | `false` | Enable A365 observability export |
+| `enabled` | `boolean` | `false` | Enable A365 observability. Registers the `A365SpanProcessor` for baggage/attribute enrichment of downstream exporters (Azure Monitor, OTLP, console). Does **not** send data to the A365 service on its own — set `enableObservabilityExporter` for that |
+| `enableObservabilityExporter` | `boolean` | `false` | Enable the A365 HTTP exporter (`Agent365Exporter`) to send spans to the A365 observability service. Requires `enabled: true`. Equivalent to `ENABLE_A365_OBSERVABILITY_EXPORTER` env var |
 | `tokenResolver` | `(agentId, tenantId, authScopes?) => string \| Promise<string>` | — | Token resolver for A365 service authentication |
 | `clusterCategory` | `ClusterCategory` | `"prod"` | Cluster category for endpoint resolution (`local`, `dev`, `test`, `preprod`, `firstrelease`, `prod`, `gov`, `high`, `dod`, `mooncake`, `ex`, `rx`) |
 | `domainOverride` | `string` | — | Override the A365 observability service domain |
-| `authScopes` | `string[]` | `["https://api.powerplatform.com/.default"]` | OAuth scopes for A365 service authentication |
+| `authScopes` | `string[]` | `["api://9b975845-388f-4429-889e-eab1ef63949c/.default"]` | OAuth scopes for A365 service authentication |
+| `observabilityScopeOverride` | `string` | — | Single-string scope override (highest precedence). Equivalent to `A365_OBSERVABILITY_SCOPES_OVERRIDE` env var |
+| `logLevel` | `string` | `"none"` | A365 internal log level: `none`, `info`, `warn`, `error`, or pipe-separated combination. Overrides `A365_OBSERVABILITY_LOG_LEVEL` env var |
+| `useS2SEndpoint` | `boolean` | `false` | Use the S2S (service-to-service) endpoint path for export |
 
 When A365 export is enabled, the distro defaults to GenAI-focused telemetry. To opt back into non-GenAI auto-instrumentation, set explicit overrides:
 
@@ -310,8 +314,16 @@ new ObservabilityHostingManager().configure(adapter as unknown as { use(...m: un
 });
 ```
 
+#### A365 exporter tuning
 
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `maxQueueSize` | `number` | `2048` | Maximum span queue size before drops occur |
+| `scheduledDelayMilliseconds` | `number` | `5000` | Delay (ms) between automatic batch flush attempts |
+| `exporterTimeoutMilliseconds` | `number` | `90000` | Maximum time (ms) for the entire export call |
 | `httpRequestTimeoutMilliseconds` | `number` | `30000` | HTTP request timeout (ms) when sending spans to A365 service |
+| `maxExportBatchSize` | `number` | `512` | Maximum number of spans per export batch |
+| `maxPayloadBytes` | `number` | — | Maximum estimated payload size (bytes) per HTTP chunk |
 
 Example:
 
@@ -320,12 +332,10 @@ useMicrosoftOpenTelemetry({
   a365: {
     enabled: true,
     tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId),
-    exporterOptions: {
-      maxQueueSize: 4096,
-      maxExportBatchSize: 1024,
-      scheduledDelayMilliseconds: 10000,
-      httpRequestTimeoutMilliseconds: 15000,
-    },
+    maxQueueSize: 4096,
+    maxExportBatchSize: 1024,
+    scheduledDelayMilliseconds: 10000,
+    httpRequestTimeoutMilliseconds: 15000,
   },
 });
 ```

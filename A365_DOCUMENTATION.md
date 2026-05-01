@@ -83,3 +83,16 @@ configureA365Hosting(adapter, {
 ```
 
 Set `enableOutputLogging: false` if response content should not be captured.
+
+## Shutdown
+
+Call `shutdownMicrosoftOpenTelemetry()` during graceful shutdown to flush pending telemetry and release resources:
+
+```typescript
+import { shutdownMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+
+process.on("SIGTERM", async () => {
+  await shutdownMicrosoftOpenTelemetry();
+  process.exit(0);
+});
+```

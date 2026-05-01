@@ -15,11 +15,14 @@ Reference docs: https://learn.microsoft.com/en-us/microsoft-agent-365/developer/
 | `npm install @microsoft/agents-a365-observability` | `npm install @microsoft/opentelemetry` |
 | `import { ... } from "@microsoft/agents-a365-observability"` | `import { ... } from "@microsoft/opentelemetry"` |
 
-If you used hosting helpers:
+If you used hosting helpers, extension packages, or the runtime package, remove them and use the single distro package:
 
 | Before | After |
 |---|---|
 | `@microsoft/agents-a365-observability-hosting` | `@microsoft/opentelemetry` |
+| `@microsoft/agents-a365-observability-extensions-openai` | `@microsoft/opentelemetry` (auto-instrumented) |
+| `@microsoft/agents-a365-observability-extensions-langchain` | `@microsoft/opentelemetry` (auto-instrumented) |
+| `@microsoft/agents-a365-runtime` | `@microsoft/opentelemetry` |
 
 ---
 
@@ -39,7 +42,7 @@ new Builder({
 ### After
 
 ```typescript
-import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+import { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
 
 useMicrosoftOpenTelemetry({
   a365: {
@@ -48,7 +51,12 @@ useMicrosoftOpenTelemetry({
     clusterCategory: "prod",
   },
 });
+
+// On graceful shutdown (e.g. SIGTERM handler, process.on('beforeExit'), etc.)
+await shutdownMicrosoftOpenTelemetry();
 ```
+
+> **Important:** Call `shutdownMicrosoftOpenTelemetry()` during graceful shutdown to flush pending telemetry and release resources. Without this, buffered spans and metrics may be lost.
 
 ---
 
@@ -195,11 +203,13 @@ To switch from a custom resolver to the built-in cache, replace your custom logi
 
 ### Custom instance
 
+> **Breaking change:** The default auth scope has changed from `https://api.powerplatform.com/.default` to `api://9b975845-388f-4429-889e-eab1ef63949c/.default`. If you previously hardcoded the old scope, update it. For OBO (on-behalf-of) flows, use `api://9b975845-388f-4429-889e-eab1ef63949c/Agent365.Observability.OtelWrite`. For S2S (service-to-service) flows, use `api://9b975845-388f-4429-889e-eab1ef63949c`. If you omit `authScopes`, the built-in default is used automatically.
+
 ```typescript
 import { AgenticTokenCache, useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
 
 const tokenCache = new AgenticTokenCache({
-  authScopes: ["https://api.powerplatform.com/.default"],
+  authScopes: ["api://9b975845-388f-4429-889e-eab1ef63949c/.default"],
 });
 
 useMicrosoftOpenTelemetry({
@@ -220,12 +230,13 @@ If you use A365 scopes or baggage propagation, see [A365_DOCUMENTATION.md](./A36
 Quick example:
 
 ```typescript
-import { BaggageScope } from "@microsoft/opentelemetry";
+import { BaggageBuilder } from "@microsoft/opentelemetry";
 
-const baggage = new BaggageScope({
-  tenantId: "my-tenant",
-  channelId: "my-channel",
-});
+const baggage = new BaggageBuilder()
+  .agentId("my-agent")
+  .tenantId("my-tenant")
+  .channelId("my-channel")
+  .build();
 
 baggage.run(() => {
   // Baggage automatically propagated to child spans
@@ -388,31 +399,26 @@ new ObservabilityHostingManager().configure(adapter, {
 
 ## 12) Logging level migration
 
-| Old | New |
-|---|---|
-| `A365_OBSERVABILITY_LOG_LEVEL=none` | `OTEL_LOG_LEVEL=NONE` |
-| `A365_OBSERVABILITY_LOG_LEVEL=info` | `OTEL_LOG_LEVEL=INFO` |
-| `A365_OBSERVABILITY_LOG_LEVEL=warn` | `OTEL_LOG_LEVEL=WARN` |
-| `A365_OBSERVABILITY_LOG_LEVEL=error` | `OTEL_LOG_LEVEL=ERROR` |
+> **Note:** `A365_OBSERVABILITY_LOG_LEVEL` is **still supported** and controls internal A365 component logging (exporter, span processor, token cache). It is independent of the OpenTelemetry SDK log level.
 
-Before:
+| Variable | Purpose |
+|---|---|
+| `A365_OBSERVABILITY_LOG_LEVEL` | Controls A365 internal component logging (`none`, `info`, `warn`, `error`, or pipe-separated combination). **Still supported.** |
+| `OTEL_LOG_LEVEL` | Controls OpenTelemetry SDK diagnostic logging (`NONE`, `INFO`, `WARN`, `ERROR`). |
+| `AZURE_LOG_LEVEL` | Controls Azure SDK logging (`info`, `warning`, `error`, `verbose`). |
+
+If you were using `A365_OBSERVABILITY_LOG_LEVEL` for A365-specific logging, **no change is needed** — it continues to work.
+
+To also enable OpenTelemetry SDK diagnostics and Azure SDK logging, add the corresponding variables:
 
 ```bash
 # Linux / macOS
-export A365_OBSERVABILITY_LOG_LEVEL=info
+export A365_OBSERVABILITY_LOG_LEVEL=info   # A365 internal logging (still supported)
+export OTEL_LOG_LEVEL=INFO                  # OpenTelemetry SDK diagnostics
+export AZURE_LOG_LEVEL=info                 # Azure SDK logging
 
 # Windows cmd
 set A365_OBSERVABILITY_LOG_LEVEL=info
-```
-
-After:
-
-```bash
-# Linux / macOS
-export OTEL_LOG_LEVEL=INFO
-export AZURE_LOG_LEVEL=info
-
-# Windows cmd
 set OTEL_LOG_LEVEL=INFO
 set AZURE_LOG_LEVEL=info
 ```
@@ -490,6 +496,7 @@ For the full troubleshooting guide, see the [official troubleshooting documentat
 - [ ] Replace `@microsoft/agents-a365-observability` with `@microsoft/opentelemetry`
 - [ ] Replace hosting imports: `@microsoft/agents-a365-observability-hosting` → `@microsoft/opentelemetry`
 - [ ] Replace `new Builder(...).build()` with `useMicrosoftOpenTelemetry({ a365: { ... } })`
+- [ ] Add `await shutdownMicrosoftOpenTelemetry()` to your graceful shutdown path
 - [ ] Set `service.name` and `service.version` via `resource` option or `OTEL_RESOURCE_ATTRIBUTES`
 
 **Auto-instrumentation:**
