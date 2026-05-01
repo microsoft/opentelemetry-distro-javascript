@@ -1,0 +1,12 @@
+{
+  "name": "fabric-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node --import @microsoft/opentelemetry/loader app.mjs"
+  },
+  "dependencies": {
+    "@microsoft/opentelemetry": "file:../..",
+    "express": "^4.21.0"
+  }
+}

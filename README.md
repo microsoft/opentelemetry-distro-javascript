@@ -368,6 +368,10 @@ useMicrosoftOpenTelemetry({
 await shutdownMicrosoftOpenTelemetry();
 ```
 
+## Guides
+
+- [Fabric Getting Started](docs/fabric-getting-started.md) — Send telemetry to Microsoft Fabric / Azure Data Explorer via OTLP + OTel Collector
+
 ## Samples
 
 See the [samples/](./samples/) directory for working TypeScript examples covering connection setup, custom metrics, custom traces, sampling, OTLP dual-export, and more.
