@@ -419,6 +419,13 @@ export function _getSdkInstance(): NodeSDK | undefined {
   return sdk;
 }
 
+// GenAI instrumentations are bootstrapped via eager dynamic imports rather than
+// the OTel `InstrumentationBase` hook system used by core instrumentations
+// (http, mongodb, redis, etc.).  OTel instrumentations register lazy hooks that
+// only fire when the user's code loads the target module, so a missing package
+// is never an error.  Here we eagerly import the optional @openai/agents and
+// @langchain/core packages, so we must tolerate them not being installed.
+// This will be migrated to upstream OTel instrumentation hooks once they are ready.
 function initializeGenAIInstrumentations(options?: InstrumentationOptions): void {
   const openAIOptions = options?.openaiAgents;
   if (openAIOptions?.enabled !== false) {
@@ -447,9 +454,8 @@ async function initializeOpenAIAgentsInstrumentation(
     if (isShutdown) return;
     OpenAIAgentsTraceInstrumentor.instrument(options);
   } catch (error) {
-    Logger.getInstance().warn(
-      "[GenAI] Failed to initialize OpenAI Agents instrumentation. " +
-        "Ensure @openai/agents is installed when openaiAgents config is enabled.",
+    Logger.getInstance().debug(
+      "[GenAI] Skipping OpenAI Agents instrumentation, @openai/agents is not installed.",
       error,
     );
   }
@@ -466,9 +472,8 @@ async function initializeLangChainInstrumentation(
     if (isShutdown) return;
     LangChainTraceInstrumentor.instrument(callbackManagerModule);
   } catch (error) {
-    Logger.getInstance().warn(
-      "[GenAI] Failed to initialize LangChain instrumentation. " +
-        "Ensure @langchain/core is installed when langchain config is enabled.",
+    Logger.getInstance().debug(
+      "[GenAI] Skipping LangChain instrumentation, @langchain/core is not installed.",
       error,
     );
   }
@@ -479,15 +484,21 @@ async function resetGenAIInstrumentations(): Promise<void> {
     const { OpenAIAgentsTraceInstrumentor } =
       await import("../genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js");
     OpenAIAgentsTraceInstrumentor.resetInstance();
-  } catch {
-    // Ignore when optional dependency is not installed.
+  } catch (error) {
+    Logger.getInstance().debug(
+      "[GenAI] Skipping OpenAI Agents reset, @openai/agents is not installed.",
+      error,
+    );
   }
 
   try {
     const { LangChainTraceInstrumentor } =
       await import("../genai/instrumentations/langchain/langchainTraceInstrumentor.js");
     LangChainTraceInstrumentor.resetInstance();
-  } catch {
-    // Ignore when optional dependency is not installed.
+  } catch (error) {
+    Logger.getInstance().debug(
+      "[GenAI] Skipping LangChain reset, @langchain/core is not installed.",
+      error,
+    );
   }
 }

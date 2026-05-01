@@ -251,7 +251,7 @@ describe("OutputLoggingMiddleware", () => {
     };
 
     delete (activity as { getAgenticTenantId?: () => string }).getAgenticTenantId;
-    delete (activity as { getAgenticInstanceId?: () => string }).getAgenticInstanceId;
+    delete (activity as { getAgenticInstanceId?: () => string | undefined }).getAgenticInstanceId;
     delete (activity as { isAgenticRequest?: () => boolean }).isAgenticRequest;
 
     activity.recipient = {

@@ -94,7 +94,7 @@ describe("LangChainTraceInstrumentor", () => {
 describe("addTracerToHandlers", () => {
   it("creates a new array with LangChainTracer when handlers is null", () => {
     const tracer = createMockTracer();
-    const result = addTracerToHandlers(tracer, undefined);
+    const result = addTracerToHandlers(tracer, undefined, LangChainTracer);
     assert.ok(Array.isArray(result));
     assert.strictEqual(result.length, 1);
     assert.ok(result[0] instanceof LangChainTracer);
@@ -104,7 +104,7 @@ describe("addTracerToHandlers", () => {
     const tracer = createMockTracer();
     const existingHandler = { handleLLMStart: vi.fn() };
     const handlers = [existingHandler] as any;
-    const result = addTracerToHandlers(tracer, handlers);
+    const result = addTracerToHandlers(tracer, handlers, LangChainTracer);
     assert.ok(Array.isArray(result));
     assert.strictEqual(result.length, 2);
     assert.ok(result[1] instanceof LangChainTracer);
@@ -114,7 +114,7 @@ describe("addTracerToHandlers", () => {
     const tracer = createMockTracer();
     const existingTracer = new LangChainTracer(tracer);
     const handlers = [existingTracer] as any;
-    const result = addTracerToHandlers(tracer, handlers);
+    const result = addTracerToHandlers(tracer, handlers, LangChainTracer);
     assert.ok(Array.isArray(result));
     assert.strictEqual(result.length, 1, "should not duplicate");
   });
@@ -126,7 +126,7 @@ describe("addTracerToHandlers", () => {
       inheritableHandlers: [] as any[],
       addHandler: addHandlerSpy,
     } as any;
-    addTracerToHandlers(tracer, handlers);
+    addTracerToHandlers(tracer, handlers, LangChainTracer);
     assert.ok(addHandlerSpy.mock.calls.length === 1);
     assert.ok(addHandlerSpy.mock.calls[0][0] instanceof LangChainTracer);
     assert.strictEqual(addHandlerSpy.mock.calls[0][1], true, "should be inheritable");
@@ -140,13 +140,13 @@ describe("addTracerToHandlers", () => {
       inheritableHandlers: [existingTracer],
       addHandler: addHandlerSpy,
     } as any;
-    addTracerToHandlers(tracer, handlers);
+    addTracerToHandlers(tracer, handlers, LangChainTracer);
     assert.strictEqual(addHandlerSpy.mock.calls.length, 0, "should not add duplicate");
   });
 
   it("passes content recording option through", () => {
     const tracer = createMockTracer();
-    const result = addTracerToHandlers(tracer, undefined, { isContentRecordingEnabled: true });
+    const result = addTracerToHandlers(tracer, undefined, LangChainTracer);
     assert.ok(Array.isArray(result));
     assert.ok(result[0] instanceof LangChainTracer);
   });
