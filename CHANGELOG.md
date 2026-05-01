@@ -4,6 +4,7 @@
 
 ### Other Changes
 - Lazy-load LangChain tracer to avoid eager import of `@langchain/core` before instrumentation hooks register. Removed noise when openai and langchain packages are not installed [#98](https://github.com/microsoft/opentelemetry-distro-javascript/pull/98)
+- Accept beta versions of azure monitor exporter but not preview versions [#xxx](https://github.com/microsoft/opentelemetry-distro-javascript/pull/xxx)
 
 ## [1.0.0] - 2026-04-30
 
