@@ -12,6 +12,8 @@ import {
   setInputMessagesAttribute,
   setOutputMessagesAttribute,
   setModelAttribute,
+  getRequestModel,
+  getResponseModel,
   setProviderNameAttribute,
   setSessionIdAttribute,
   setSystemInstructionsAttribute,
@@ -25,6 +27,7 @@ import {
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_RESPONSE_MODEL,
   ATTR_GEN_AI_SYSTEM_INSTRUCTIONS,
   ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
   ATTR_GEN_AI_TOOL_CALL_ID,
@@ -340,7 +343,7 @@ describe("setOutputMessagesAttribute", () => {
 });
 
 describe("setModelAttribute", () => {
-  it("extracts model from response_metadata", () => {
+  it("falls back to response_metadata for request model when no request fields are set, and also sets response model", () => {
     const span = makeSpan();
     const run = makeRun({
       outputs: {
@@ -348,14 +351,64 @@ describe("setModelAttribute", () => {
       },
     });
     setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
-      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o",
-      ),
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o"),
+      "request model falls back to response model when nothing else is available",
+    );
+    assert.ok(
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o"),
+      "response model is set from response_metadata",
     );
   });
 
-  it("extracts model from extra.metadata.ls_model_name", () => {
+  it("does NOT overwrite request model with response model when invocation_params provide a deployment alias", () => {
+    // Reproduces the AzureChatOpenAI / CAPI scenario from the bug: request side
+    // has the Azure deployment alias and response side has the underlying model.
+    const span = makeSpan();
+    const run = makeRun({
+      extra: { invocation_params: { model: "my-gpt4o-deployment" } },
+      outputs: {
+        generations: [
+          [{ message: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } }],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "my-gpt4o-deployment",
+      ),
+      "request model is the deployment alias, not the resolved response model",
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "response model captures the resolved underlying model",
+    );
+  });
+
+  it("uses Azure deployment_name from invocation_params for the request model", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      extra: { invocation_params: { deployment_name: "prod-gpt4o" } },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "prod-gpt4o",
+      ),
+    );
+    assert.ok(
+      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL),
+      "no response model attribute when there is no response model",
+    );
+  });
+
+  it("extracts request model from extra.metadata.ls_model_name", () => {
     const span = makeSpan();
     const run = makeRun({
       extra: { metadata: { ls_model_name: "claude-3" } },
@@ -368,7 +421,7 @@ describe("setModelAttribute", () => {
     );
   });
 
-  it("extracts model from extra.invocation_params.model", () => {
+  it("extracts request model from extra.invocation_params.model", () => {
     const span = makeSpan();
     const run = makeRun({
       extra: { invocation_params: { model: "llama-3" } },
@@ -381,11 +434,75 @@ describe("setModelAttribute", () => {
     );
   });
 
+  it("extracts response model from llmOutput.model_name", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      extra: { invocation_params: { model: "deployment-x" } },
+      outputs: { llmOutput: { model_name: "gpt-4o-2024-08-06" } },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-x",
+      ),
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+    );
+  });
+
   it("does nothing when no model is found", () => {
     const span = makeSpan();
     const run = makeRun();
     setModelAttribute(run, span);
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+});
+
+describe("getRequestModel / getResponseModel", () => {
+  it("getRequestModel prefers Azure deployment aliases over ls_model_name and invocation_params.model", () => {
+    // LangChain.js fills invocation_params.model with a default (e.g. "gpt-3.5-turbo")
+    // for AzureChatOpenAI even when the user only configured a deployment name,
+    // so the deployment alias must win.
+    const run = makeRun({
+      extra: {
+        metadata: { ls_model_name: "gpt-3.5-turbo" },
+        invocation_params: {
+          model: "gpt-3.5-turbo",
+          azureOpenAIApiDeploymentName: "my-gpt4o-deployment",
+        },
+      },
+    });
+    assert.strictEqual(getRequestModel(run), "my-gpt4o-deployment");
+  });
+
+  it("getRequestModel prefers ls_model_name over invocation_params.model when no Azure deployment is set", () => {
+    const run = makeRun({
+      extra: {
+        metadata: { ls_model_name: "ls-model" },
+        invocation_params: { model: "ip-model" },
+      },
+    });
+    assert.strictEqual(getRequestModel(run), "ls-model");
+  });
+
+  it("getRequestModel returns undefined when only response_metadata is set", () => {
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { response_metadata: { model_name: "gpt-4o" } } }]],
+      },
+    });
+    assert.strictEqual(getRequestModel(run), undefined);
+  });
+
+  it("getResponseModel returns undefined when only request fields are set", () => {
+    const run = makeRun({
+      extra: { invocation_params: { model: "deployment-x" } },
+    });
+    assert.strictEqual(getResponseModel(run), undefined);
   });
 });
 

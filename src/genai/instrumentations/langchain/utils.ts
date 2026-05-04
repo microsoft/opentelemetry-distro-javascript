@@ -12,6 +12,7 @@ import {
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_RESPONSE_MODEL,
   ATTR_GEN_AI_SYSTEM_INSTRUCTIONS,
   ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
   ATTR_GEN_AI_TOOL_CALL_ID,
@@ -438,26 +439,72 @@ export function setOutputMessagesAttribute(run: Run, span: Span) {
   }
 }
 
-// Model - Helper to extract model name from run
-export function getModel(run: Run): string | undefined {
+// Model - Helper to extract the request-side model (deployment alias / configured model)
+// from a LangChain run. Prefers fields populated by the caller's configuration
+// (e.g. AzureChatOpenAI deployment) over the resolved response model so that the
+// Azure deployment alias is preserved for telemetry.
+export function getRequestModel(run: Run): string | undefined {
+  const invocationParams = run.extra?.invocation_params as Record<string, unknown> | undefined;
   return [
-    // v1: response_metadata directly on message
-    run.outputs?.generations?.[0]?.[0]?.message?.response_metadata?.model_name,
-    // v0: response_metadata nested under kwargs
-    run.outputs?.generations?.[0]?.[0]?.message?.kwargs?.response_metadata?.model_name,
-    // Metadata paths (both v0 and v1)
+    // Azure-specific deployment aliases used by AzureChatOpenAI / AzureOpenAI.
+    // These are checked first because LangChain.js fills invocation_params.model
+    // with a default (e.g. "gpt-3.5-turbo") for Azure clients even when the user
+    // only configured a deployment name, so the deployment alias is the most
+    // accurate request-side identifier when present.
+    invocationParams?.azureOpenAIApiDeploymentName,
+    invocationParams?.azure_deployment,
+    invocationParams?.deployment_name,
+    // LangChain-set request-side identifier (both v0 and v1)
     run.extra?.metadata?.ls_model_name,
-    run.extra?.invocation_params?.model,
-    run.extra?.invocation_params?.model_name,
+    // Generic OpenAI-style request model from invocation params
+    invocationParams?.model,
+    invocationParams?.model_name,
   ]
     .map((v) => (v != null ? String(v).trim() : ""))
     .find((v) => v.length > 0);
 }
 
-// Model - Set model attribute on span
+// Model - Helper to extract the response-side model (the model that actually
+// served the request, e.g. the underlying OpenAI model behind an Azure deployment).
+export function getResponseModel(run: Run): string | undefined {
+  const llmOutput = run.outputs?.llmOutput as Record<string, unknown> | undefined;
+  return [
+    // v1: response_metadata directly on message
+    run.outputs?.generations?.[0]?.[0]?.message?.response_metadata?.model_name,
+    // v0: response_metadata nested under kwargs
+    run.outputs?.generations?.[0]?.[0]?.message?.kwargs?.response_metadata?.model_name,
+    // LLMResult.llmOutput.model_name (common for Chat models)
+    llmOutput?.model_name,
+    llmOutput?.model,
+  ]
+    .map((v) => (v != null ? String(v).trim() : ""))
+    .find((v) => v.length > 0);
+}
+
+// Model - Helper kept for backwards compatibility (e.g. span naming). Prefers the
+// request model so the deployment alias is used, falling back to the response model
+// only when the request side is not available.
+export function getModel(run: Run): string | undefined {
+  return getRequestModel(run) ?? getResponseModel(run);
+}
+
+// Model - Set request and response model attributes on the span.
 export function setModelAttribute(run: Run, span: Span) {
-  const model = getModel(run);
-  if (model) span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, model);
+  const requestModel = getRequestModel(run);
+  const responseModel = getResponseModel(run);
+
+  if (requestModel) {
+    span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, requestModel);
+  } else if (responseModel) {
+    // Preserve prior behavior of always populating gen_ai.request.model when at
+    // least one model identifier is available, so spans aren't left without any
+    // model attribution when invocation params are missing.
+    span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, responseModel);
+  }
+
+  if (responseModel) {
+    span.setAttribute(ATTR_GEN_AI_RESPONSE_MODEL, responseModel);
+  }
 }
 
 // Provider
