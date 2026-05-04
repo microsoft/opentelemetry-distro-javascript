@@ -53,9 +53,12 @@ const Utils = require(utilsPath) as {
 };
 import type { Run } from "@langchain/core/tracers/base";
 
-const CONNECTION_STRING =
-  process.env.APPLICATIONINSIGHTS_CONNECTION_STRING ||
-  "InstrumentationKey=b59d565e-da91-4140-8671-6c79b6938b4d;IngestionEndpoint=https://westus2-2.in.applicationinsights.azure.com/;LiveEndpoint=https://westus2.livediagnostics.monitor.azure.com/;ApplicationId=a8451929-c71b-4336-8ac5-f27f3d6d6292";
+const CONNECTION_STRING = process.env.APPLICATIONINSIGHTS_CONNECTION_STRING;
+if (!CONNECTION_STRING) {
+  throw new Error(
+    "APPLICATIONINSIGHTS_CONNECTION_STRING environment variable is required to run this sample.",
+  );
+}
 
 useMicrosoftOpenTelemetry({
   azureMonitor: {
