@@ -390,6 +390,52 @@ describe("setModelAttribute", () => {
     );
   });
 
+  it("prefers azureOpenAIApiDeploymentName over a conflicting default invocation_params.model (regression test)", () => {
+    // Reproduces the exact AzureChatOpenAI + CAPI regression: LangChain.js fills
+    // invocation_params.model with its default ("gpt-3.5-turbo") even when the
+    // user only configured a deployment alias. The deployment alias must win on
+    // the request side, and the resolved underlying model must end up on the
+    // response side.
+    const span = makeSpan();
+    const run = makeRun({
+      extra: {
+        metadata: { ls_model_name: "gpt-3.5-turbo" },
+        invocation_params: {
+          model: "gpt-3.5-turbo",
+          azureOpenAIApiDeploymentName: "my-gpt4o-deployment",
+        },
+      },
+      outputs: {
+        generations: [
+          [{ message: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } }],
+        ],
+        llmOutput: { model_name: "gpt-4o-2024-08-06" },
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) =>
+          c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "my-gpt4o-deployment",
+      ),
+      "request model is the Azure deployment alias, not the default invocation_params.model",
+    );
+    assert.ok(
+      !calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo",
+      ),
+      "default invocation_params.model must not be used as the request model",
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) =>
+          c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "response model captures the resolved underlying model",
+    );
+  });
+
   it("uses Azure deployment_name from invocation_params for the request model", () => {
     const span = makeSpan();
     const run = makeRun({
