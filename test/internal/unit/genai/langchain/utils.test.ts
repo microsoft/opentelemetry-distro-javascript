@@ -369,9 +369,7 @@ describe("setModelAttribute", () => {
     const run = makeRun({
       extra: { invocation_params: { model: "my-gpt4o-deployment" } },
       outputs: {
-        generations: [
-          [{ message: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } }],
-        ],
+        generations: [[{ message: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } }]],
       },
     });
     setModelAttribute(run, span);
@@ -406,9 +404,7 @@ describe("setModelAttribute", () => {
         },
       },
       outputs: {
-        generations: [
-          [{ message: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } }],
-        ],
+        generations: [[{ message: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } }]],
         llmOutput: { model_name: "gpt-4o-2024-08-06" },
       },
     });
@@ -416,21 +412,17 @@ describe("setModelAttribute", () => {
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
       calls.some(
-        (c: unknown[]) =>
-          c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "my-gpt4o-deployment",
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "my-gpt4o-deployment",
       ),
       "request model is the Azure deployment alias, not the default invocation_params.model",
     );
     assert.ok(
-      !calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo",
-      ),
+      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo"),
       "default invocation_params.model must not be used as the request model",
     );
     assert.ok(
       calls.some(
-        (c: unknown[]) =>
-          c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-2024-08-06",
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-2024-08-06",
       ),
       "response model captures the resolved underlying model",
     );
@@ -444,9 +436,7 @@ describe("setModelAttribute", () => {
     setModelAttribute(run, span);
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
-      calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "prod-gpt4o",
-      ),
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "prod-gpt4o"),
     );
     assert.ok(
       !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL),
@@ -489,9 +479,7 @@ describe("setModelAttribute", () => {
     setModelAttribute(run, span);
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
-      calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-x",
-      ),
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-x"),
     );
     assert.ok(
       calls.some(
