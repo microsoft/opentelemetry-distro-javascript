@@ -12,8 +12,10 @@ import {
   setInputMessagesAttribute,
   setOutputMessagesAttribute,
   setModelAttribute,
+  setResponseIdAttribute,
   getRequestModel,
   getResponseModel,
+  getResponseId,
   setProviderNameAttribute,
   setSessionIdAttribute,
   setSystemInstructionsAttribute,
@@ -27,6 +29,7 @@ import {
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_RESPONSE_ID,
   ATTR_GEN_AI_RESPONSE_MODEL,
   ATTR_GEN_AI_SYSTEM_INSTRUCTIONS,
   ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
@@ -699,5 +702,81 @@ describe("setTokenAttributes", () => {
     const run = makeRun({ outputs: {} });
     setTokenAttributes(run, span);
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+});
+
+describe("getResponseId / setResponseIdAttribute", () => {
+  it("extracts the response id from AIMessage.id (v1)", () => {
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { id: "chatcmpl-abc123" } }]],
+      },
+    });
+    assert.strictEqual(getResponseId(run), "chatcmpl-abc123");
+  });
+
+  it("extracts the response id from message.kwargs.id (v0)", () => {
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { kwargs: { id: "chatcmpl-v0" } } }]],
+      },
+    });
+    assert.strictEqual(getResponseId(run), "chatcmpl-v0");
+  });
+
+  it("extracts the response id from response_metadata.id when message id is missing", () => {
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [{ message: { response_metadata: { id: "chatcmpl-from-metadata" } } }],
+        ],
+      },
+    });
+    assert.strictEqual(getResponseId(run), "chatcmpl-from-metadata");
+  });
+
+  it("falls back to llmOutput.id when no per-message id is available", () => {
+    const run = makeRun({
+      outputs: {
+        llmOutput: { id: "chatcmpl-llmoutput" },
+        generations: [[{ message: {} }]],
+      },
+    });
+    assert.strictEqual(getResponseId(run), "chatcmpl-llmoutput");
+  });
+
+  it("returns undefined when no response id is present", () => {
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { response_metadata: { model_name: "gpt-4o" } } }]],
+      },
+    });
+    assert.strictEqual(getResponseId(run), undefined);
+  });
+
+  it("setResponseIdAttribute sets gen_ai.response.id when an id is present", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { id: "chatcmpl-set" } }]],
+      },
+    });
+    setResponseIdAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "chatcmpl-set"),
+      "gen_ai.response.id is set from AIMessage.id",
+    );
+  });
+
+  it("setResponseIdAttribute does not set gen_ai.response.id when no id is present", () => {
+    const span = makeSpan();
+    const run = makeRun({ outputs: { generations: [[{ message: {} }]] } });
+    setResponseIdAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID),
+      "gen_ai.response.id is not set when no response id is found",
+    );
   });
 });

@@ -12,6 +12,7 @@ import {
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_RESPONSE_ID,
   ATTR_GEN_AI_RESPONSE_MODEL,
   ATTR_GEN_AI_SYSTEM_INSTRUCTIONS,
   ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
@@ -504,6 +505,43 @@ export function setModelAttribute(run: Run, span: Span) {
 
   if (responseModel) {
     span.setAttribute(ATTR_GEN_AI_RESPONSE_MODEL, responseModel);
+  }
+}
+
+// Response identifier - Helper to extract the unique response id returned by
+// the underlying provider (e.g. OpenAI chat completion id). LangChain.js
+// typically surfaces this as the AIMessage id (top-level for v1, nested
+// under kwargs for v0) and some providers also include it under
+// response_metadata.id or on LLMResult.llmOutput.id.
+export function getResponseId(run: Run): string | undefined {
+  const message = run.outputs?.generations?.[0]?.[0]?.message as
+    | Record<string, unknown>
+    | undefined;
+  const messageKwargs = message?.kwargs as Record<string, unknown> | undefined;
+  const responseMetadata =
+    (message?.response_metadata as Record<string, unknown> | undefined) ??
+    (messageKwargs?.response_metadata as Record<string, unknown> | undefined);
+  const llmOutput = run.outputs?.llmOutput as Record<string, unknown> | undefined;
+  return [
+    // v1: AIMessage.id directly on the message
+    message?.id,
+    // v0: AIMessage.id nested under kwargs
+    messageKwargs?.id,
+    // Provider-supplied response id surfaced via response_metadata
+    responseMetadata?.id,
+    // LLMResult.llmOutput.id (some providers)
+    llmOutput?.id,
+  ]
+    .map((v) => (v != null ? String(v).trim() : ""))
+    .find((v) => v.length > 0);
+}
+
+// Response identifier - Set the gen_ai.response.id attribute on the span when
+// a provider-supplied response id is available on the run.
+export function setResponseIdAttribute(run: Run, span: Span): void {
+  const responseId = getResponseId(run);
+  if (responseId) {
+    span.setAttribute(ATTR_GEN_AI_RESPONSE_ID, responseId);
   }
 }
 
