@@ -24,8 +24,10 @@ export function getCallerBaggagePairs(turnContext: TurnContextLike): Array<[stri
     return [];
   }
   const from = turnContext.activity.from;
+  // Fallback chain for userId: aadObjectId (Teams) → agenticUserId (A2A) → from.id (other channels)
+  const userId = from.aadObjectId || from.agenticUserId || from.id;
   const pairs: Array<[string, string | undefined]> = [
-    [OpenTelemetryConstants.USER_ID_KEY, from.aadObjectId],
+    [OpenTelemetryConstants.USER_ID_KEY, userId],
     [OpenTelemetryConstants.USER_NAME_KEY, from.name],
     [OpenTelemetryConstants.USER_EMAIL_KEY, from.agenticUserId],
     [OpenTelemetryConstants.GEN_AI_CALLER_AGENT_APPLICATION_ID_KEY, from.agenticAppBlueprintId],
