@@ -109,13 +109,19 @@ describe("TurnContextUtils", () => {
     it("should resolve userId to agenticUserId when it is a GUID (A2A with GUID)", () => {
       const ctx: TurnContextLike = {
         activity: {
-          from: { id: "29:1sH5NArUwkWAX", agenticUserId: "bef730f4-d6f5-4ffb-b759-26ffa449ed7e", name: "Agent" },
+          from: {
+            id: "29:1sH5NArUwkWAX",
+            agenticUserId: "bef730f4-d6f5-4ffb-b759-26ffa449ed7e",
+            name: "Agent",
+          },
         },
         turnState: new Map(),
       };
       const pairs = getCallerBaggagePairs(ctx);
       const obj = Object.fromEntries(pairs);
-      expect(obj[OpenTelemetryConstants.USER_ID_KEY]).toBe("bef730f4-d6f5-4ffb-b759-26ffa449ed7e");
+      expect(obj[OpenTelemetryConstants.USER_ID_KEY]).toBe(
+        "bef730f4-d6f5-4ffb-b759-26ffa449ed7e",
+      );
     });
 
     it("should prefer aadObjectId over agenticUserId and from.id", () => {
