@@ -81,6 +81,66 @@ describe("TurnContextUtils", () => {
       expect(pairs).toEqual([]);
     });
 
+    it("should fall back to from.id when aadObjectId is undefined (non-Teams channel)", () => {
+      const ctx: TurnContextLike = {
+        activity: {
+          from: { id: "webchat-user-123", name: "Web User" },
+        },
+        turnState: new Map(),
+      };
+      const pairs = getCallerBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.USER_ID_KEY]).toBe("webchat-user-123");
+      expect(obj[OpenTelemetryConstants.USER_NAME_KEY]).toBe("Web User");
+    });
+
+    it("should fall back to agenticUserId when aadObjectId is undefined (A2A)", () => {
+      const ctx: TurnContextLike = {
+        activity: {
+          from: { agenticUserId: "agent@contoso.com", name: "Upstream Agent" },
+        },
+        turnState: new Map(),
+      };
+      const pairs = getCallerBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.USER_ID_KEY]).toBe("agent@contoso.com");
+    });
+
+    it("should resolve userId to agenticUserId when it is a GUID (A2A with GUID)", () => {
+      const ctx: TurnContextLike = {
+        activity: {
+          from: {
+            id: "29:1sH5NArUwkWAX",
+            agenticUserId: "bef730f4-d6f5-4ffb-b759-26ffa449ed7e",
+            name: "Agent",
+          },
+        },
+        turnState: new Map(),
+      };
+      const pairs = getCallerBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.USER_ID_KEY]).toBe(
+        "bef730f4-d6f5-4ffb-b759-26ffa449ed7e",
+      );
+    });
+
+    it("should prefer aadObjectId over agenticUserId and from.id", () => {
+      const ctx: TurnContextLike = {
+        activity: {
+          from: {
+            id: "fallback-id",
+            aadObjectId: "aad-oid",
+            agenticUserId: "agent@contoso.com",
+            name: "User",
+          },
+        },
+        turnState: new Map(),
+      };
+      const pairs = getCallerBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.USER_ID_KEY]).toBe("aad-oid");
+    });
+
     it("should filter out undefined/empty values", () => {
       const ctx: TurnContextLike = {
         activity: { from: { name: "User", aadObjectId: "" } },
