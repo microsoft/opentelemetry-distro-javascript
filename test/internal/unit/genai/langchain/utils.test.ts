@@ -727,9 +727,7 @@ describe("getResponseId / setResponseIdAttribute", () => {
   it("extracts the response id from response_metadata.id when message id is missing", () => {
     const run = makeRun({
       outputs: {
-        generations: [
-          [{ message: { response_metadata: { id: "chatcmpl-from-metadata" } } }],
-        ],
+        generations: [[{ message: { response_metadata: { id: "chatcmpl-from-metadata" } } }]],
       },
     });
     assert.strictEqual(getResponseId(run), "chatcmpl-from-metadata");
