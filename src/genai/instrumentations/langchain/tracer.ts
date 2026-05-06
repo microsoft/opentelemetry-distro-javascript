@@ -17,6 +17,41 @@ import * as Utils from "./utils.js";
 type RunWithSpan = { run: Run; span: Span; startTime: number; lastAccessTime: number };
 
 /**
+ * Vendor-neutral hook called for every completed run before its span is ended.
+ * Allows external modules to enrich the span with attributes derived from the
+ * LangChain `Run` shape, without the instrumentation needing any vendor-specific
+ * knowledge.
+ */
+export type LangChainSpanEnricher = (run: Run, span: Span) => void;
+
+const spanEnrichers: LangChainSpanEnricher[] = [];
+
+/**
+ * Register an enricher that will be invoked from `_endTrace` for every run
+ * mapped to a span. Returns an unregister function. Idempotent for the same
+ * function reference (re-registering the same enricher does not duplicate it).
+ */
+export function registerLangChainSpanEnricher(enricher: LangChainSpanEnricher): () => void {
+  if (!spanEnrichers.includes(enricher)) {
+    spanEnrichers.push(enricher);
+  }
+  return () => {
+    const idx = spanEnrichers.indexOf(enricher);
+    if (idx >= 0) spanEnrichers.splice(idx, 1);
+  };
+}
+
+/** @internal Test-only helper to clear the global enricher registry. */
+export function _resetLangChainSpanEnrichersForTesting() {
+  spanEnrichers.length = 0;
+}
+
+/** @internal Test-only helper to inspect the global enricher registry. */
+export function _getLangChainSpanEnrichersForTesting(): readonly LangChainSpanEnricher[] {
+  return spanEnrichers;
+}
+
+/**
  * OpenTelemetry-based tracer for LangChain / LangGraph applications.
  *
  * Extends LangChain's `BaseTracer` callback handler so it can be injected into
@@ -188,7 +223,6 @@ export class LangChainTracer extends BaseTracer {
         }
       }
       Utils.setModelAttribute(run, span);
-      Utils.setLangChainDeploymentAliasAttribute(run, span);
       Utils.setResponseIdAttribute(run, span);
       Utils.setProviderNameAttribute(run, span);
       Utils.setSessionIdAttribute(run, span);
@@ -199,6 +233,19 @@ export class LangChainTracer extends BaseTracer {
       Utils.setInputMessagesAttribute(run, span);
       Utils.setOutputMessagesAttribute(run, span);
       Utils.setSystemInstructionsAttribute(run, span);
+
+      // Run any externally-registered span enrichers (vendor-neutral hook).
+      // Errors in individual enrichers are isolated so one bad enricher does
+      // not block others or fail span emission.
+      for (const enricher of spanEnrichers) {
+        try {
+          enricher(run, span);
+        } catch (enricherError) {
+          diag.error(
+            `[LangChainTracer] Span enricher threw for run ${run.name}: ${enricherError instanceof Error ? enricherError.message : String(enricherError)}`,
+          );
+        }
+      }
     } catch (error) {
       diag.error(
         `[LangChainTracer] Error setting span attributes for run ${run.name}: ${error instanceof Error ? error.message : String(error)}`,

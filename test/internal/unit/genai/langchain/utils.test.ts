@@ -13,8 +13,6 @@ import {
   setOutputMessagesAttribute,
   setModelAttribute,
   setResponseIdAttribute,
-  setLangChainDeploymentAliasAttribute,
-  getLangChainDeploymentAlias,
   getRequestModel,
   getResponseModel,
   getResponseId,
@@ -41,7 +39,6 @@ import {
   ATTR_GEN_AI_TOOL_TYPE,
   ATTR_GEN_AI_USAGE_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
-  ATTR_MICROSOFT_LANGCHAIN_DEPLOYMENT_ALIAS,
   ATTR_MICROSOFT_SESSION_ID,
   ATTR_GEN_AI_CONVERSATION_ID,
   GEN_AI_OPERATION_CHAT,
@@ -497,12 +494,12 @@ describe("setModelAttribute", () => {
     );
   });
 
-  it("setModelAttribute is a no-op for the request model when only an Azure deployment-alias field is present (alias is surfaced separately by the bridge helper)", () => {
-    // When LangChain populates only an Azure deployment-alias field, the
-    // instrumentation must NOT set gen_ai.request.model — the downstream
-    // processor is responsible for taking the alias from the bridge attribute
-    // and assigning it. This guards against the instrumentation accidentally
-    // re-introducing Azure decisioning.
+  it("setModelAttribute is a no-op when only an Azure deployment-alias field is present (instrumentation stays vendor-neutral)", () => {
+    // Regression guard: if someone re-introduces Azure-specific field handling
+    // into the instrumentation, this test will fail. The instrumentation must
+    // NOT promote azureOpenAIApiDeploymentName / azure_deployment /
+    // deployment_name into gen_ai.request.model — that's the Azure span
+    // processor's job.
     const span = makeSpan();
     const run = makeRun({
       extra: { invocation_params: { azureOpenAIApiDeploymentName: "my-gpt4o-deployment" } },
@@ -511,7 +508,7 @@ describe("setModelAttribute", () => {
     assert.strictEqual(
       (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length,
       0,
-      "setModelAttribute writes nothing when the only model-like value is an Azure deployment alias",
+      "instrumentation must not write any model attribute from Azure-only invocation_params",
     );
   });
 
@@ -565,82 +562,6 @@ describe("getRequestModel / getResponseModel", () => {
       extra: { invocation_params: { model: "deployment-x" } },
     });
     assert.strictEqual(getResponseModel(run), undefined);
-  });
-});
-
-describe("getLangChainDeploymentAlias / setLangChainDeploymentAliasAttribute", () => {
-  it("getLangChainDeploymentAlias prefers azureOpenAIApiDeploymentName over azure_deployment and deployment_name", () => {
-    const run = makeRun({
-      extra: {
-        invocation_params: {
-          azureOpenAIApiDeploymentName: "alias-1",
-          azure_deployment: "alias-2",
-          deployment_name: "alias-3",
-        },
-      },
-    });
-    assert.strictEqual(getLangChainDeploymentAlias(run), "alias-1");
-  });
-
-  it("getLangChainDeploymentAlias falls back to azure_deployment then deployment_name", () => {
-    assert.strictEqual(
-      getLangChainDeploymentAlias(
-        makeRun({ extra: { invocation_params: { azure_deployment: "alias-2" } } }),
-      ),
-      "alias-2",
-    );
-    assert.strictEqual(
-      getLangChainDeploymentAlias(
-        makeRun({ extra: { invocation_params: { deployment_name: "alias-3" } } }),
-      ),
-      "alias-3",
-    );
-  });
-
-  it("getLangChainDeploymentAlias skips empty-string fields and falls through to the next candidate", () => {
-    const run = makeRun({
-      extra: {
-        invocation_params: {
-          azureOpenAIApiDeploymentName: "",
-          azure_deployment: "   ",
-          deployment_name: "alias-3",
-        },
-      },
-    });
-    assert.strictEqual(getLangChainDeploymentAlias(run), "alias-3");
-  });
-
-  it("getLangChainDeploymentAlias returns undefined when no alias fields are present", () => {
-    const run = makeRun({ extra: { invocation_params: { model: "gpt-3.5-turbo" } } });
-    assert.strictEqual(getLangChainDeploymentAlias(run), undefined);
-  });
-
-  it("setLangChainDeploymentAliasAttribute sets the bridge attribute when an alias exists", () => {
-    const span = makeSpan();
-    const run = makeRun({
-      extra: {
-        invocation_params: {
-          model: "gpt-3.5-turbo",
-          azureOpenAIApiDeploymentName: "my-gpt4o-deployment",
-        },
-      },
-    });
-    setLangChainDeploymentAliasAttribute(run, span);
-    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
-    assert.ok(
-      calls.some(
-        (c: unknown[]) =>
-          c[0] === ATTR_MICROSOFT_LANGCHAIN_DEPLOYMENT_ALIAS && c[1] === "my-gpt4o-deployment",
-      ),
-      "deployment alias bridge attribute is set when LangChain populates a deployment-alias field",
-    );
-  });
-
-  it("setLangChainDeploymentAliasAttribute is a no-op when no alias is present", () => {
-    const span = makeSpan();
-    const run = makeRun({ extra: { invocation_params: { model: "gpt-3.5-turbo" } } });
-    setLangChainDeploymentAliasAttribute(run, span);
-    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
   });
 });
 

@@ -57,19 +57,3 @@ export const ATTR_GEN_AI_CONVERSATION_ID = "gen_ai.conversation.id" as const;
 // Microsoft-specific (not in OTel semconv)
 export const ATTR_MICROSOFT_SESSION_ID = "microsoft.session.id" as const;
 export const ATTR_MICROSOFT_TENANT_ID = "microsoft.tenant.id" as const;
-
-/**
- * Internal bridge attribute carrying the LangChain "deployment alias" value
- * surfaced by the LangChain instrumentation (read from any of LangChain's
- * deployment-alias-style fields on a Run's invocation_params, e.g.
- * `azureOpenAIApiDeploymentName`, `azure_deployment`, `deployment_name`).
- *
- * The instrumentation only extracts and forwards the value here; the decision
- * to prefer the deployment alias over `gen_ai.request.model` is Azure-specific
- * business logic and is intentionally kept out of the instrumentation. That
- * preference is applied by an Azure-specific span processor (see
- * `azureMonitor/traces/azureMonitorLangChainModelProcessor.ts`), which strips
- * this attribute from the span before export.
- */
-export const ATTR_MICROSOFT_LANGCHAIN_DEPLOYMENT_ALIAS =
-  "microsoft.langchain.deployment_alias" as const;

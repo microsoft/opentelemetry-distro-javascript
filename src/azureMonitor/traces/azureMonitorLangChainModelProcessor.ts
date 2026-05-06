@@ -1,61 +1,100 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Context } from "@opentelemetry/api";
+import type { Context, Span as ApiSpan } from "@opentelemetry/api";
 import type {
   ReadableSpan,
   Span,
   SpanProcessor as BaseSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
-import {
-  ATTR_GEN_AI_REQUEST_MODEL,
-  ATTR_MICROSOFT_LANGCHAIN_DEPLOYMENT_ALIAS,
-  GEN_AI_OPERATION_CHAT,
-} from "../../genai/index.js";
+import type { Run } from "@langchain/core/tracers/base";
+import { ATTR_GEN_AI_REQUEST_MODEL, GEN_AI_OPERATION_CHAT } from "../../genai/index.js";
+import { registerLangChainSpanEnricher } from "../../genai/instrumentations/langchain/index.js";
 import { Logger } from "../../shared/logging/index.js";
+
+/**
+ * LangChain-specific field names that Azure-backed clients (AzureChatOpenAI /
+ * AzureOpenAI) populate on `Run.extra.invocation_params` when configured with
+ * a deployment instead of a raw model name. Owned by the Azure module — the
+ * vendor-neutral LangChain instrumentation has no knowledge of these.
+ */
+const AZURE_DEPLOYMENT_ALIAS_FIELDS: ReadonlyArray<string> = [
+  "azureOpenAIApiDeploymentName",
+  "azure_deployment",
+  "deployment_name",
+];
+
+function extractAzureDeploymentAlias(run: Run): string | undefined {
+  const invocationParams = run.extra?.invocation_params as Record<string, unknown> | undefined;
+  if (!invocationParams) return undefined;
+  for (const field of AZURE_DEPLOYMENT_ALIAS_FIELDS) {
+    const raw = invocationParams[field];
+    if (raw == null) continue;
+    const value = String(raw).trim();
+    if (value.length > 0) return value;
+  }
+  return undefined;
+}
+
+/**
+ * Module-scoped bridge between the enricher (which sees the LangChain `Run`
+ * and the live API `Span`) and the span processor (which only sees a
+ * `ReadableSpan` later). Using a WeakMap keyed by the span object means
+ *   - nothing Azure-internal ever lands on the span as an attribute, and
+ *   - entries are garbage-collected with the span.
+ */
+const deploymentAliasBySpan = new WeakMap<object, string>();
+
+/**
+ * Span enricher that captures the Azure-specific LangChain deployment alias
+ * for later consumption by {@link AzureMonitorLangChainModelProcessor}.
+ */
+function azureLangChainDeploymentAliasEnricher(run: Run, span: ApiSpan): void {
+  const alias = extractAzureDeploymentAlias(run);
+  if (alias) {
+    deploymentAliasBySpan.set(span as unknown as object, alias);
+  }
+}
 
 /**
  * Azure Monitor Span Processor that applies Azure-specific decisioning to
  * spans produced by the LangChain GenAI instrumentation.
  *
- * The LangChain instrumentation deliberately stays vendor-neutral: it sets
- * `gen_ai.request.model` from LangChain-generic fields only and surfaces the
- * raw LangChain "deployment alias" (when present) under the bridge attribute
- * {@link ATTR_MICROSOFT_LANGCHAIN_DEPLOYMENT_ALIAS}. This processor owns the
- * Azure-specific behavior of preferring that deployment alias over the
- * resolved request model, which is the right value for AzureChatOpenAI /
- * AzureOpenAI users (LangChain.js otherwise fills `invocation_params.model`
- * with a default like `gpt-3.5-turbo` even when only a deployment was
- * configured).
- *
- * The processor:
- *  - Overwrites `gen_ai.request.model` with the deployment alias.
- *  - Updates the span name to `chat <deployment-alias>` when applicable so
- *    the user-facing identifier matches the configured deployment.
- *  - Removes the bridge attribute so it is not exported.
+ * The vendor-neutral LangChain instrumentation populates `gen_ai.request.model`
+ * from LangChain-generic fields only. This processor:
+ *   - Registers an Azure-specific span enricher with the instrumentation that
+ *     extracts the LangChain deployment-alias fields from a `Run` and stashes
+ *     them in a module-scoped `WeakMap<Span, string>` keyed by the live span.
+ *   - On `onEnd`, looks the span up in the WeakMap and (if a deployment alias
+ *     was captured) overrides `gen_ai.request.model` and rewrites the
+ *     `chat <model>` span name. AzureChatOpenAI users would otherwise see the
+ *     LangChain default (e.g. `gpt-3.5-turbo`) instead of their configured
+ *     deployment because LangChain.js fills `invocation_params.model` even
+ *     when only a deployment was configured.
  *
  * @internal
  */
 export class AzureMonitorLangChainModelProcessor implements BaseSpanProcessor {
-  /** Span attributes are mutated before export. No work to do on start. */
+  private readonly _unregisterEnricher: () => void;
+
+  constructor() {
+    // The langchain registry de-duplicates by reference, so calling this on
+    // every construction is safe (multiple processor instances share the
+    // single registration of the module-scoped enricher function).
+    this._unregisterEnricher = registerLangChainSpanEnricher(azureLangChainDeploymentAliasEnricher);
+  }
+
   onStart(_span: Span, _parentContext: Context): void {
     // No-op: invocation params are not yet known at start time.
   }
 
   /**
-   * Called when a span ends. If the LangChain instrumentation surfaced a
-   * deployment alias, override the request model and span name accordingly.
-   *
-   * Mutates the underlying span via the same casting pattern used by other
-   * processors in this distro (see `A365SpanProcessor`). This is necessary
-   * because attributes / span name need to be rewritten after the
-   * instrumentation has populated them but before the batch processor exports
-   * the span.
+   * If the LangChain enricher captured a deployment alias for this span,
+   * override the request model and rewrite the chat span name accordingly.
    */
   onEnd(span: ReadableSpan): void {
     try {
-      const attrs = span.attributes;
-      const deploymentAlias = attrs?.[ATTR_MICROSOFT_LANGCHAIN_DEPLOYMENT_ALIAS];
+      const deploymentAlias = deploymentAliasBySpan.get(span as unknown as object);
       if (typeof deploymentAlias !== "string" || deploymentAlias.length === 0) {
         return;
       }
@@ -63,20 +102,17 @@ export class AzureMonitorLangChainModelProcessor implements BaseSpanProcessor {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const mutable = span as any;
 
-      // Override gen_ai.request.model so Azure deployment users see their
-      // configured deployment name (instead of LangChain's default).
       if (mutable.attributes) {
         mutable.attributes[ATTR_GEN_AI_REQUEST_MODEL] = deploymentAlias;
-        // Strip the internal bridge attribute so it does not leak to exporters.
-        delete mutable.attributes[ATTR_MICROSOFT_LANGCHAIN_DEPLOYMENT_ALIAS];
       }
 
-      // Keep the span name aligned with the rewritten request model for
-      // chat operations (e.g. "chat my-gpt4o-deployment").
       const currentName = typeof mutable.name === "string" ? (mutable.name as string) : "";
       if (currentName.startsWith(`${GEN_AI_OPERATION_CHAT} `)) {
         mutable.name = `${GEN_AI_OPERATION_CHAT} ${deploymentAlias}`;
       }
+
+      // Drop the bridge entry now that we've consumed it.
+      deploymentAliasBySpan.delete(span as unknown as object);
     } catch (error) {
       Logger.getInstance().warn(
         "Error while applying Azure deployment alias to LangChain span",
@@ -86,10 +122,15 @@ export class AzureMonitorLangChainModelProcessor implements BaseSpanProcessor {
   }
 
   async shutdown(): Promise<void> {
-    // No-op
+    this._unregisterEnricher();
   }
 
   async forceFlush(): Promise<void> {
     // No-op
   }
+
+  /** @internal Exposed for tests to drive the enricher / WeakMap directly. */
+  static readonly _enricherForTesting = azureLangChainDeploymentAliasEnricher;
+  /** @internal Exposed for tests to inspect the bridge state. */
+  static readonly _bridgeForTesting = deploymentAliasBySpan;
 }

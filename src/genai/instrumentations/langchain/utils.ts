@@ -22,7 +22,6 @@ import {
   ATTR_GEN_AI_TOOL_TYPE,
   ATTR_GEN_AI_USAGE_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
-  ATTR_MICROSOFT_LANGCHAIN_DEPLOYMENT_ALIAS,
   ATTR_MICROSOFT_SESSION_ID,
   GEN_AI_OPERATION_CHAT,
   GEN_AI_OPERATION_EXECUTE_TOOL,
@@ -445,15 +444,6 @@ export function setOutputMessagesAttribute(run: Run, span: Span) {
 // run. Reads only the LangChain-generic fields:
 //   - `extra.metadata.ls_model_name` (LangChain-set request model identifier)
 //   - `extra.invocation_params.model` / `extra.invocation_params.model_name`
-//
-// LangChain also exposes deployment-alias-style fields on `invocation_params`
-// (e.g. `azureOpenAIApiDeploymentName`, `azure_deployment`, `deployment_name`)
-// that get populated by Azure-backed clients like AzureChatOpenAI. The
-// preference of those deployment aliases over the resolved model is
-// Azure-specific business logic and is intentionally NOT applied here — the
-// instrumentation only surfaces the alias via
-// {@link setLangChainDeploymentAliasAttribute}, and a downstream Azure-specific
-// span processor decides whether to override `gen_ai.request.model` with it.
 export function getRequestModel(run: Run): string | undefined {
   const invocationParams = run.extra?.invocation_params as Record<string, unknown> | undefined;
   return [
@@ -468,7 +458,7 @@ export function getRequestModel(run: Run): string | undefined {
 }
 
 // Model - Helper to extract the response-side model (the model that actually
-// served the request, e.g. the underlying OpenAI model behind an Azure deployment).
+// served the request).
 export function getResponseModel(run: Run): string | undefined {
   const llmOutput = run.outputs?.llmOutput as Record<string, unknown> | undefined;
   return [
@@ -491,28 +481,8 @@ export function getModel(run: Run): string | undefined {
   return getRequestModel(run) ?? getResponseModel(run);
 }
 
-// Model - Helper to extract a LangChain "deployment alias" value from a run's
-// invocation_params. LangChain populates these fields when the underlying
-// client is configured against a deployment-style endpoint (most notably Azure
-// OpenAI via `AzureChatOpenAI` / `AzureOpenAI`). Knowing the LangChain Run
-// shape is the instrumentation's responsibility; deciding what to do with the
-// alias (e.g. overriding `gen_ai.request.model`) is the responsibility of a
-// downstream processor.
-export function getLangChainDeploymentAlias(run: Run): string | undefined {
-  const invocationParams = run.extra?.invocation_params as Record<string, unknown> | undefined;
-  return [
-    invocationParams?.azureOpenAIApiDeploymentName,
-    invocationParams?.azure_deployment,
-    invocationParams?.deployment_name,
-  ]
-    .map((v) => (v != null ? String(v).trim() : ""))
-    .find((v) => v.length > 0);
-}
-
 // Model - Set request and response model attributes on the span using only
-// LangChain-generic identifiers. Vendor-specific attribution (e.g. preferring
-// an Azure deployment alias) is handled by a downstream span processor that
-// reads the bridge attribute set by {@link setLangChainDeploymentAliasAttribute}.
+// LangChain-generic identifiers.
 export function setModelAttribute(run: Run, span: Span) {
   const requestModel = getRequestModel(run);
   const responseModel = getResponseModel(run);
@@ -528,17 +498,6 @@ export function setModelAttribute(run: Run, span: Span) {
 
   if (responseModel) {
     span.setAttribute(ATTR_GEN_AI_RESPONSE_MODEL, responseModel);
-  }
-}
-
-// Model - Surface the LangChain deployment alias (if any) on the span as a
-// vendor-namespaced bridge attribute. A downstream Azure-specific span
-// processor consumes this and rewrites `gen_ai.request.model` accordingly,
-// keeping all Azure-specific decisioning out of the instrumentation itself.
-export function setLangChainDeploymentAliasAttribute(run: Run, span: Span) {
-  const deploymentAlias = getLangChainDeploymentAlias(run);
-  if (deploymentAlias) {
-    span.setAttribute(ATTR_MICROSOFT_LANGCHAIN_DEPLOYMENT_ALIAS, deploymentAlias);
   }
 }
 
