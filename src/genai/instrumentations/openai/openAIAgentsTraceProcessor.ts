@@ -17,7 +17,7 @@ import type {
   MCPListToolsSpanData,
   Trace as AgentTrace,
   TracingProcessor,
-} from "@openai/agents-core";
+} from "@openai/agents";
 import {
   ATTR_GEN_AI_AGENT_NAME,
   ATTR_GEN_AI_CALLER_AGENT_NAME,
@@ -43,7 +43,7 @@ type ContextToken = unknown;
 /**
  * OpenTelemetry-based trace processor for the OpenAI Agents SDK.
  *
- * Implements the `TracingProcessor` interface from `@openai/agents-core` so it
+ * Implements the `TracingProcessor` interface from `@openai/agents` so it
  * can be registered via `setTraceProcessors()`. Every OpenAI agent span
  * (agent invocation, function/tool call, LLM generation, response, handoff,
  * MCP list-tools) is mapped to an OTel span with GenAI semantic convention

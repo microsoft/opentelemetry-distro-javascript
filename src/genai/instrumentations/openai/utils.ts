@@ -3,7 +3,7 @@
 // Vendored from microsoft/Agent365-nodejs packages/agents-a365-observability-extensions-openai
 
 import { SpanStatusCode } from "@opentelemetry/api";
-import type { Span as AgentsSpan, SpanData } from "@openai/agents-core";
+import type { Span as AgentsSpan, SpanData } from "@openai/agents";
 import {
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_PROVIDER_NAME,

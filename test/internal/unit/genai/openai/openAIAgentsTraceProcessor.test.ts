@@ -4,8 +4,8 @@
 import { assert, beforeEach, describe, it, vi } from "vitest";
 import type { Tracer, Span as OtelSpan } from "@opentelemetry/api";
 import { SpanStatusCode } from "@opentelemetry/api";
-import type { Span as AgentsSpan, SpanData } from "@openai/agents-core";
-import type { Trace as AgentTrace } from "@openai/agents-core";
+import type { Span as AgentsSpan, SpanData } from "@openai/agents";
+import type { Trace as AgentTrace } from "@openai/agents";
 import { OpenAIAgentsTraceProcessor } from "../../../../../src/genai/instrumentations/openai/openAIAgentsTraceProcessor.js";
 
 function makeMockOtelSpan(): OtelSpan & { attrs: Record<string, unknown>; _name: string } {

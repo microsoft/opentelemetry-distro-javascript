@@ -17,7 +17,7 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
-import type { Span as AgentsSpan, SpanData } from "@openai/agents-core";
+import type { Span as AgentsSpan, SpanData } from "@openai/agents";
 import { OpenAIAgentsTraceProcessor } from "../../../src/genai/instrumentations/openai/openAIAgentsTraceProcessor.js";
 import {
   ATTR_GEN_AI_AGENT_NAME,

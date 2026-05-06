@@ -3,7 +3,7 @@
 
 import { assert, describe, it } from "vitest";
 import { SpanStatusCode } from "@opentelemetry/api";
-import type { Span as AgentsSpan, SpanData } from "@openai/agents-core";
+import type { Span as AgentsSpan, SpanData } from "@openai/agents";
 import {
   safeJsonDumps,
   getSpanName,
