@@ -119,9 +119,7 @@ describe("TurnContextUtils", () => {
       };
       const pairs = getCallerBaggagePairs(ctx);
       const obj = Object.fromEntries(pairs);
-      expect(obj[OpenTelemetryConstants.USER_ID_KEY]).toBe(
-        "bef730f4-d6f5-4ffb-b759-26ffa449ed7e",
-      );
+      expect(obj[OpenTelemetryConstants.USER_ID_KEY]).toBe("bef730f4-d6f5-4ffb-b759-26ffa449ed7e");
     });
 
     it("should prefer aadObjectId over agenticUserId and from.id", () => {
