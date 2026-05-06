@@ -20,6 +20,7 @@ import type { InternalConfig } from "../../shared/config.js";
 import type { MetricHandler } from "../metrics/handler.js";
 import { ignoreOutgoingRequestHook } from "../utils/common.js";
 import { AzureMonitorSpanProcessor } from "./spanProcessor.js";
+import { AzureMonitorLangChainModelProcessor } from "./azureMonitorLangChainModelProcessor.js";
 import type { Instrumentation } from "@opentelemetry/instrumentation";
 
 /**
@@ -28,6 +29,7 @@ import type { Instrumentation } from "@opentelemetry/instrumentation";
 export class TraceHandler {
   private _batchSpanProcessor: BatchSpanProcessor;
   private _azureSpanProcessor: AzureMonitorSpanProcessor;
+  private _langChainModelProcessor: AzureMonitorLangChainModelProcessor;
   private _azureExporter: AzureMonitorTraceExporter;
   private _instrumentations: Instrumentation[];
   private _config: InternalConfig;
@@ -51,6 +53,7 @@ export class TraceHandler {
     };
     this._batchSpanProcessor = new BatchSpanProcessor(this._azureExporter, bufferConfig);
     this._azureSpanProcessor = new AzureMonitorSpanProcessor(this._metricHandler);
+    this._langChainModelProcessor = new AzureMonitorLangChainModelProcessor();
     this._initializeInstrumentations();
   }
 
@@ -60,6 +63,10 @@ export class TraceHandler {
 
   public getAzureMonitorSpanProcessor(): AzureMonitorSpanProcessor {
     return this._azureSpanProcessor;
+  }
+
+  public getLangChainModelProcessor(): AzureMonitorLangChainModelProcessor {
+    return this._langChainModelProcessor;
   }
 
   public getInstrumentations(): Instrumentation[] {
@@ -72,6 +79,7 @@ export class TraceHandler {
   public async shutdown(): Promise<void> {
     await this._batchSpanProcessor.shutdown();
     await this._azureSpanProcessor.shutdown();
+    await this._langChainModelProcessor.shutdown();
     await this._azureExporter.shutdown();
   }
 

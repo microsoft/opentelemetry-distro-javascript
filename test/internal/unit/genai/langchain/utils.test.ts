@@ -13,6 +13,8 @@ import {
   setOutputMessagesAttribute,
   setModelAttribute,
   setResponseIdAttribute,
+  setLangChainDeploymentAliasAttribute,
+  getLangChainDeploymentAlias,
   getRequestModel,
   getResponseModel,
   getResponseId,
@@ -39,6 +41,7 @@ import {
   ATTR_GEN_AI_TOOL_TYPE,
   ATTR_GEN_AI_USAGE_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
+  ATTR_MICROSOFT_LANGCHAIN_DEPLOYMENT_ALIAS,
   ATTR_MICROSOFT_SESSION_ID,
   ATTR_GEN_AI_CONVERSATION_ID,
   GEN_AI_OPERATION_CHAT,
@@ -365,9 +368,11 @@ describe("setModelAttribute", () => {
     );
   });
 
-  it("does NOT overwrite request model with response model when invocation_params provide a deployment alias", () => {
-    // Reproduces the AzureChatOpenAI / CAPI scenario from the bug: request side
-    // has the Azure deployment alias and response side has the underlying model.
+  it("does NOT overwrite request model with response model when invocation_params provide a model", () => {
+    // Request side has the LangChain-generic model identifier; response side has
+    // the resolved underlying model. The instrumentation should keep them
+    // separate (azure-deployment-alias preference is now handled by a downstream
+    // span processor, not by the instrumentation).
     const span = makeSpan();
     const run = makeRun({
       extra: { invocation_params: { model: "my-gpt4o-deployment" } },
@@ -381,7 +386,7 @@ describe("setModelAttribute", () => {
       calls.some(
         (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "my-gpt4o-deployment",
       ),
-      "request model is the deployment alias, not the resolved response model",
+      "request model is the invocation_params.model, not the resolved response model",
     );
     assert.ok(
       calls.some(
@@ -391,12 +396,12 @@ describe("setModelAttribute", () => {
     );
   });
 
-  it("prefers azureOpenAIApiDeploymentName over a conflicting default invocation_params.model (regression test)", () => {
-    // Reproduces the exact AzureChatOpenAI + CAPI regression: LangChain.js fills
-    // invocation_params.model with its default ("gpt-3.5-turbo") even when the
-    // user only configured a deployment alias. The deployment alias must win on
-    // the request side, and the resolved underlying model must end up on the
-    // response side.
+  it("does NOT prefer Azure deployment-alias fields over invocation_params.model (Azure preference is handled downstream)", () => {
+    // The instrumentation is intentionally vendor-neutral: it must NOT prefer
+    // azureOpenAIApiDeploymentName / azure_deployment / deployment_name over
+    // invocation_params.model when populating gen_ai.request.model. The Azure
+    // deployment alias is surfaced separately for a downstream Azure-specific
+    // span processor to consume.
     const span = makeSpan();
     const run = makeRun({
       extra: {
@@ -415,13 +420,16 @@ describe("setModelAttribute", () => {
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
       calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "my-gpt4o-deployment",
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo",
       ),
-      "request model is the Azure deployment alias, not the default invocation_params.model",
+      "request model is the LangChain-generic identifier, not the Azure deployment alias",
     );
     assert.ok(
-      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo"),
-      "default invocation_params.model must not be used as the request model",
+      !calls.some(
+        (c: unknown[]) =>
+          c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "my-gpt4o-deployment",
+      ),
+      "Azure deployment alias must not be set as gen_ai.request.model by the instrumentation",
     );
     assert.ok(
       calls.some(
@@ -431,7 +439,7 @@ describe("setModelAttribute", () => {
     );
   });
 
-  it("uses Azure deployment_name from invocation_params for the request model", () => {
+  it("does NOT use Azure deployment_name as the request model (handled downstream)", () => {
     const span = makeSpan();
     const run = makeRun({
       extra: { invocation_params: { deployment_name: "prod-gpt4o" } },
@@ -439,7 +447,8 @@ describe("setModelAttribute", () => {
     setModelAttribute(run, span);
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
-      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "prod-gpt4o"),
+      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "prod-gpt4o"),
+      "deployment_name must not be promoted to gen_ai.request.model by the instrumentation",
     );
     assert.ok(
       !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL),
@@ -500,10 +509,11 @@ describe("setModelAttribute", () => {
 });
 
 describe("getRequestModel / getResponseModel", () => {
-  it("getRequestModel prefers Azure deployment aliases over ls_model_name and invocation_params.model", () => {
-    // LangChain.js fills invocation_params.model with a default (e.g. "gpt-3.5-turbo")
-    // for AzureChatOpenAI even when the user only configured a deployment name,
-    // so the deployment alias must win.
+  it("getRequestModel does NOT consider Azure deployment-alias fields", () => {
+    // The instrumentation is vendor-neutral: getRequestModel must rely on
+    // LangChain-generic fields (ls_model_name, invocation_params.model /
+    // model_name) only. The Azure deployment alias preference is applied by
+    // a downstream span processor.
     const run = makeRun({
       extra: {
         metadata: { ls_model_name: "gpt-3.5-turbo" },
@@ -513,10 +523,10 @@ describe("getRequestModel / getResponseModel", () => {
         },
       },
     });
-    assert.strictEqual(getRequestModel(run), "my-gpt4o-deployment");
+    assert.strictEqual(getRequestModel(run), "gpt-3.5-turbo");
   });
 
-  it("getRequestModel prefers ls_model_name over invocation_params.model when no Azure deployment is set", () => {
+  it("getRequestModel prefers ls_model_name over invocation_params.model", () => {
     const run = makeRun({
       extra: {
         metadata: { ls_model_name: "ls-model" },
@@ -540,6 +550,69 @@ describe("getRequestModel / getResponseModel", () => {
       extra: { invocation_params: { model: "deployment-x" } },
     });
     assert.strictEqual(getResponseModel(run), undefined);
+  });
+});
+
+describe("getLangChainDeploymentAlias / setLangChainDeploymentAliasAttribute", () => {
+  it("getLangChainDeploymentAlias prefers azureOpenAIApiDeploymentName over azure_deployment and deployment_name", () => {
+    const run = makeRun({
+      extra: {
+        invocation_params: {
+          azureOpenAIApiDeploymentName: "alias-1",
+          azure_deployment: "alias-2",
+          deployment_name: "alias-3",
+        },
+      },
+    });
+    assert.strictEqual(getLangChainDeploymentAlias(run), "alias-1");
+  });
+
+  it("getLangChainDeploymentAlias falls back to azure_deployment then deployment_name", () => {
+    assert.strictEqual(
+      getLangChainDeploymentAlias(
+        makeRun({ extra: { invocation_params: { azure_deployment: "alias-2" } } }),
+      ),
+      "alias-2",
+    );
+    assert.strictEqual(
+      getLangChainDeploymentAlias(
+        makeRun({ extra: { invocation_params: { deployment_name: "alias-3" } } }),
+      ),
+      "alias-3",
+    );
+  });
+
+  it("getLangChainDeploymentAlias returns undefined when no alias fields are present", () => {
+    const run = makeRun({ extra: { invocation_params: { model: "gpt-3.5-turbo" } } });
+    assert.strictEqual(getLangChainDeploymentAlias(run), undefined);
+  });
+
+  it("setLangChainDeploymentAliasAttribute sets the bridge attribute when an alias exists", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      extra: {
+        invocation_params: {
+          model: "gpt-3.5-turbo",
+          azureOpenAIApiDeploymentName: "my-gpt4o-deployment",
+        },
+      },
+    });
+    setLangChainDeploymentAliasAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) =>
+          c[0] === ATTR_MICROSOFT_LANGCHAIN_DEPLOYMENT_ALIAS && c[1] === "my-gpt4o-deployment",
+      ),
+      "deployment alias bridge attribute is set when LangChain populates a deployment-alias field",
+    );
+  });
+
+  it("setLangChainDeploymentAliasAttribute is a no-op when no alias is present", () => {
+    const span = makeSpan();
+    const run = makeRun({ extra: { invocation_params: { model: "gpt-3.5-turbo" } } });
+    setLangChainDeploymentAliasAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
   });
 });
 

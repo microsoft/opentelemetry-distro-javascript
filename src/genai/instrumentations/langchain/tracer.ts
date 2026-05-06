@@ -188,6 +188,7 @@ export class LangChainTracer extends BaseTracer {
         }
       }
       Utils.setModelAttribute(run, span);
+      Utils.setLangChainDeploymentAliasAttribute(run, span);
       Utils.setResponseIdAttribute(run, span);
       Utils.setProviderNameAttribute(run, span);
       Utils.setSessionIdAttribute(run, span);
