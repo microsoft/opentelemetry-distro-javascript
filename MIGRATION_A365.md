@@ -475,7 +475,39 @@ If your migrated code still calls `instrumentor.enable()` (e.g., `OpenAIAgentsTr
 
 ### Validating locally
 
-Set `ENABLE_A365_OBSERVABILITY_EXPORTER=false` to export spans to the console for local validation. Enable verbose logging with:
+#### Console + A365 (validate locally and remotely)
+
+To validate telemetry locally while also sending to A365, explicitly enable console exporters:
+
+```typescript
+useMicrosoftOpenTelemetry({
+  enableConsoleExporters: true,
+  a365: {
+    enabled: true,
+    tokenResolver: (agentId, tenantId) => getToken(agentId, tenantId),
+  },
+});
+```
+
+`enableConsoleExporters: true` forces console output regardless of other exporters being active. Without it, the console exporter only auto-enables when no other exporter (A365, Azure Monitor, OTLP) is configured.
+
+#### Console only (no A365 export)
+
+To export spans only to the console (e.g., for offline development), disable the A365 exporter:
+
+```bash
+# Linux / macOS
+export ENABLE_A365_OBSERVABILITY_EXPORTER=false
+
+# Windows cmd
+set ENABLE_A365_OBSERVABILITY_EXPORTER=false
+```
+
+In this case, the console exporter auto-enables because no other exporter is active.
+
+#### Debugging export failures
+
+Enable verbose logging to diagnose export issues:
 
 ```bash
 # Choose one of: info, warn, error
@@ -485,6 +517,15 @@ export A365_OBSERVABILITY_LOG_LEVEL=info
 # Windows cmd
 set A365_OBSERVABILITY_LOG_LEVEL=info
 ```
+
+Key log messages to look for:
+
+- `Obtained token for agent {agentId} tenant {tenantId}` — token acquisition succeeded
+- `No token obtained. Skipping export for this identity` — token resolver returned empty
+- `TokenResolver threw for agent {agentId} tenant {tenantId}` — token resolver error
+- `HTTP {statusCode} exporting spans` — export HTTP response
+
+> **Production warning:** `enableConsoleExporters: true` is intended for local development only. Do not include it in production deployments — it adds overhead and may log sensitive telemetry to stdout.
 
 For the full troubleshooting guide, see the [official troubleshooting documentation](https://learn.microsoft.com/en-us/microsoft-agent-365/developer/microsoft-opentelemetry?tabs=nodejs).
 
