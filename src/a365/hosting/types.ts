@@ -20,6 +20,7 @@ export interface ActivityLike {
   channelIdSubChannel?: string | unknown;
   serviceUrl?: string;
   from?: {
+    id?: string;
     aadObjectId?: string;
     name?: string;
     role?: string;
