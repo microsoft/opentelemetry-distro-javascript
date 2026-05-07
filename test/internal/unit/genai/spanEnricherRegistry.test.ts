@@ -37,7 +37,7 @@ describe("spanEnricherRegistry", () => {
     assert.ok(!getRegisteredSpanEnrichers().includes(fn));
   });
 
-  it("is idempotent for the same function reference (single registration)", () => {
+  it("is idempotent for the same function reference (single active entry, reference-counted)", () => {
     const fn: SpanEnricher = () => undefined;
     track(registerSpanEnricher(fn));
     track(registerSpanEnricher(fn));
@@ -61,6 +61,45 @@ describe("spanEnricherRegistry", () => {
     const unregister = registerSpanEnricher(fn);
     unregister();
     unregister();
+    assert.ok(!getRegisteredSpanEnrichers().includes(fn));
+  });
+
+  it("reference-counted: same enricher registered N times stays active until N unregisters run", () => {
+    const fn: SpanEnricher = () => undefined;
+    const u1 = registerSpanEnricher(fn);
+    const u2 = registerSpanEnricher(fn);
+    const u3 = registerSpanEnricher(fn);
+
+    assert.ok(getRegisteredSpanEnrichers().includes(fn));
+    u1();
+    assert.ok(
+      getRegisteredSpanEnrichers().includes(fn),
+      "still active after one unregister of three",
+    );
+    u2();
+    assert.ok(
+      getRegisteredSpanEnrichers().includes(fn),
+      "still active after two unregisters of three",
+    );
+    u3();
+    assert.ok(!getRegisteredSpanEnrichers().includes(fn), "removed only when the last owner ends");
+
+    // Each thunk is independently idempotent.
+    u1();
+    u2();
+    u3();
+    assert.ok(!getRegisteredSpanEnrichers().includes(fn));
+  });
+
+  it("re-registering after removal restores the enricher", () => {
+    const fn: SpanEnricher = () => undefined;
+    const u1 = registerSpanEnricher(fn);
+    u1();
+    assert.ok(!getRegisteredSpanEnrichers().includes(fn));
+
+    const u2 = track(registerSpanEnricher(fn));
+    assert.ok(getRegisteredSpanEnrichers().includes(fn));
+    u2();
     assert.ok(!getRegisteredSpanEnrichers().includes(fn));
   });
 

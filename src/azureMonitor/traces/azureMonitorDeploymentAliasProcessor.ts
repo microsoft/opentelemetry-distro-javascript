@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Context, Span as ApiSpan } from "@opentelemetry/api";
+import type { Context, Span as ApiSpan, AttributeValue } from "@opentelemetry/api";
 import type {
   ReadableSpan,
   Span,
@@ -19,6 +19,23 @@ import { Logger } from "../../shared/logging/index.js";
  *   - entries are garbage-collected with the span.
  */
 const deploymentAliasBySpan = new WeakMap<object, string>();
+
+/**
+ * Narrow view of the `@opentelemetry/sdk-trace-base` `Span` runtime object
+ * that the OTel JS SDK actually hands to `onEnd`. The public `ReadableSpan`
+ * interface marks `attributes` and `name` as read-only, but the runtime
+ * object passed to span processors is the same `Span` instance whose fields
+ * are plain mutable properties. We ship this narrow shape so the cast in
+ * `onEnd` is scoped to the two specific fields the spec requires us to
+ * rewrite (`gen_ai.request.model` and the span name) instead of relying on
+ * `any`. Post-end attribute rewrites are necessary here because the public
+ * `Span.setAttribute` / `Span.updateName` APIs become no-ops once the span
+ * has ended, and span-processor `onEnd` callbacks run after that point.
+ */
+type MutableEndedSpan = ReadableSpan & {
+  attributes: Record<string, AttributeValue | undefined>;
+  name: string;
+};
 
 /**
  * Associate an Azure deployment alias with a span.
@@ -66,14 +83,19 @@ export class AzureMonitorDeploymentAliasProcessor implements BaseSpanProcessor {
         return;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mutable = span as any;
+      // The SDK hands `onEnd` the same `Span` runtime object whose
+      // `attributes` and `name` fields are plain mutable properties; the
+      // `ReadableSpan` API just exposes them as read-only. We use the
+      // narrow `MutableEndedSpan` shape (instead of `any`) so the mutation
+      // surface is restricted to exactly the two fields the App Insights
+      // GenAI attribution spec requires us to rewrite.
+      const mutable = span as MutableEndedSpan;
 
       if (mutable.attributes) {
         mutable.attributes[ATTR_GEN_AI_REQUEST_MODEL] = deploymentAlias;
       }
 
-      const currentName = typeof mutable.name === "string" ? (mutable.name as string) : "";
+      const currentName = typeof mutable.name === "string" ? mutable.name : "";
       if (currentName.startsWith(`${GEN_AI_OPERATION_CHAT} `)) {
         mutable.name = `${GEN_AI_OPERATION_CHAT} ${deploymentAlias}`;
       }

@@ -380,4 +380,94 @@ describe("end-to-end (enricher → processor)", () => {
     assert.strictEqual(readable.attributes[ATTR_GEN_AI_RESPONSE_MODEL], "gpt-4o-2024-08-06");
     assert.strictEqual(readable.name, "chat my-gpt4o-deployment");
   });
+
+  it("regression: deployment alias wins over the LangChain-default invocation_params.model, and the response model still flows from llmOutput", () => {
+    // Reproduces the original bug scenario from the PR description:
+    // LangChain.js fills `invocation_params.model` with `gpt-3.5-turbo` even
+    // when only an Azure deployment was configured. The Azure pipeline must
+    // surface the alias on `gen_ai.request.model` while keeping the actual
+    // resolved model on `gen_ai.response.model`.
+    const proc = new AzureMonitorDeploymentAliasProcessor();
+    const unregister = track(registerAzureLangChainDeploymentAliasEnricher());
+    assert.ok(unregister, "registration succeeded");
+
+    const identity = {} as object;
+    for (const enricher of getRegisteredSpanEnrichers()) {
+      enricher(
+        {
+          extra: {
+            metadata: { ls_model_name: "gpt-3.5-turbo" },
+            invocation_params: {
+              // Conflicting LangChain default — must NOT win on the Azure
+              // pipeline.
+              model: "gpt-3.5-turbo",
+              azureOpenAIApiDeploymentName: "my-gpt4o-deployment",
+            },
+          },
+        },
+        identity as unknown as ApiSpan,
+      );
+    }
+
+    // Vendor-neutral instrumentation has already set
+    // request=gpt-3.5-turbo (from invocation_params.model) and
+    // response=gpt-4o-2024-08-06 (from response_metadata.model_name /
+    // llmOutput.model_name) by the time onEnd runs.
+    const readable = makeReadableSpan(
+      "chat gpt-3.5-turbo",
+      {
+        [ATTR_GEN_AI_REQUEST_MODEL]: "gpt-3.5-turbo",
+        [ATTR_GEN_AI_RESPONSE_MODEL]: "gpt-4o-2024-08-06",
+      },
+      identity,
+    );
+    proc.onEnd(readable);
+
+    assert.strictEqual(
+      readable.attributes[ATTR_GEN_AI_REQUEST_MODEL],
+      "my-gpt4o-deployment",
+      "request model is the deployment alias on the Azure pipeline",
+    );
+    assert.strictEqual(
+      readable.attributes[ATTR_GEN_AI_RESPONSE_MODEL],
+      "gpt-4o-2024-08-06",
+      "response model still reflects the resolved underlying model",
+    );
+    assert.strictEqual(
+      readable.name,
+      "chat my-gpt4o-deployment",
+      "span name follows the alias for chat operations",
+    );
+  });
+
+  it("regression: alias preference also holds when surfaced via deployment_name", () => {
+    const proc = new AzureMonitorDeploymentAliasProcessor();
+    const unregister = track(registerAzureLangChainDeploymentAliasEnricher());
+    assert.ok(unregister, "registration succeeded");
+
+    const identity = {} as object;
+    for (const enricher of getRegisteredSpanEnrichers()) {
+      enricher(
+        {
+          extra: {
+            invocation_params: {
+              model: "gpt-3.5-turbo",
+              deployment_name: "prod-gpt4o",
+            },
+          },
+        },
+        identity as unknown as ApiSpan,
+      );
+    }
+
+    const readable = makeReadableSpan(
+      "chat gpt-3.5-turbo",
+      { [ATTR_GEN_AI_REQUEST_MODEL]: "gpt-3.5-turbo" },
+      identity,
+    );
+    proc.onEnd(readable);
+
+    assert.strictEqual(readable.attributes[ATTR_GEN_AI_REQUEST_MODEL], "prod-gpt4o");
+    assert.strictEqual(readable.name, "chat prod-gpt4o");
+  });
 });
