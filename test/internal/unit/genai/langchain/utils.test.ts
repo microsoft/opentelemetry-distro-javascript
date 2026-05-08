@@ -13,6 +13,7 @@ import {
   setOutputMessagesAttribute,
   setModelAttribute,
   setProviderNameAttribute,
+  setResponseIdAttribute,
   setSessionIdAttribute,
   setSystemInstructionsAttribute,
   setTokenAttributes,
@@ -25,6 +26,8 @@ import {
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_RESPONSE_ID,
+  ATTR_GEN_AI_RESPONSE_MODEL,
   ATTR_GEN_AI_SYSTEM_INSTRUCTIONS,
   ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
   ATTR_GEN_AI_TOOL_CALL_ID,
@@ -385,6 +388,117 @@ describe("setModelAttribute", () => {
     const span = makeSpan();
     const run = makeRun();
     setModelAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
+  it("populates both request and response model when response_metadata is the only source", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [{ message: { kwargs: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } } }],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "request model should fall back to response model when no request-side identifier exists",
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "response model should be set from response_metadata.model_name",
+    );
+  });
+
+  it("keeps request and response model separate when both are present", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      extra: { invocation_params: { model: "gpt-4o" } },
+      outputs: {
+        generations: [
+          [{ message: { kwargs: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } } }],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o"),
+      "request model should come from invocation_params.model",
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "response model should come from response_metadata.model_name",
+    );
+  });
+
+  it("uses llmOutput.model_name as a response-model source", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: { llmOutput: { model_name: "o4-mini-2025-04-16" } },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "o4-mini-2025-04-16",
+      ),
+    );
+  });
+});
+
+describe("setResponseIdAttribute", () => {
+  it("extracts response id from AIMessage.id (v1)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: { generations: [[{ message: { id: "chatcmpl-abc123" } }]] },
+    });
+    setResponseIdAttribute(run, span);
+    assert.ok(
+      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "chatcmpl-abc123",
+      ),
+    );
+  });
+
+  it("extracts response id from AIMessage kwargs.id (v0)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: { generations: [[{ message: { kwargs: { id: "chatcmpl-xyz" } } }]] },
+    });
+    setResponseIdAttribute(run, span);
+    assert.ok(
+      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "chatcmpl-xyz",
+      ),
+    );
+  });
+
+  it("extracts response id from llmOutput.id", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: { llmOutput: { id: "resp-42" } },
+    });
+    setResponseIdAttribute(run, span);
+    assert.ok(
+      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "resp-42",
+      ),
+    );
+  });
+
+  it("does nothing when no response id is found", () => {
+    const span = makeSpan();
+    const run = makeRun();
+    setResponseIdAttribute(run, span);
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
   });
 });
