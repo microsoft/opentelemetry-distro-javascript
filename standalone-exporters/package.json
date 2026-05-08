@@ -1,0 +1,43 @@
+{
+  "name": "@a365/otel-exporter",
+  "version": "0.1.0",
+  "description": "A365 (Agent 365) OpenTelemetry SpanExporter for Node.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.js.map"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": ">=1.4.0",
+    "@opentelemetry/sdk-trace-base": ">=1.15.0"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-base": "^1.25.0",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AzureAD/Agent365ObservabilityService"
+  },
+  "keywords": [
+    "opentelemetry",
+    "agent365",
+    "a365",
+    "observability",
+    "span-exporter",
+    "tracing"
+  ]
+}
