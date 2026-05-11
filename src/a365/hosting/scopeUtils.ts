@@ -9,7 +9,7 @@
 
 import type { SpanKind, TimeInput } from "@opentelemetry/api";
 import type { TurnContextLike } from "./types.js";
-import { resolveEmbodiedAgentIds } from "./turnContextUtils.js";
+import { resolveEmbodiedAgentIds, resolveSubChannel } from "./turnContextUtils.js";
 import { InvokeAgentScope, InferenceScope, ExecuteToolScope } from "../scopes/index.js";
 import type {
   AgentDetails,
@@ -96,7 +96,7 @@ export class ScopeUtils {
   } {
     return {
       name: turnContext?.activity?.channelId,
-      description: turnContext?.activity?.channelIdSubChannel as string | undefined,
+      description: resolveSubChannel(turnContext?.activity),
     };
   }
 

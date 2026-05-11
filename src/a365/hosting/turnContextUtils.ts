@@ -8,7 +8,7 @@
  */
 
 import { OpenTelemetryConstants } from "../constants.js";
-import type { TurnContextLike } from "./types.js";
+import type { ActivityLike, TurnContextLike } from "./types.js";
 
 function normalizePairs(pairs: Array<[string, string | undefined]>): Array<[string, string]> {
   return pairs
@@ -88,19 +88,14 @@ export function getTenantIdPair(turnContext: TurnContextLike): Array<[string, st
 }
 
 /**
- * Extracts channel baggage pairs from the TurnContext.
+ * Resolves the subchannel from an activity, falling back to channelData.productContext
+ * when channelIdSubChannel is not set directly.
  */
-export function getChannelBaggagePairs(turnContext: TurnContextLike): Array<[string, string]> {
-  if (!turnContext) {
-    return [];
-  }
-
-  let subChannel = turnContext.activity?.channelIdSubChannel as string | undefined;
-
-  // Fallback: extract subChannel from channelData.productContext if not set directly
+export function resolveSubChannel(activity: ActivityLike | undefined): string | undefined {
+  let subChannel = activity?.channelIdSubChannel as string | undefined;
   if (!subChannel) {
     try {
-      const rawChannelData = turnContext.activity?.channelData;
+      const rawChannelData = activity?.channelData;
       let channelData: Record<string, unknown> | undefined;
       if (typeof rawChannelData === "string") {
         channelData = JSON.parse(rawChannelData) as Record<string, unknown>;
@@ -114,6 +109,18 @@ export function getChannelBaggagePairs(turnContext: TurnContextLike): Array<[str
       // Ignore parse errors – subChannel stays undefined
     }
   }
+  return subChannel;
+}
+
+/**
+ * Extracts channel baggage pairs from the TurnContext.
+ */
+export function getChannelBaggagePairs(turnContext: TurnContextLike): Array<[string, string]> {
+  if (!turnContext) {
+    return [];
+  }
+
+  const subChannel = resolveSubChannel(turnContext.activity);
 
   const pairs: Array<[string, string | undefined]> = [
     [OpenTelemetryConstants.CHANNEL_NAME_KEY, turnContext.activity?.channelId],

@@ -215,6 +215,33 @@ describe("ScopeUtils", () => {
         description: undefined,
       });
     });
+
+    it("should fall back to productContext when channelIdSubChannel is not set", () => {
+      const ctx = makeCtx({
+        activity: {
+          channelId: "teams",
+          channelData: { productContext: "from-product-context" },
+        },
+      });
+      expect(ScopeUtils.deriveChannelObject(ctx)).toEqual({
+        name: "teams",
+        description: "from-product-context",
+      });
+    });
+
+    it("should prefer channelIdSubChannel over productContext", () => {
+      const ctx = makeCtx({
+        activity: {
+          channelId: "teams",
+          channelIdSubChannel: "direct-subchannel",
+          channelData: { productContext: "from-product-context" },
+        },
+      });
+      expect(ScopeUtils.deriveChannelObject(ctx)).toEqual({
+        name: "teams",
+        description: "direct-subchannel",
+      });
+    });
   });
 
   describe("populateInferenceScopeFromTurnContext", () => {

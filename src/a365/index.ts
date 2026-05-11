@@ -94,6 +94,7 @@ export {
   getChannelBaggagePairs,
   getConversationIdAndItemLinkPairs,
   resolveEmbodiedAgentIds,
+  resolveSubChannel,
   BaggageMiddleware,
   OutputLoggingMiddleware,
   A365_PARENT_SPAN_KEY,

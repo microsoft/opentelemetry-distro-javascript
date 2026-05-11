@@ -10,6 +10,7 @@ export {
   getChannelBaggagePairs,
   getConversationIdAndItemLinkPairs,
   resolveEmbodiedAgentIds,
+  resolveSubChannel,
 } from "./turnContextUtils.js";
 export { BaggageMiddleware } from "./baggageMiddleware.js";
 export {
