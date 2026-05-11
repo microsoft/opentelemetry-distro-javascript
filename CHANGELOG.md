@@ -2,9 +2,22 @@
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-05-11
+
+### Bugs Fixed
+- Fix `getCallerBaggagePairs` to resolve `userId` across all channels [#116](https://github.com/microsoft/opentelemetry-distro-javascript/pull/116)
+- Import OpenAI agent types from `@openai/agents` to avoid version drift [#122](https://github.com/microsoft/opentelemetry-distro-javascript/pull/122)
+
+### Other Changes
+- Accept beta versions of azure monitor exporter but not preview versions [#110](https://github.com/microsoft/opentelemetry-distro-javascript/pull/110)
+- Add explicit `enableConsoleExporters` to migration guide validation section [#121](https://github.com/microsoft/opentelemetry-distro-javascript/pull/121)
+- Promote A365 sub-owners in CODEOWNERS [#123](https://github.com/microsoft/opentelemetry-distro-javascript/pull/123)
+
+## [1.0.1] - 2026-05-01
+
 ### Other Changes
 - Lazy-load LangChain tracer to avoid eager import of `@langchain/core` before instrumentation hooks register. Removed noise when openai and langchain packages are not installed [#98](https://github.com/microsoft/opentelemetry-distro-javascript/pull/98)
-- Accept beta versions of azure monitor exporter but not preview versions [#110](https://github.com/microsoft/opentelemetry-distro-javascript/pull/110)
+- Add Fabric/ADX getting started guide and sample app [#100](https://github.com/microsoft/opentelemetry-distro-javascript/pull/100)
 
 ## [1.0.0] - 2026-04-30
 
