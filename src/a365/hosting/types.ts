@@ -18,6 +18,7 @@ export interface ActivityLike {
   text?: string;
   channelId?: string;
   channelIdSubChannel?: string | unknown;
+  channelData?: unknown;
   serviceUrl?: string;
   from?: {
     id?: string;

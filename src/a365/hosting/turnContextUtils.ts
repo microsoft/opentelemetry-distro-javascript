@@ -94,12 +94,30 @@ export function getChannelBaggagePairs(turnContext: TurnContextLike): Array<[str
   if (!turnContext) {
     return [];
   }
+
+  let subChannel = turnContext.activity?.channelIdSubChannel as string | undefined;
+
+  // Fallback: extract subChannel from channelData.productContext if not set directly
+  if (!subChannel) {
+    try {
+      const rawChannelData = turnContext.activity?.channelData;
+      let channelData: Record<string, unknown> | undefined;
+      if (typeof rawChannelData === "string") {
+        channelData = JSON.parse(rawChannelData) as Record<string, unknown>;
+      } else if (rawChannelData && typeof rawChannelData === "object") {
+        channelData = rawChannelData as Record<string, unknown>;
+      }
+      if (channelData && typeof channelData.productContext === "string") {
+        subChannel = channelData.productContext as string;
+      }
+    } catch {
+      // Ignore parse errors – subChannel stays undefined
+    }
+  }
+
   const pairs: Array<[string, string | undefined]> = [
     [OpenTelemetryConstants.CHANNEL_NAME_KEY, turnContext.activity?.channelId],
-    [
-      OpenTelemetryConstants.CHANNEL_LINK_KEY,
-      turnContext.activity?.channelIdSubChannel as string | undefined,
-    ],
+    [OpenTelemetryConstants.CHANNEL_LINK_KEY, subChannel],
   ];
   return normalizePairs(pairs);
 }

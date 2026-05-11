@@ -259,6 +259,42 @@ describe("TurnContextUtils", () => {
       const pairs = getChannelBaggagePairs(null as unknown as TurnContextLike);
       expect(pairs).toEqual([]);
     });
+
+    it("should extract subChannel from productContext when channelIdSubChannel is not set", () => {
+      const ctx = makeMockTurnContext();
+      ctx.activity.channelIdSubChannel = undefined;
+      ctx.activity.channelData = { productContext: "from-product-context" };
+      const pairs = getChannelBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBe("from-product-context");
+    });
+
+    it("should prefer channelIdSubChannel over productContext", () => {
+      const ctx = makeMockTurnContext();
+      ctx.activity.channelIdSubChannel = "direct-subchannel";
+      ctx.activity.channelData = { productContext: "from-product-context" };
+      const pairs = getChannelBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBe("direct-subchannel");
+    });
+
+    it("should extract subChannel from JSON string channelData", () => {
+      const ctx = makeMockTurnContext();
+      ctx.activity.channelIdSubChannel = undefined;
+      ctx.activity.channelData = JSON.stringify({ productContext: "json-string-context" });
+      const pairs = getChannelBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBe("json-string-context");
+    });
+
+    it("should handle invalid JSON channelData gracefully", () => {
+      const ctx = makeMockTurnContext();
+      ctx.activity.channelIdSubChannel = undefined;
+      ctx.activity.channelData = "not-valid-json{{{";
+      const pairs = getChannelBaggagePairs(ctx);
+      const obj = Object.fromEntries(pairs);
+      expect(obj[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBeUndefined();
+    });
   });
 
   describe("getConversationIdAndItemLinkPairs", () => {
