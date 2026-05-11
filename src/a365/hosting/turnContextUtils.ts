@@ -92,7 +92,8 @@ export function getTenantIdPair(turnContext: TurnContextLike): Array<[string, st
  * when channelIdSubChannel is not set directly.
  */
 export function resolveSubChannel(activity: ActivityLike | undefined): string | undefined {
-  let subChannel = activity?.channelIdSubChannel as string | undefined;
+  const rawSubChannel = activity?.channelIdSubChannel;
+  let subChannel = typeof rawSubChannel === "string" && rawSubChannel.trim() !== "" ? rawSubChannel : undefined;
   if (!subChannel) {
     try {
       const rawChannelData = activity?.channelData;
