@@ -134,7 +134,7 @@ export class OpenTelemetryConstants {
   public static readonly TELEMETRY_SDK_NAME_KEY = "telemetry.sdk.name";
   public static readonly TELEMETRY_SDK_LANGUAGE_KEY = "telemetry.sdk.language";
   public static readonly TELEMETRY_SDK_VERSION_KEY = "telemetry.sdk.version";
-  public static readonly TELEMETRY_SDK_NAME_VALUE = "A365ObservabilitySDK";
+  public static readonly TELEMETRY_SDK_NAME_VALUE = "microsoft-opentelemetry";
   public static readonly TELEMETRY_SDK_LANGUAGE_VALUE = "nodejs";
   public static readonly TELEMETRY_SDK_VERSION_VALUE = MICROSOFT_OPENTELEMETRY_VERSION;
 }
