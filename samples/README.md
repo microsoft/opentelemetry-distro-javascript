@@ -78,17 +78,17 @@ Or pass the connection string directly:
 APPLICATIONINSIGHTS_CONNECTION_STRING="<your connection string>" node dist/basicConnection.js
 ```
 
-[basicconnection]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/basicConnection.ts
-[cloudrole]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/cloudRole.ts
-[custommetric]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/customMetric.ts
-[customtrace]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/customTrace.ts
-[livemetrics]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/liveMetrics.ts
-[offlinestorage]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/offlineStorage.ts
-[otlpexporter]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/otlpExporter.ts
-[redactquerystrings]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/redactQueryStrings.ts
-[sampling]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/sampling.ts
-[langchaininstrumentation]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/langchainInstrumentation.ts
-[openaiinstrumentation]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/openaiInstrumentation.ts
-[a365export]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/a365Export.ts
-[a365manualscopes]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/a365ManualScopes.ts
-[a365hostingmiddleware]: https://github.com/Azure/opentelemetry-distro-javascript/blob/main/samples/src/a365HostingMiddleware.ts
+[basicconnection]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/basicConnection.ts
+[cloudrole]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/cloudRole.ts
+[custommetric]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/customMetric.ts
+[customtrace]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/customTrace.ts
+[livemetrics]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/liveMetrics.ts
+[offlinestorage]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/offlineStorage.ts
+[otlpexporter]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/otlpExporter.ts
+[redactquerystrings]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/redactQueryStrings.ts
+[sampling]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/sampling.ts
+[langchaininstrumentation]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/langchainInstrumentation.ts
+[openaiinstrumentation]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/openaiInstrumentation.ts
+[a365export]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/a365Export.ts
+[a365manualscopes]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/a365ManualScopes.ts
+[a365hostingmiddleware]: https://github.com/microsoft/opentelemetry-distro-javascript/blob/main/samples/src/a365HostingMiddleware.ts
