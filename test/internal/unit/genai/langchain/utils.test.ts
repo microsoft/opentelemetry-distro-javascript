@@ -13,6 +13,7 @@ import {
   setOutputMessagesAttribute,
   setModelAttribute,
   setProviderNameAttribute,
+  setResponseIdAttribute,
   setSessionIdAttribute,
   setSystemInstructionsAttribute,
   setTokenAttributes,
@@ -25,6 +26,8 @@ import {
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_RESPONSE_ID,
+  ATTR_GEN_AI_RESPONSE_MODEL,
   ATTR_GEN_AI_SYSTEM_INSTRUCTIONS,
   ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
   ATTR_GEN_AI_TOOL_CALL_ID,
@@ -385,6 +388,289 @@ describe("setModelAttribute", () => {
     const span = makeSpan();
     const run = makeRun();
     setModelAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
+  it("populates both request and response model when response_metadata is the only source", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [{ message: { kwargs: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } } }],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "request model should fall back to response model when no request-side identifier exists",
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "response model should be set from response_metadata.model_name",
+    );
+  });
+
+  it("prefers response model over request-side identifier for AzureChatOpenAI runs", () => {
+    // LangChain JS hardcodes ls_model_name to "gpt-3.5-turbo" for AzureChatOpenAI
+    // (https://github.com/langchain-ai/langchainjs/issues/10874), so for that
+    // client the server-reported model is a closer approximation of the
+    // requested model than the request-side identifier.
+    const span = makeSpan();
+    const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "azure_openai", "AzureChatOpenAI"],
+      },
+      extra: { invocation_params: { model: "gpt-4o" } },
+      outputs: {
+        generations: [
+          [{ message: { kwargs: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } } }],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "request model should prefer the response-side identifier for AzureChatOpenAI",
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-2024-08-06",
+      ),
+      "response model should come from response_metadata.model_name",
+    );
+  });
+
+  it("avoids the AzureChatOpenAI ls_model_name=gpt-3.5-turbo regression", () => {
+    // Regression test: AzureChatOpenAI sets ls_model_name to the BaseChatOpenAI
+    // default ("gpt-3.5-turbo") regardless of the configured deployment. The
+    // response-side model_name carries the actual served model, which we should
+    // emit as gen_ai.request.model to avoid misattributing the request.
+    const span = makeSpan();
+    const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "azure_openai", "AzureChatOpenAI"],
+      },
+      extra: { metadata: { ls_model_name: "gpt-3.5-turbo" } },
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                kwargs: { response_metadata: { model_name: "gpt-4o-mini-2024-07-18" } },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-mini-2024-07-18",
+      ),
+      "request model should use the server-reported model rather than the LangChain default",
+    );
+    assert.ok(
+      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo"),
+      "request model must not fall back to the hardcoded ls_model_name default",
+    );
+  });
+
+  it("keeps request and response model separate for non-Azure clients (e.g. ChatOpenAI)", () => {
+    // For plain ChatOpenAI / Foundry deployments the request-side identifier
+    // (deployment alias or `model` kwarg) is correct and must be used as-is for
+    // gen_ai.request.model. Only AzureChatOpenAI needs the response-model
+    // workaround.
+    const span = makeSpan();
+    const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "openai", "ChatOpenAI"],
+      },
+      extra: { invocation_params: { model: "deployment-o4-mini" } },
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                kwargs: { response_metadata: { model_name: "o4-mini-2025-04-16" } },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-o4-mini",
+      ),
+      "request model should come from invocation_params.model for non-Azure clients",
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "o4-mini-2025-04-16",
+      ),
+      "response model should come from response_metadata.model_name",
+    );
+    assert.ok(
+      !calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "o4-mini-2025-04-16",
+      ),
+      "non-Azure runs must not overwrite the request model with the response model",
+    );
+  });
+
+  it("uses llmOutput.model_name as a response-model source", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: { llmOutput: { model_name: "o4-mini-2025-04-16" } },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "o4-mini-2025-04-16",
+      ),
+    );
+  });
+});
+
+describe("setResponseIdAttribute", () => {
+  it("extracts response id from AIMessage.id (v1)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: { generations: [[{ message: { id: "chatcmpl-abc123" } }]] },
+    });
+    setResponseIdAttribute(run, span);
+    assert.ok(
+      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "chatcmpl-abc123",
+      ),
+    );
+  });
+
+  it("extracts response id from AIMessage kwargs.id (v0)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: { generations: [[{ message: { kwargs: { id: "chatcmpl-xyz" } } }]] },
+    });
+    setResponseIdAttribute(run, span);
+    assert.ok(
+      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "chatcmpl-xyz",
+      ),
+    );
+  });
+
+  it("extracts response id from llmOutput.id", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: { llmOutput: { id: "resp-42" } },
+    });
+    setResponseIdAttribute(run, span);
+    assert.ok(
+      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "resp-42",
+      ),
+    );
+  });
+
+  it("extracts response id from response_metadata.id (v1, top-level)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { response_metadata: { id: "chatcmpl-meta-v1" } } }]],
+      },
+    });
+    setResponseIdAttribute(run, span);
+    assert.ok(
+      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "chatcmpl-meta-v1",
+      ),
+    );
+  });
+
+  it("extracts response id from response_metadata.id nested under kwargs (v0)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [[{ message: { kwargs: { response_metadata: { id: "chatcmpl-meta-v0" } } } }]],
+      },
+    });
+    setResponseIdAttribute(run, span);
+    assert.ok(
+      (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "chatcmpl-meta-v0",
+      ),
+    );
+  });
+
+  it("prefers response_metadata.id over message.id when both are present", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                id: "ignored-message-id",
+                response_metadata: { id: "preferred-metadata-id" },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setResponseIdAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "preferred-metadata-id",
+      ),
+    );
+    assert.ok(
+      !calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_ID && c[1] === "ignored-message-id",
+      ),
+    );
+  });
+
+  it("ignores non-primitive AIMessage.id values (e.g. serialization class arrays)", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                // LangChain Serializable.id is sometimes an array of class
+                // hierarchy names; it must not be emitted as a response id.
+                id: ["langchain", "schema", "messages", "AIMessage"],
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setResponseIdAttribute(run, span);
+    assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
+  });
+
+  it("does nothing when no response id is found", () => {
+    const span = makeSpan();
+    const run = makeRun();
+    setResponseIdAttribute(run, span);
     assert.strictEqual((span.setAttribute as ReturnType<typeof vi.fn>).mock.calls.length, 0);
   });
 });

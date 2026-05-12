@@ -12,6 +12,8 @@ import {
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_RESPONSE_ID,
+  ATTR_GEN_AI_RESPONSE_MODEL,
   ATTR_GEN_AI_SYSTEM_INSTRUCTIONS,
   ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
   ATTR_GEN_AI_TOOL_CALL_ID,
@@ -438,26 +440,143 @@ export function setOutputMessagesAttribute(run: Run, span: Span) {
   }
 }
 
-// Model - Helper to extract model name from run
-export function getModel(run: Run): string | undefined {
+// Model - Helper to extract the request-side model identifier from a LangChain
+// run. Reads only the LangChain-generic fields:
+//   - `extra.metadata.ls_model_name` (LangChain-set request model identifier)
+//   - `extra.invocation_params.model` / `extra.invocation_params.model_name`
+export function getRequestModel(run: Run): string | undefined {
+  const invocationParams = run.extra?.invocation_params as Record<string, unknown> | undefined;
   return [
-    // v1: response_metadata directly on message
-    run.outputs?.generations?.[0]?.[0]?.message?.response_metadata?.model_name,
-    // v0: response_metadata nested under kwargs
-    run.outputs?.generations?.[0]?.[0]?.message?.kwargs?.response_metadata?.model_name,
-    // Metadata paths (both v0 and v1)
+    // LangChain-set request-side identifier (both v0 and v1)
     run.extra?.metadata?.ls_model_name,
-    run.extra?.invocation_params?.model,
-    run.extra?.invocation_params?.model_name,
+    // Generic request model from invocation params
+    invocationParams?.model,
+    invocationParams?.model_name,
   ]
     .map((v) => (v != null ? String(v).trim() : ""))
     .find((v) => v.length > 0);
 }
 
-// Model - Set model attribute on span
+// Model - Helper to extract the response-side model (the model that actually
+// served the request).
+export function getResponseModel(run: Run): string | undefined {
+  const llmOutput = run.outputs?.llmOutput as Record<string, unknown> | undefined;
+  return [
+    // v1: response_metadata directly on message
+    run.outputs?.generations?.[0]?.[0]?.message?.response_metadata?.model_name,
+    // v0: response_metadata nested under kwargs
+    run.outputs?.generations?.[0]?.[0]?.message?.kwargs?.response_metadata?.model_name,
+    // LLMResult.llmOutput.model_name (common for Chat models)
+    llmOutput?.model_name,
+    llmOutput?.model,
+  ]
+    .map((v) => (v != null ? String(v).trim() : ""))
+    .find((v) => v.length > 0);
+}
+
+// Model - Helper kept for backwards compatibility (e.g. span naming). Prefers
+// the request model so the resolved request-side identifier is used, falling
+// back to the response model only when the request side is not available.
+export function getModel(run: Run): string | undefined {
+  return getRequestModel(run) ?? getResponseModel(run);
+}
+
+// Detects whether a LangChain run originated from `AzureChatOpenAI`. We look at
+// the serialized constructor id array (e.g. ["langchain", "chat_models",
+// "azure_openai", "AzureChatOpenAI"]) which LangChain JS surfaces alongside
+// every callback run. Used to scope the AzureChatOpenAI-specific request model
+// workaround in `setModelAttribute`.
+function isAzureChatOpenAIRun(run: Run): boolean {
+  if (!run.serialized || typeof run.serialized !== "object" || Array.isArray(run.serialized)) {
+    return false;
+  }
+  const id = (run.serialized as Record<string, unknown>).id;
+  return Array.isArray(id) && id.some((segment) => segment === "AzureChatOpenAI");
+}
+
+// Model - Set request and response model attributes on the span using only
+// LangChain-generic identifiers.
+//
+// Note on request-model priority: for `AzureChatOpenAI` runs we deliberately
+// prefer the response-side model for `gen_ai.request.model`. LangChain JS does
+// not surface the configured deployment for `AzureChatOpenAI` through
+// `getLsParams()` or `invocationParams()` — `extra.metadata.ls_model_name`
+// falls back to the `BaseChatOpenAI` default of `"gpt-3.5-turbo"`, which would
+// otherwise be emitted as the request model regardless of what the caller
+// actually configured. The server-reported model (e.g.
+// `gpt-4o-mini-2024-07-18`) is a much closer approximation of the requested
+// model than that hardcoded default. See
+// https://github.com/langchain-ai/langchainjs/issues/10874.
+//
+// For all other clients (notably plain `ChatOpenAI` / Foundry deployments) the
+// request-side identifier is correct and is preferred so the deployment alias
+// or `model` kwarg is reported as `gen_ai.request.model`.
 export function setModelAttribute(run: Run, span: Span) {
-  const model = getModel(run);
-  if (model) span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, model);
+  const requestModel = getRequestModel(run);
+  const responseModel = getResponseModel(run);
+
+  const effectiveRequestModel = isAzureChatOpenAIRun(run)
+    ? (responseModel ?? requestModel)
+    : (requestModel ?? responseModel);
+
+  if (effectiveRequestModel) {
+    span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, effectiveRequestModel);
+  }
+
+  if (responseModel) {
+    span.setAttribute(ATTR_GEN_AI_RESPONSE_MODEL, responseModel);
+  }
+}
+
+// Response identifier - Helper to extract the unique response id returned by
+// the underlying provider (e.g. OpenAI chat completion id). LangChain.js
+// typically surfaces this as the AIMessage id (top-level for v1, nested
+// under kwargs for v0) and some providers also include it under
+// response_metadata.id or on LLMResult.llmOutput.id.
+//
+// Only primitive string / number values are accepted: in some LangChain
+// serialization paths an `id` field can be an array of class hierarchy names
+// (e.g. `["langchain", "schema", "messages", "AIMessage"]`) which must not be
+// emitted as a response id. Provider-supplied sources (`response_metadata.id`
+// and `llmOutput.id`) are checked first because they are unambiguously the
+// transport-level response identifier.
+export function getResponseId(run: Run): string | undefined {
+  const message = run.outputs?.generations?.[0]?.[0]?.message as
+    | Record<string, unknown>
+    | undefined;
+  const messageKwargs = message?.kwargs as Record<string, unknown> | undefined;
+  const responseMetadata =
+    (message?.response_metadata as Record<string, unknown> | undefined) ??
+    (messageKwargs?.response_metadata as Record<string, unknown> | undefined);
+  const llmOutput = run.outputs?.llmOutput as Record<string, unknown> | undefined;
+  const candidates: unknown[] = [
+    // Provider-supplied response id surfaced via response_metadata
+    responseMetadata?.id,
+    // LLMResult.llmOutput.id (some providers)
+    llmOutput?.id,
+    // v1: AIMessage.id directly on the message
+    message?.id,
+    // v0: AIMessage.id nested under kwargs
+    messageKwargs?.id,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) return trimmed;
+    } else if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return String(candidate);
+    }
+  }
+  return undefined;
+}
+
+// Response identifier - Set the gen_ai.response.id attribute on the span when
+// a provider-supplied response id is available on the run.
+export function setResponseIdAttribute(run: Run, span: Span): void {
+  const responseId = getResponseId(run);
+  if (responseId) {
+    span.setAttribute(ATTR_GEN_AI_RESPONSE_ID, responseId);
+  }
 }
 
 // Provider
