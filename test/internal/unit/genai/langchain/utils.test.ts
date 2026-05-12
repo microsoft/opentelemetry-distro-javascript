@@ -481,9 +481,7 @@ describe("setModelAttribute", () => {
       "request model should use the server-reported model rather than the LangChain default",
     );
     assert.ok(
-      !calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo",
-      ),
+      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo"),
       "request model must not fall back to the hardcoded ls_model_name default",
     );
   });
