@@ -3,6 +3,8 @@ name: Deploy TypeDoc
 on:
   push:
     branches: [main]
+    paths:
+      - 'package.json'
   workflow_dispatch:
 
 permissions:
@@ -15,8 +17,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check-version:
+    name: Check version change
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ github.event_name == 'workflow_dispatch' || steps.version.outputs.changed == 'true' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if version changed
+        id: version
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          if ! git show HEAD~1:package.json > prev-package.json 2>/dev/null; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PREVIOUS=$(node -p "require('./prev-package.json').version")
+          if [ "$CURRENT" != "$PREVIOUS" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Generate docs
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
     runs-on: ubuntu-latest
 
     steps:
