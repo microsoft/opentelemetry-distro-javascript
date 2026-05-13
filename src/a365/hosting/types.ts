@@ -21,7 +21,6 @@ export interface ActivityLike {
   channelData?: unknown;
   serviceUrl?: string;
   from?: {
-    id?: string;
     aadObjectId?: string;
     name?: string;
     role?: string;

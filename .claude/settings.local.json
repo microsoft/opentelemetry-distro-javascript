@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm info:*)",
+      "WebSearch"
+    ]
+  }
+}
