@@ -83,11 +83,18 @@ export class SdkStatsManager {
   /**
    * Set up SDKStats export via the Azure Monitor statsbeat endpoint.
    *
+   * @param options.networkOnly When `true`, the {@link SdkStatsMetrics}
+   *   instance only registers the six network gauges and skips the
+   *   feature/instrumentation gauges. Used on the Azure-Monitor-enabled
+   *   path because the AzMon exporter's own long-interval statsbeat
+   *   already emits those gauges (with our distro bits bridged in via
+   *   `AZURE_MONITOR_STATSBEAT_FEATURES`).
+   *
    * Returns `true` if the standalone pipeline was initialized (or was
    * already initialized), `false` if SDKStats are disabled via env var
    * or initialization failed.
    */
-  async initialize(): Promise<boolean> {
+  async initialize(options: { networkOnly?: boolean } = {}): Promise<boolean> {
     if (!isSdkStatsEnabled()) {
       return false;
     }
@@ -134,7 +141,9 @@ export class SdkStatsManager {
         readers: [reader],
         resource: resourceFromAttributes({}),
       });
-      this._metrics = new SdkStatsMetrics(this._meterProvider);
+      this._metrics = new SdkStatsMetrics(this._meterProvider, {
+        networkOnly: options.networkOnly,
+      });
       this._initialized = true;
       setSdkStatsShutdown(false);
 

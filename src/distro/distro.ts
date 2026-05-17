@@ -376,16 +376,21 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   isShutdown = false;
   sdk.start();
 
-  // ── SDKStats: standalone pipeline for non-Azure-Monitor paths ─────
-  // When Azure Monitor is enabled the exporter package emits SDKStats
-  // itself (reading bits set above via `AZURE_MONITOR_STATSBEAT_FEATURES`).
-  // For A365-only / OTLP-only / Console-only customers we spin up our
-  // own MeterProvider + AzureMonitorStatsbeatExporter pipeline so the
-  // distro feature/instrumentation bits still reach the well-known
-  // statsbeat endpoint.
-  if (!azureMonitorEnabled) {
-    void SdkStatsManager.getInstance().initialize();
-  }
+  // ── SDKStats: standalone pipeline ─────────────────────────────────
+  // The standalone pipeline ALWAYS runs so per-export network statsbeat
+  // (`request_*` gauges) for A365 / OTLP transmits is captured.
+  //
+  // - When Azure Monitor is enabled (`networkOnly: true`): only the
+  //   network gauges are registered. The Feature / Feature.instrumentations
+  //   long-interval statsbeat is owned by the AzMon exporter, with our
+  //   distro bits bridged in via `setStatsbeatFeatures` →
+  //   `AZURE_MONITOR_STATSBEAT_FEATURES`. Network statsbeat is safe to
+  //   coexist because the `endpoint` attribute partitions the time series
+  //   (AzMon ingestion hosts vs A365 / OTLP hosts).
+  // - When Azure Monitor is disabled: the standalone pipeline owns the
+  //   full set (feature + instrumentation + network) and ships them to
+  //   the well-known statsbeat endpoint.
+  void SdkStatsManager.getInstance().initialize({ networkOnly: azureMonitorEnabled });
 
   // Initialize GenAI instrumentations after providers are registered so any
   // tracer they capture is backed by the active SDK provider.
