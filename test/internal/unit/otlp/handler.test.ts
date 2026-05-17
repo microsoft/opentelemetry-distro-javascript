@@ -76,12 +76,10 @@ describe("OTLP Handler", () => {
         const components = createOtlpComponents();
 
         const spanInner = (components.spanProcessor as unknown as { _exporter: unknown })._exporter;
-        const metricInner = (
-          components.metricReader as unknown as { _exporter: unknown }
-        )._exporter;
-        const logInner = (
-          components.logRecordProcessor as unknown as { _exporter: unknown }
-        )._exporter;
+        const metricInner = (components.metricReader as unknown as { _exporter: unknown })
+          ._exporter;
+        const logInner = (components.logRecordProcessor as unknown as { _exporter: unknown })
+          ._exporter;
 
         expect(spanInner?.constructor.name).toBe("NetworkStatsSpanExporter");
         expect(metricInner?.constructor.name).toBe("NetworkStatsMetricExporter");

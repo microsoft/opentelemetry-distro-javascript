@@ -82,9 +82,7 @@ describe("sdkstats/networkStats", () => {
     expect([...throttles.keys()][0]).toEqual(["otlp", "a.example.com", "402"]);
 
     const exceptions = drain(REQUEST_EXCEPTION_NAME);
-    expect([...exceptions.entries()]).toEqual([
-      [["otlp", "a.example.com", "AbortError"], 2],
-    ]);
+    expect([...exceptions.entries()]).toEqual([[["otlp", "a.example.com", "AbortError"], 2]]);
   });
 
   it("accumulates duration as a sum of seconds", () => {

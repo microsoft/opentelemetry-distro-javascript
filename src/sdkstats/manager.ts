@@ -117,9 +117,7 @@ export class SdkStatsManager {
    * already initialized), `false` if SDKStats are disabled via env var
    * or initialization failed.
    */
-  async initialize(
-    options: { networkOnly?: boolean; cikey?: string } = {},
-  ): Promise<boolean> {
+  async initialize(options: { networkOnly?: boolean; cikey?: string } = {}): Promise<boolean> {
     if (!isSdkStatsEnabled()) {
       return false;
     }

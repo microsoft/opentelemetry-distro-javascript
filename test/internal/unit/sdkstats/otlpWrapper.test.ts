@@ -148,9 +148,7 @@ describe("sdkstats/otlpWrapper", () => {
       const wrapper = new NetworkStatsMetricExporter(
         makeMetricExporter({ code: ExportResultCode.SUCCESS }),
       );
-      await new Promise<void>((resolve) =>
-        wrapper.export({} as ResourceMetrics, () => resolve()),
-      );
+      await new Promise<void>((resolve) => wrapper.export({} as ResourceMetrics, () => resolve()));
       expect([...drain(REQUEST_SUCCESS_NAME).entries()]).toEqual([[[ENDPOINT, HOST], 1]]);
     });
 

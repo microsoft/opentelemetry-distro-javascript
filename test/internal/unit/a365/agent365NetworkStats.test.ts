@@ -61,7 +61,8 @@ function fetchHost(): string {
   // Whatever URL `Agent365Exporter` POSTs to in the default config — we
   // pluck it from the captured fetch args and pass through the same
   // shortHost() transform the production code uses.
-  const calls = (globalThis.fetch as unknown as { mock?: { calls: unknown[][] } }).mock?.calls ?? [];
+  const calls =
+    (globalThis.fetch as unknown as { mock?: { calls: unknown[][] } }).mock?.calls ?? [];
   if (calls.length === 0) return "unknown";
   const url = calls[0][0] as string;
   return _shortHost(url);
@@ -99,7 +100,7 @@ describe("Agent365Exporter network statsbeat", () => {
     expect([...drain(REQUEST_SUCCESS_NAME).entries()]).toEqual([[[ENDPOINT, host], 1]]);
     const dur = drain(REQUEST_DURATION_NAME);
     expect([...dur.keys()][0]).toEqual([ENDPOINT, host]);
-    expect((dur.get([ENDPOINT, host]) ?? [...dur.values()][0])).toBeGreaterThanOrEqual(0);
+    expect(dur.get([ENDPOINT, host]) ?? [...dur.values()][0]).toBeGreaterThanOrEqual(0);
   });
 
   it("records request_retry_count for every retryable response and a final request_failure_count when retries are exhausted", async () => {

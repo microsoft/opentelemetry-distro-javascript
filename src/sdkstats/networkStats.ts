@@ -64,9 +64,7 @@ export type NetworkMetricName = (typeof NETWORK_METRIC_NAMES)[number];
  *
  * @internal
  */
-export type NetworkKey =
-  | readonly [string, string]
-  | readonly [string, string, string];
+export type NetworkKey = readonly [string, string] | readonly [string, string, string];
 
 // Single-threaded JS execution → no lock needed (Python uses one because of
 // the GIL + threads; Node.js doesn't share JS objects across worker threads).
@@ -104,19 +102,11 @@ export function recordSuccess(endpoint: string, host: string): void {
   bump(REQUEST_SUCCESS_NAME, [endpoint, host]);
 }
 
-export function recordFailure(
-  endpoint: string,
-  host: string,
-  statusCode: number | string,
-): void {
+export function recordFailure(endpoint: string, host: string, statusCode: number | string): void {
   bump(REQUEST_FAILURE_NAME, [endpoint, host, String(statusCode)]);
 }
 
-export function recordRetry(
-  endpoint: string,
-  host: string,
-  statusCode: number | string,
-): void {
+export function recordRetry(endpoint: string, host: string, statusCode: number | string): void {
   bump(REQUEST_RETRY_NAME, [endpoint, host, String(statusCode)]);
 }
 
@@ -128,19 +118,11 @@ export function recordThrottle(
   bump(REQUEST_THROTTLE_NAME, [endpoint, host, String(statusCode)]);
 }
 
-export function recordException(
-  endpoint: string,
-  host: string,
-  exceptionType: string,
-): void {
+export function recordException(endpoint: string, host: string, exceptionType: string): void {
   bump(REQUEST_EXCEPTION_NAME, [endpoint, host, exceptionType]);
 }
 
-export function recordDuration(
-  endpoint: string,
-  host: string,
-  durationSeconds: number,
-): void {
+export function recordDuration(endpoint: string, host: string, durationSeconds: number): void {
   bump(REQUEST_DURATION_NAME, [endpoint, host], durationSeconds);
 }
 

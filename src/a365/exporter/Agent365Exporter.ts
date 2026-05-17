@@ -341,9 +341,7 @@ export class Agent365Exporter implements SpanExporter {
           recordException(
             endpointCategory,
             host,
-            error instanceof Error
-              ? error.name || error.constructor.name || "Error"
-              : typeof error,
+            error instanceof Error ? error.name || error.constructor.name || "Error" : typeof error,
           );
         }
         this.logger.error("[Agent365Exporter] Request error:", error);
