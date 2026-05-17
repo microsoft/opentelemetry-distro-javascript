@@ -20,6 +20,7 @@ import { InternalConfig } from "../shared/config.js";
 import { MetricHandler } from "../azureMonitor/metrics/index.js";
 import { TraceHandler } from "../azureMonitor/traces/handler.js";
 import { LogHandler } from "../azureMonitor/logs/index.js";
+import { ConnectionStringParser } from "../azureMonitor/utils/connectionStringParser.js";
 import { AZURE_MONITOR_OPENTELEMETRY_VERSION } from "../types.js";
 import { patchOpenTelemetryInstrumentationEnable } from "../utils/opentelemetryInstrumentationPatcher.js";
 import { parseResourceDetectorsFromEnvVar } from "../utils/common.js";
@@ -378,19 +379,35 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
 
   // ── SDKStats: standalone pipeline ─────────────────────────────────
   // The standalone pipeline ALWAYS runs so per-export network statsbeat
-  // (`request_*` gauges) for A365 / OTLP transmits is captured.
+  // (`Request_*` etc. gauges) for A365 / OTLP transmits is captured.
   //
   // - When Azure Monitor is enabled (`networkOnly: true`): only the
   //   network gauges are registered. The Feature / Feature.instrumentations
   //   long-interval statsbeat is owned by the AzMon exporter, with our
   //   distro bits bridged in via `setStatsbeatFeatures` →
   //   `AZURE_MONITOR_STATSBEAT_FEATURES`. Network statsbeat is safe to
-  //   coexist because the `endpoint` attribute partitions the time series
-  //   (AzMon ingestion hosts vs A365 / OTLP hosts).
+  //   coexist because the (endpoint, host) attributes partition the
+  //   time series (AzMon ingestion hosts vs A365 / OTLP hosts).
   // - When Azure Monitor is disabled: the standalone pipeline owns the
   //   full set (feature + instrumentation + network) and ships them to
   //   the well-known statsbeat endpoint.
-  void SdkStatsManager.getInstance().initialize({ networkOnly: azureMonitorEnabled });
+  //
+  // `cikey` is reported as a customDimension on every observation per
+  // the SDKStats spec. Parse it from the customer connection string if
+  // we have one; empty string otherwise.
+  const sdkStatsCikey = (() => {
+    const cs =
+      config.azureMonitorExporterOptions?.connectionString ??
+      process.env["APPLICATIONINSIGHTS_CONNECTION_STRING"] ??
+      "";
+    if (!cs) return "";
+    const parsed = ConnectionStringParser.parse(cs);
+    return parsed.instrumentationkey ?? "";
+  })();
+  void SdkStatsManager.getInstance().initialize({
+    networkOnly: azureMonitorEnabled,
+    cikey: sdkStatsCikey,
+  });
 
   // Initialize GenAI instrumentations after providers are registered so any
   // tracer they capture is backed by the active SDK provider.

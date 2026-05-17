@@ -30,6 +30,7 @@ import {
   recordRetry,
   recordSuccess,
   recordThrottle,
+  shortHost,
 } from "../../sdkstats/index.js";
 
 const DEFAULT_MAX_RETRIES = 3;
@@ -261,17 +262,15 @@ export class Agent365Exporter implements SpanExporter {
   ): Promise<{ ok: boolean; correlationId: string }> {
     let lastCorrelationId = "unknown";
 
-    // Resolve the endpoint host (and the SDKStats kill-switch) once per
-    // call so each retry attempt records under the same key without
-    // re-parsing the URL or re-checking env on every iteration.
+    // Resolve the short host (and the SDKStats kill-switch) once per call
+    // so each retry attempt records under the same key without re-parsing
+    // the URL or re-checking env on every iteration. `endpoint` is the
+    // category label per spec — A365 transmits report endpoint="a365".
     const recordA365Stats = isSdkStatsEnabled();
-    let endpointHost = url;
+    const endpointCategory = "a365";
+    let host = url;
     if (recordA365Stats) {
-      try {
-        endpointHost = new URL(url).hostname || url;
-      } catch {
-        endpointHost = url;
-      }
+      host = shortHost(url);
     }
 
     for (let attempt = 0; attempt <= DEFAULT_MAX_RETRIES; attempt++) {
@@ -285,7 +284,7 @@ export class Agent365Exporter implements SpanExporter {
         });
 
         if (recordA365Stats) {
-          recordDuration(endpointHost, (Date.now() - startTime) / 1000);
+          recordDuration(endpointCategory, host, (Date.now() - startTime) / 1000);
         }
 
         const correlationId =
@@ -296,7 +295,7 @@ export class Agent365Exporter implements SpanExporter {
 
         if (response.status >= 200 && response.status < 300) {
           if (recordA365Stats) {
-            recordSuccess(endpointHost);
+            recordSuccess(endpointCategory, host);
           }
           return { ok: true, correlationId };
         }
@@ -309,7 +308,7 @@ export class Agent365Exporter implements SpanExporter {
           if (recordA365Stats) {
             // 402 (throttle) is not in the retryable set, so it never
             // lands here — only true retries.
-            recordRetry(endpointHost, response.status);
+            recordRetry(endpointCategory, host, response.status);
           }
           if (attempt < DEFAULT_MAX_RETRIES) {
             const sleepMs = 200 * (attempt + 1) + Math.floor(Math.random() * 100);
@@ -322,13 +321,13 @@ export class Agent365Exporter implements SpanExporter {
           // Retries exhausted: also record a final failure so dashboards
           // see this as a terminal failure (not just a retry blip).
           if (recordA365Stats) {
-            recordFailure(endpointHost, response.status);
+            recordFailure(endpointCategory, host, response.status);
           }
         } else if (recordA365Stats) {
           if (THROTTLE_STATUS_CODES.has(response.status)) {
-            recordThrottle(endpointHost, response.status);
+            recordThrottle(endpointCategory, host, response.status);
           } else {
-            recordFailure(endpointHost, response.status);
+            recordFailure(endpointCategory, host, response.status);
           }
         }
 
@@ -338,9 +337,10 @@ export class Agent365Exporter implements SpanExporter {
         return { ok: false, correlationId };
       } catch (error) {
         if (recordA365Stats) {
-          recordDuration(endpointHost, (Date.now() - startTime) / 1000);
+          recordDuration(endpointCategory, host, (Date.now() - startTime) / 1000);
           recordException(
-            endpointHost,
+            endpointCategory,
+            host,
             error instanceof Error
               ? error.name || error.constructor.name || "Error"
               : typeof error,

@@ -30,22 +30,42 @@ import { isSdkStatsEnabled, setSdkStatsShutdown } from "./state.js";
 import { SdkStatsMetrics } from "./metrics.js";
 
 /**
- * Default long export interval (24 hours) for Feature/Instrumentation
- * SDKStats per the Application Insights SDKStats specification.
+ * Default short export interval (15 minutes) for the standalone SDKStats
+ * pipeline. This matches the Application Insights statsbeat
+ * short-interval cadence used by the network statsbeat counters and the
+ * Python distro (`_get_stats_short_export_interval()` in
+ * `azure.monitor.opentelemetry.exporter.statsbeat._utils`).
+ *
+ * The pipeline emits both Feature/Feature.instrumentations gauges
+ * (when not in `networkOnly` mode) and the six `request_*` network
+ * gauges; the network counters dominate cadence requirements, so the
+ * single shared interval defaults to short rather than long.
  *
  * @internal
  */
-const DEFAULT_LONG_EXPORT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_SHORT_EXPORT_INTERVAL_MS = 15 * 60 * 1000;
 
 /**
- * Override env var: long export interval in seconds, per the spec.
+ * Override env var: standalone SDKStats export interval in seconds.
+ * Matches the Python distro env var name.
  *
  * @internal
  */
-const SDKSTATS_LONG_EXPORT_INTERVAL_ENV = "APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL";
+const SDKSTATS_SHORT_EXPORT_INTERVAL_ENV = "APPLICATIONINSIGHTS_STATS_SHORT_EXPORT_INTERVAL";
 
 /**
- * Initial-export delay (15 seconds) before the first long-interval flush.
+ * Override env var: redirect SDKStats envelopes to a custom App
+ * Insights connection string. When unset, SDKStats flow to the
+ * Microsoft-owned statsbeat resource (`NON_EU_CONNECTION_STRING` in
+ * the AzMon exporter package). Primarily useful for testing.
+ * Matches the Python distro env var name.
+ *
+ * @internal
+ */
+const SDKSTATS_CONNECTION_STRING_ENV = "APPLICATIONINSIGHTS_STATS_CONNECTION_STRING";
+
+/**
+ * Initial-export delay (15 seconds) before the first flush.
  *
  * The spec recommends this delay specifically for the Node.js SDK to
  * avoid short-running CLI-style applications generating excess SDKStats
@@ -89,12 +109,17 @@ export class SdkStatsManager {
    *   path because the AzMon exporter's own long-interval statsbeat
    *   already emits those gauges (with our distro bits bridged in via
    *   `AZURE_MONITOR_STATSBEAT_FEATURES`).
+   * @param options.cikey Customer iKey to report as the `cikey`
+   *   customDimension on every observation. Required by the SDKStats
+   *   spec; pass an empty string only if no customer iKey is available.
    *
    * Returns `true` if the standalone pipeline was initialized (or was
    * already initialized), `false` if SDKStats are disabled via env var
    * or initialization failed.
    */
-  async initialize(options: { networkOnly?: boolean } = {}): Promise<boolean> {
+  async initialize(
+    options: { networkOnly?: boolean; cikey?: string } = {},
+  ): Promise<boolean> {
     if (!isSdkStatsEnabled()) {
       return false;
     }
@@ -127,8 +152,16 @@ export class SdkStatsManager {
       const AzureMonitorStatsbeatExporter = statsbeatExporterModule.AzureMonitorStatsbeatExporter;
       const NON_EU_CONNECTION_STRING = statsbeatTypesModule.NON_EU_CONNECTION_STRING;
 
+      // Allow overriding the SDKStats ingestion target via env var,
+      // matching the Python distro's APPLICATIONINSIGHTS_STATS_CONNECTION_STRING
+      // hook. Primarily useful for testing — production should leave
+      // this unset so SDKStats flows to the Microsoft-owned statsbeat
+      // resource (NON_EU_CONNECTION_STRING).
+      const connectionString =
+        process.env[SDKSTATS_CONNECTION_STRING_ENV] ?? NON_EU_CONNECTION_STRING;
+
       const exporter = new AzureMonitorStatsbeatExporter({
-        connectionString: NON_EU_CONNECTION_STRING,
+        connectionString,
         disableOfflineStorage: true,
       });
 
@@ -143,6 +176,7 @@ export class SdkStatsManager {
       });
       this._metrics = new SdkStatsMetrics(this._meterProvider, {
         networkOnly: options.networkOnly,
+        cikey: options.cikey,
       });
       this._initialized = true;
       setSdkStatsShutdown(false);
@@ -210,11 +244,11 @@ export class SdkStatsManager {
 }
 
 function resolveExportInterval(): number {
-  const raw = process.env[SDKSTATS_LONG_EXPORT_INTERVAL_ENV];
-  if (!raw) return DEFAULT_LONG_EXPORT_INTERVAL_MS;
+  const raw = process.env[SDKSTATS_SHORT_EXPORT_INTERVAL_ENV];
+  if (!raw) return DEFAULT_SHORT_EXPORT_INTERVAL_MS;
   const seconds = Number(raw);
   if (!Number.isFinite(seconds) || seconds <= 0) {
-    return DEFAULT_LONG_EXPORT_INTERVAL_MS;
+    return DEFAULT_SHORT_EXPORT_INTERVAL_MS;
   }
   return Math.floor(seconds * 1000);
 }

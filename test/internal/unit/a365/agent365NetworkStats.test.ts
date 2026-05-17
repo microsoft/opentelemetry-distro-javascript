@@ -15,6 +15,7 @@ import {
   REQUEST_THROTTLE_NAME,
   _resetAllForTest,
   drain,
+  shortHost as _shortHost,
 } from "../../../../src/sdkstats/networkStats.js";
 import { _resetA365LoggerForTest } from "../../../../src/a365/logging.js";
 
@@ -58,17 +59,15 @@ function exportSpan(exporter: Agent365Exporter): Promise<number> {
 
 function fetchHost(): string {
   // Whatever URL `Agent365Exporter` POSTs to in the default config — we
-  // pluck it from the captured fetch args so the test never has to know
-  // the Agent365 endpoint resolution rules.
+  // pluck it from the captured fetch args and pass through the same
+  // shortHost() transform the production code uses.
   const calls = (globalThis.fetch as unknown as { mock?: { calls: unknown[][] } }).mock?.calls ?? [];
   if (calls.length === 0) return "unknown";
   const url = calls[0][0] as string;
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
+  return _shortHost(url);
 }
+
+const ENDPOINT = "a365";
 
 describe("Agent365Exporter network statsbeat", () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
@@ -97,10 +96,10 @@ describe("Agent365Exporter network statsbeat", () => {
     await exportSpan(exporter);
 
     const host = fetchHost();
-    expect([...drain(REQUEST_SUCCESS_NAME).entries()]).toEqual([[[host], 1]]);
+    expect([...drain(REQUEST_SUCCESS_NAME).entries()]).toEqual([[[ENDPOINT, host], 1]]);
     const dur = drain(REQUEST_DURATION_NAME);
-    expect([...dur.keys()][0]).toEqual([host]);
-    expect((dur.get([host]) ?? [...dur.values()][0])).toBeGreaterThanOrEqual(0);
+    expect([...dur.keys()][0]).toEqual([ENDPOINT, host]);
+    expect((dur.get([ENDPOINT, host]) ?? [...dur.values()][0])).toBeGreaterThanOrEqual(0);
   });
 
   it("records request_retry_count for every retryable response and a final request_failure_count when retries are exhausted", async () => {
@@ -116,9 +115,9 @@ describe("Agent365Exporter network statsbeat", () => {
 
     const host = fetchHost();
     const retries = drain(REQUEST_RETRY_NAME);
-    expect([...retries.entries()]).toEqual([[[host, "503"], 4]]);
+    expect([...retries.entries()]).toEqual([[[ENDPOINT, host, "503"], 4]]);
     const failures = drain(REQUEST_FAILURE_NAME);
-    expect([...failures.entries()]).toEqual([[[host, "503"], 1]]);
+    expect([...failures.entries()]).toEqual([[[ENDPOINT, host, "503"], 1]]);
   });
 
   it("records request_failure_count for non-retryable, non-throttle status codes", async () => {
@@ -127,7 +126,7 @@ describe("Agent365Exporter network statsbeat", () => {
     await exportSpan(exporter);
 
     const host = fetchHost();
-    expect([...drain(REQUEST_FAILURE_NAME).entries()]).toEqual([[[host, "404"], 1]]);
+    expect([...drain(REQUEST_FAILURE_NAME).entries()]).toEqual([[[ENDPOINT, host, "404"], 1]]);
     expect(drain(REQUEST_RETRY_NAME).size).toBe(0);
   });
 
@@ -137,7 +136,7 @@ describe("Agent365Exporter network statsbeat", () => {
     await exportSpan(exporter);
 
     const host = fetchHost();
-    expect([...drain(REQUEST_THROTTLE_NAME).entries()]).toEqual([[[host, "402"], 1]]);
+    expect([...drain(REQUEST_THROTTLE_NAME).entries()]).toEqual([[[ENDPOINT, host, "402"], 1]]);
     expect(drain(REQUEST_FAILURE_NAME).size).toBe(0);
   });
 
@@ -156,9 +155,9 @@ describe("Agent365Exporter network statsbeat", () => {
 
     const host = fetchHost();
     const exceptions = drain(REQUEST_EXCEPTION_NAME);
-    expect([...exceptions.entries()]).toEqual([[[host, "AbortError"], 4]]);
+    expect([...exceptions.entries()]).toEqual([[[ENDPOINT, host, "AbortError"], 4]]);
     const durations = drain(REQUEST_DURATION_NAME);
-    expect([...durations.keys()][0]).toEqual([host]);
+    expect([...durations.keys()][0]).toEqual([ENDPOINT, host]);
   });
 
   it("records nothing when MICROSOFT_OTEL_SDKSTATS_DISABLED=true", async () => {

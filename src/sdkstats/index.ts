@@ -50,6 +50,7 @@ export {
   recordException,
   recordDuration,
   drain,
+  shortHost,
   _resetAllForTest as _resetNetworkStatsForTest,
 } from "./networkStats.js";
 export type { NetworkMetricName, NetworkKey } from "./networkStats.js";

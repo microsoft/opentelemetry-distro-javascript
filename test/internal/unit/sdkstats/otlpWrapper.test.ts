@@ -22,10 +22,14 @@ import {
   drain,
 } from "../../../../src/sdkstats/networkStats.js";
 
-const HOST = "collector.example.com";
+// `shortHost("https://collector.example.com:4318")` strips the first
+// path component, so the dimension value the wrappers record is just
+// "collector". `endpoint` is the category label ("otlp").
+const HOST = "collector";
+const ENDPOINT = "otlp";
 
 function setEndpointEnv(): void {
-  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = `https://${HOST}:4318`;
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = `https://collector.example.com:4318`;
 }
 
 function clearEndpointEnv(): void {
@@ -85,9 +89,9 @@ describe("sdkstats/otlpWrapper", () => {
       expect(inner.exported).toBe(1);
 
       const success = drain(REQUEST_SUCCESS_NAME);
-      expect([...success.entries()]).toEqual([[[HOST], 1]]);
+      expect([...success.entries()]).toEqual([[[ENDPOINT, HOST], 1]]);
       const dur = drain(REQUEST_DURATION_NAME);
-      expect([...dur.keys()][0]).toEqual([HOST]);
+      expect([...dur.keys()][0]).toEqual([ENDPOINT, HOST]);
     });
 
     it("records failure(0) + duration on FAILED result (no HTTP status code surfaced)", async () => {
@@ -96,7 +100,7 @@ describe("sdkstats/otlpWrapper", () => {
       await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
 
       const failure = drain(REQUEST_FAILURE_NAME);
-      expect([...failure.entries()]).toEqual([[[HOST, "0"], 1]]);
+      expect([...failure.entries()]).toEqual([[[ENDPOINT, HOST, "0"], 1]]);
     });
 
     it("records exception + duration and re-throws on a synchronous throw", async () => {
@@ -105,7 +109,7 @@ describe("sdkstats/otlpWrapper", () => {
 
       expect(() => wrapper.export([], () => {})).toThrow(TypeError);
       const exc = drain(REQUEST_EXCEPTION_NAME);
-      expect([...exc.entries()]).toEqual([[[HOST, "TypeError"], 1]]);
+      expect([...exc.entries()]).toEqual([[[ENDPOINT, HOST, "TypeError"], 1]]);
       const dur = drain(REQUEST_DURATION_NAME);
       expect(dur.size).toBe(1);
     });
@@ -147,7 +151,7 @@ describe("sdkstats/otlpWrapper", () => {
       await new Promise<void>((resolve) =>
         wrapper.export({} as ResourceMetrics, () => resolve()),
       );
-      expect([...drain(REQUEST_SUCCESS_NAME).entries()]).toEqual([[[HOST], 1]]);
+      expect([...drain(REQUEST_SUCCESS_NAME).entries()]).toEqual([[[ENDPOINT, HOST], 1]]);
     });
 
     it("forwards selectAggregationTemporality only when inner provides it", () => {
@@ -189,7 +193,7 @@ describe("sdkstats/otlpWrapper", () => {
         makeLogExporter({ code: ExportResultCode.SUCCESS }),
       );
       await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
-      expect([...drain(REQUEST_SUCCESS_NAME).entries()]).toEqual([[[HOST], 1]]);
+      expect([...drain(REQUEST_SUCCESS_NAME).entries()]).toEqual([[[ENDPOINT, HOST], 1]]);
     });
 
     it("records failure(0) on FAILED result", async () => {
@@ -197,7 +201,7 @@ describe("sdkstats/otlpWrapper", () => {
         makeLogExporter({ code: ExportResultCode.FAILED }),
       );
       await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
-      expect([...drain(REQUEST_FAILURE_NAME).entries()]).toEqual([[[HOST, "0"], 1]]);
+      expect([...drain(REQUEST_FAILURE_NAME).entries()]).toEqual([[[ENDPOINT, HOST, "0"], 1]]);
     });
   });
 
@@ -210,7 +214,7 @@ describe("sdkstats/otlpWrapper", () => {
     return new Promise<void>((resolve) =>
       wrapper.export([], () => {
         const success = drain(REQUEST_SUCCESS_NAME);
-        expect([...success.keys()][0]).toEqual(["unknown"]);
+        expect([...success.keys()][0]).toEqual([ENDPOINT, "unknown"]);
         resolve();
       }),
     );

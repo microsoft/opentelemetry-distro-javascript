@@ -21,12 +21,19 @@
  */
 export const THROTTLE_STATUS_CODES: ReadonlySet<number> = new Set([402]);
 
-export const REQUEST_SUCCESS_NAME = "request_success_count";
-export const REQUEST_FAILURE_NAME = "request_failure_count";
-export const REQUEST_RETRY_NAME = "request_retry_count";
-export const REQUEST_THROTTLE_NAME = "request_throttle_count";
-export const REQUEST_EXCEPTION_NAME = "request_exception_count";
-export const REQUEST_DURATION_NAME = "request_duration";
+// Metric names must match the AzMon statsbeat backend's recognized
+// schema (see `StatsbeatCounter` enum in
+// `@azure/monitor-opentelemetry-exporter/dist/esm/export/statsbeat/types.js`).
+// Sending envelopes under any other name returns HTTP 200 but the
+// backend doesn't index them, so they're invisible in the statsbeat
+// dashboards. The constants below intentionally match the wire-format
+// names — do NOT rename them to lowercase.
+export const REQUEST_SUCCESS_NAME = "Request_Success_Count";
+export const REQUEST_FAILURE_NAME = "Request_Failure_Count";
+export const REQUEST_RETRY_NAME = "Retry_Count";
+export const REQUEST_THROTTLE_NAME = "Throttle_Count";
+export const REQUEST_EXCEPTION_NAME = "Exception_Count";
+export const REQUEST_DURATION_NAME = "Request_Duration";
 
 /**
  * Names of all six network statsbeat metrics, in registration order.
@@ -47,13 +54,19 @@ export type NetworkMetricName = (typeof NETWORK_METRIC_NAMES)[number];
 /**
  * Composite key for an aggregated network statsbeat counter.
  *
- * - Single-element tuples key on `endpoint` only (success / duration).
- * - Two-element tuples key on `[endpoint, statusCode | exceptionType]`
+ * Per the Application Insights SDKStats spec the per-key dimensions are
+ * `endpoint` (category, e.g. "otlp", "a365"), `host` (stamp-specific
+ * region or hostname), and optionally `statusCode` / `exceptionType`.
+ *
+ * - 2-element tuples key on `[endpoint, host]` (success / duration).
+ * - 3-element tuples key on `[endpoint, host, statusCode | exceptionType]`
  *   (failure / retry / throttle / exception).
  *
  * @internal
  */
-export type NetworkKey = readonly [string] | readonly [string, string];
+export type NetworkKey =
+  | readonly [string, string]
+  | readonly [string, string, string];
 
 // Single-threaded JS execution → no lock needed (Python uses one because of
 // the GIL + threads; Node.js doesn't share JS objects across worker threads).
@@ -72,13 +85,13 @@ const REQUESTS_MAP: Record<NetworkMetricName, Map<string, number>> = {
 const KEY_SEPARATOR = "\u0000";
 
 function encodeKey(key: NetworkKey): string {
-  return key.length === 1 ? key[0] : `${key[0]}${KEY_SEPARATOR}${key[1]}`;
+  return key.join(KEY_SEPARATOR);
 }
 
 function decodeKey(encoded: string): NetworkKey {
-  const sep = encoded.indexOf(KEY_SEPARATOR);
-  if (sep < 0) return [encoded] as const;
-  return [encoded.slice(0, sep), encoded.slice(sep + 1)] as const;
+  const parts = encoded.split(KEY_SEPARATOR);
+  if (parts.length === 2) return [parts[0], parts[1]] as const;
+  return [parts[0], parts[1], parts[2]] as const;
 }
 
 function bump(metric: NetworkMetricName, key: NetworkKey, value = 1): void {
@@ -87,28 +100,85 @@ function bump(metric: NetworkMetricName, key: NetworkKey, value = 1): void {
   bucket.set(encoded, (bucket.get(encoded) ?? 0) + value);
 }
 
-export function recordSuccess(endpoint: string): void {
-  bump(REQUEST_SUCCESS_NAME, [endpoint]);
+export function recordSuccess(endpoint: string, host: string): void {
+  bump(REQUEST_SUCCESS_NAME, [endpoint, host]);
 }
 
-export function recordFailure(endpoint: string, statusCode: number | string): void {
-  bump(REQUEST_FAILURE_NAME, [endpoint, String(statusCode)]);
+export function recordFailure(
+  endpoint: string,
+  host: string,
+  statusCode: number | string,
+): void {
+  bump(REQUEST_FAILURE_NAME, [endpoint, host, String(statusCode)]);
 }
 
-export function recordRetry(endpoint: string, statusCode: number | string): void {
-  bump(REQUEST_RETRY_NAME, [endpoint, String(statusCode)]);
+export function recordRetry(
+  endpoint: string,
+  host: string,
+  statusCode: number | string,
+): void {
+  bump(REQUEST_RETRY_NAME, [endpoint, host, String(statusCode)]);
 }
 
-export function recordThrottle(endpoint: string, statusCode: number | string = 402): void {
-  bump(REQUEST_THROTTLE_NAME, [endpoint, String(statusCode)]);
+export function recordThrottle(
+  endpoint: string,
+  host: string,
+  statusCode: number | string = 402,
+): void {
+  bump(REQUEST_THROTTLE_NAME, [endpoint, host, String(statusCode)]);
 }
 
-export function recordException(endpoint: string, exceptionType: string): void {
-  bump(REQUEST_EXCEPTION_NAME, [endpoint, exceptionType]);
+export function recordException(
+  endpoint: string,
+  host: string,
+  exceptionType: string,
+): void {
+  bump(REQUEST_EXCEPTION_NAME, [endpoint, host, exceptionType]);
 }
 
-export function recordDuration(endpoint: string, durationSeconds: number): void {
-  bump(REQUEST_DURATION_NAME, [endpoint], durationSeconds);
+export function recordDuration(
+  endpoint: string,
+  host: string,
+  durationSeconds: number,
+): void {
+  bump(REQUEST_DURATION_NAME, [endpoint, host], durationSeconds);
+}
+
+/**
+ * Compute the stamp-specific short host for the SDKStats `host` dimension.
+ *
+ * Mirrors `getShortHost` in the AzMon exporter's `NetworkStatsbeatMetrics`
+ * but additionally strips any trailing port (`:4318`) so localhost-style
+ * URLs report a clean `localhost` instead of `localhost:4318`. Examples:
+ *   `https://westus2-1.in.applicationinsights.azure.com` → `westus2`
+ *   `http://localhost:4318/v1/traces`                    → `localhost`
+ *   `https://collector.example.com:8080`                  → `collector`
+ * For non-URL inputs, returns the hostname or the raw input on failure.
+ *
+ * @internal
+ */
+export function shortHost(input: string): string {
+  if (!input) return "unknown";
+  let host = input;
+  try {
+    const hostRegex = /^https?:\/\/(?:www\.)?([^/.-]+)/;
+    const res = hostRegex.exec(input);
+    if (res && res.length > 1) {
+      host = res[1];
+    } else {
+      try {
+        host = new URL(input).hostname || input;
+      } catch {
+        host = input;
+      }
+    }
+    host = host.replace(".in.applicationinsights.azure.com", "");
+    const colon = host.indexOf(":");
+    if (colon > 0) host = host.slice(0, colon);
+  } catch {
+    /* fall through */
+  }
+  return host;
 }
 
 /**

@@ -30,10 +30,14 @@ import {
   recordException,
   recordFailure,
   recordSuccess,
+  shortHost,
 } from "./networkStats.js";
 
+/** Per spec, `endpoint` is a category label, not the destination URL. */
+const OTLP_ENDPOINT_CATEGORY = "otlp";
+
 /**
- * Resolve the destination hostname for a given OTLP signal.
+ * Resolve the short-host string for a given OTLP signal.
  *
  * The OTel HTTP exporters do not expose their endpoint on a stable public
  * field, so we read the same env-var precedence the exporters themselves
@@ -41,7 +45,7 @@ import {
  * Falls back to `"unknown"` when no endpoint can be resolved (e.g. fully
  * programmatic config without env vars).
  */
-function resolveEndpointHost(signal: "traces" | "metrics" | "logs"): string {
+function resolveShortHost(signal: "traces" | "metrics" | "logs"): string {
   const signalSpecific =
     signal === "traces"
       ? "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
@@ -51,12 +55,7 @@ function resolveEndpointHost(signal: "traces" | "metrics" | "logs"): string {
 
   const raw = process.env[signalSpecific] ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
   if (!raw) return "unknown";
-
-  try {
-    return new URL(raw).hostname || raw;
-  } catch {
-    return raw;
-  }
+  return shortHost(raw);
 }
 
 /**
@@ -70,7 +69,7 @@ function resolveEndpointHost(signal: "traces" | "metrics" | "logs"): string {
  * exceptions keyed by the error class name.
  */
 function wrapExport<T>(
-  endpoint: string,
+  host: string,
   inner: (resultCallback: (result: ExportResult) => void) => void,
   resultCallback: (result: ExportResult) => void,
   _items: T,
@@ -80,13 +79,13 @@ function wrapExport<T>(
   const settle = (result: ExportResult): void => {
     if (settled) return;
     settled = true;
-    recordDuration(endpoint, (Date.now() - start) / 1000);
+    recordDuration(OTLP_ENDPOINT_CATEGORY, host, (Date.now() - start) / 1000);
     if (result.code === ExportResultCode.SUCCESS) {
-      recordSuccess(endpoint);
+      recordSuccess(OTLP_ENDPOINT_CATEGORY, host);
     } else {
       // The HTTP exporters don't expose an HTTP status code, so record
       // failures with statusCode=0 (matches Python distro).
-      recordFailure(endpoint, 0);
+      recordFailure(OTLP_ENDPOINT_CATEGORY, host, 0);
     }
     resultCallback(result);
   };
@@ -95,8 +94,8 @@ function wrapExport<T>(
     inner(settle);
   } catch (err) {
     settled = true;
-    recordDuration(endpoint, (Date.now() - start) / 1000);
-    recordException(endpoint, errorName(err));
+    recordDuration(OTLP_ENDPOINT_CATEGORY, host, (Date.now() - start) / 1000);
+    recordException(OTLP_ENDPOINT_CATEGORY, host, errorName(err));
     throw err;
   }
 }
@@ -112,19 +111,14 @@ function errorName(err: unknown): string {
  * Span exporter decorator that records network statsbeat counts.
  */
 export class NetworkStatsSpanExporter implements SpanExporter {
-  private readonly endpoint: string;
+  private readonly host: string;
 
   constructor(private readonly inner: SpanExporter) {
-    this.endpoint = resolveEndpointHost("traces");
+    this.host = resolveShortHost("traces");
   }
 
   export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
-    wrapExport(
-      this.endpoint,
-      (cb) => this.inner.export(spans, cb),
-      resultCallback,
-      spans,
-    );
+    wrapExport(this.host, (cb) => this.inner.export(spans, cb), resultCallback, spans);
   }
 
   shutdown(): Promise<void> {
@@ -145,12 +139,12 @@ export class NetworkStatsSpanExporter implements SpanExporter {
  * for exporters that don't.
  */
 export class NetworkStatsMetricExporter implements PushMetricExporter {
-  private readonly endpoint: string;
+  private readonly host: string;
   selectAggregationTemporality?: (instrumentType: InstrumentType) => AggregationTemporality;
   selectAggregation?: (instrumentType: InstrumentType) => AggregationOption;
 
   constructor(private readonly inner: PushMetricExporter) {
-    this.endpoint = resolveEndpointHost("metrics");
+    this.host = resolveShortHost("metrics");
     if (inner.selectAggregationTemporality) {
       this.selectAggregationTemporality = (t) => inner.selectAggregationTemporality!(t);
     }
@@ -160,12 +154,7 @@ export class NetworkStatsMetricExporter implements PushMetricExporter {
   }
 
   export(metrics: ResourceMetrics, resultCallback: (result: ExportResult) => void): void {
-    wrapExport(
-      this.endpoint,
-      (cb) => this.inner.export(metrics, cb),
-      resultCallback,
-      metrics,
-    );
+    wrapExport(this.host, (cb) => this.inner.export(metrics, cb), resultCallback, metrics);
   }
 
   forceFlush(): Promise<void> {
@@ -181,19 +170,14 @@ export class NetworkStatsMetricExporter implements PushMetricExporter {
  * Log exporter decorator that records network statsbeat counts.
  */
 export class NetworkStatsLogExporter implements LogRecordExporter {
-  private readonly endpoint: string;
+  private readonly host: string;
 
   constructor(private readonly inner: LogRecordExporter) {
-    this.endpoint = resolveEndpointHost("logs");
+    this.host = resolveShortHost("logs");
   }
 
   export(logs: ReadableLogRecord[], resultCallback: (result: ExportResult) => void): void {
-    wrapExport(
-      this.endpoint,
-      (cb) => this.inner.export(logs, cb),
-      resultCallback,
-      logs,
-    );
+    wrapExport(this.host, (cb) => this.inner.export(logs, cb), resultCallback, logs);
   }
 
   shutdown(): Promise<void> {

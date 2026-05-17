@@ -175,7 +175,7 @@ describe("sdkstats/metrics", () => {
       setSdkStatsInstrumentation(StatsbeatInstrumentation.MONGODB);
       // Drop a network counter so a request_success_count observation will fire.
       _resetNetworkStatsForTest();
-      recordSuccess("contoso.example.com");
+      recordSuccess("a365", "contoso.example.com");
 
       const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
       const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
@@ -203,16 +203,16 @@ describe("sdkstats/metrics", () => {
   });
 
   describe("network gauges (default mode)", () => {
-    it("emits one observation per drained key, attaches endpoint + statusCode/exceptionType, and clears after collection", async () => {
+    it("emits one observation per drained key, attaches endpoint + host + statusCode/exceptionType, and clears after collection", async () => {
       _resetNetworkStatsForTest();
-      recordSuccess("a365.example.com");
-      recordSuccess("a365.example.com");
-      recordFailure("a365.example.com", 503);
-      recordRetry("a365.example.com", 503);
-      recordRetry("a365.example.com", 503);
-      recordThrottle("otlp.example.com", 402);
-      recordException("otlp.example.com", "AbortError");
-      recordDuration("a365.example.com", 1.25);
+      recordSuccess("a365", "a365.example.com");
+      recordSuccess("a365", "a365.example.com");
+      recordFailure("a365", "a365.example.com", 503);
+      recordRetry("a365", "a365.example.com", 503);
+      recordRetry("a365", "a365.example.com", 503);
+      recordThrottle("otlp", "otlp.example.com", 402);
+      recordException("otlp", "otlp.example.com", "AbortError");
+      recordDuration("a365", "a365.example.com", 1.25);
 
       const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
       const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
@@ -235,13 +235,15 @@ describe("sdkstats/metrics", () => {
       const success = byName(REQUEST_SUCCESS_NAME);
       expect(success).toHaveLength(1);
       expect(success[0].value).toBe(2);
-      expect(success[0].attributes.endpoint).toBe("a365.example.com");
+      expect(success[0].attributes.endpoint).toBe("a365");
+      expect(success[0].attributes.host).toBe("a365.example.com");
       expect(success[0].attributes.statusCode).toBeUndefined();
 
       const failure = byName(REQUEST_FAILURE_NAME);
       expect(failure).toHaveLength(1);
       expect(failure[0].value).toBe(1);
-      expect(failure[0].attributes.endpoint).toBe("a365.example.com");
+      expect(failure[0].attributes.endpoint).toBe("a365");
+      expect(failure[0].attributes.host).toBe("a365.example.com");
       expect(failure[0].attributes.statusCode).toBe("503");
 
       const retry = byName(REQUEST_RETRY_NAME);
@@ -251,7 +253,8 @@ describe("sdkstats/metrics", () => {
 
       const throttle = byName(REQUEST_THROTTLE_NAME);
       expect(throttle).toHaveLength(1);
-      expect(throttle[0].attributes.endpoint).toBe("otlp.example.com");
+      expect(throttle[0].attributes.endpoint).toBe("otlp");
+      expect(throttle[0].attributes.host).toBe("otlp.example.com");
       expect(throttle[0].attributes.statusCode).toBe("402");
 
       const exception = byName(REQUEST_EXCEPTION_NAME);
@@ -262,10 +265,13 @@ describe("sdkstats/metrics", () => {
       expect(duration).toHaveLength(1);
       expect(duration[0].value).toBeCloseTo(1.25);
 
-      // Second flush after a reset & drain: drain semantics are covered
-      // in networkStats.test.ts; observable gauges may legitimately repeat
-      // their last value under CUMULATIVE aggregation depending on the
-      // SDK's caching, so we don't assert "empty" here.
+      // Common dimensions per spec.
+      for (const dp of [...success, ...failure, ...retry, ...throttle, ...exception, ...duration]) {
+        expect(dp.attributes.rp).toBe("unknown");
+        expect(dp.attributes.attach).toBe("Manual");
+        expect(dp.attributes.cikey).toBe("");
+        expect(dp.attributes.language).toBe("node");
+      }
 
       await meterProvider.shutdown();
       _resetNetworkStatsForTest();

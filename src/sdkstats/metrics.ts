@@ -108,16 +108,22 @@ export interface SdkStatsMetricsOptions {
   /** Override the distro version reported on every observation. */
   distroVersion?: string;
   /**
+   * Customer instrumentation key emitted as the `cikey` customDimension
+   * on every SDKStats observation, per the Application Insights SDKStats
+   * spec. Pass an empty string when no customer iKey is available.
+   */
+  cikey?: string;
+  /**
    * When `true`, skip the Feature / Feature.instrumentations gauges. Used
    * on the Azure-Monitor-enabled path because the AzMon exporter's own
    * long-interval statsbeat already emits those gauges (with our distro
    * bits bridged in via `AZURE_MONITOR_STATSBEAT_FEATURES`); registering
    * them here would double-count.
    *
-   * The six network statsbeat gauges (`request_*`) are always registered
-   * regardless of this flag — coexistence with AzMon's own network
-   * statsbeat is safe because the `endpoint` attribute partitions the
-   * series by destination host.
+   * The six network statsbeat gauges (`Request_*` etc.) are always
+   * registered regardless of this flag — coexistence with AzMon's own
+   * network statsbeat is safe because the (endpoint, host) attributes
+   * partition the time series.
    */
   networkOnly?: boolean;
 }
@@ -131,10 +137,18 @@ export class SdkStatsMetrics {
   private readonly commonAttributes: Record<string, string>;
 
   constructor(meterProvider: MeterProvider, options: SdkStatsMetricsOptions = {}) {
-    const { distroVersion, networkOnly = false } = options;
+    const { distroVersion, networkOnly = false, cikey = "" } = options;
     const meter = meterProvider.getMeter("microsoft.opentelemetry.sdkstats");
 
+    // Per spec/sdkstats.md the required customDimensions on every
+    // SDKStats observation are: rp, attach, cikey, runtimeVersion, os,
+    // language, version (plus endpoint/host on network gauges and
+    // statusCode/exceptionType where applicable). Missing dimensions
+    // cause envelopes to be silently dropped on the backend.
     this.commonAttributes = {
+      rp: "unknown",
+      attach: "Manual",
+      cikey,
       runtimeVersion: process.version,
       os: os.type(),
       language: STATSBEAT_LANGUAGE,
@@ -200,12 +214,16 @@ export class SdkStatsMetrics {
   private makeNetworkCallback(spec: NetworkGaugeSpec): (result: ObservableResult) => void {
     return (result: ObservableResult): void => {
       for (const [key, value] of drain(spec.metric)) {
+        // Key layout (from networkStats.ts):
+        //   [endpoint, host]                        → success / duration
+        //   [endpoint, host, statusCode|exceptionType] → others
         const attrs: Record<string, string | number> = {
           ...this.commonAttributes,
           endpoint: key[0],
+          host: key[1],
         };
-        if (spec.secondAttr && key.length === 2) {
-          attrs[spec.secondAttr] = key[1];
+        if (spec.secondAttr && key.length === 3) {
+          attrs[spec.secondAttr] = key[2];
         }
         result.observe(value, attrs);
       }
