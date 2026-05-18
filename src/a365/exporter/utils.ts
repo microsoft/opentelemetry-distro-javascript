@@ -31,7 +31,7 @@ const MESSAGE_ROLE_SYSTEM = "system";
  * Known genAI operation names produced by the SDK scopes and auto-instrumentation.
  * Only spans whose gen_ai.operation.name matches one of these values are exported.
  */
-const GEN_AI_OPERATION_NAMES: ReadonlySet<string> = new Set([
+export const GEN_AI_OPERATION_NAMES: ReadonlySet<string> = new Set([
   GEN_AI_OPERATION_INVOKE_AGENT, // 'invoke_agent'
   GEN_AI_OPERATION_EXECUTE_TOOL, // 'execute_tool'
   GEN_AI_OPERATION_OUTPUT_MESSAGES, // 'output_messages'

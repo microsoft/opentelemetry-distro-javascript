@@ -18,15 +18,8 @@ import type {
   ReadableSpan,
 } from "@opentelemetry/sdk-trace-base";
 import { OpenTelemetryConstants } from "../constants.js";
+import { GEN_AI_OPERATION_NAMES } from "../exporter/utils.js";
 import { GENERIC_ATTRIBUTES, INVOKE_AGENT_ATTRIBUTES } from "./util.js";
-
-/** Known GenAI operation names used to filter spans in the processor. */
-const GENAI_OPERATION_NAMES = new Set<string>([
-  OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME,
-  OpenTelemetryConstants.EXECUTE_TOOL_OPERATION_NAME,
-  OpenTelemetryConstants.CHAT_OPERATION_NAME,
-  OpenTelemetryConstants.OUTPUT_MESSAGES_OPERATION_NAME,
-]);
 
 /**
  * Copies relevant baggage entries to span attributes on span start.
@@ -73,7 +66,7 @@ export class A365SpanProcessor implements BaseSpanProcessor {
     const operationNameAttr = (span as any).attributes?.[
       OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY
     ];
-    if (!GENAI_OPERATION_NAMES.has(operationNameAttr)) {
+    if (!GEN_AI_OPERATION_NAMES.has(operationNameAttr)) {
       return;
     }
 
