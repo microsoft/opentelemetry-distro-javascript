@@ -31,6 +31,9 @@ export class A365SpanProcessor implements BaseSpanProcessor {
   /**
    * Called when a span is started.
    * Copies relevant baggage entries to span attributes.
+   * Only GenAI spans are processed (those that have a `gen_ai.operation.name`
+   * attribute or baggage entry, i.e. invoke_agent, execute_tool, inference,
+   * and output_messages spans); all other spans pass through unmodified.
    */
   onStart(span: Span, parentContext?: Context): void {
     const ctx = parentContext;
@@ -53,6 +56,17 @@ export class A365SpanProcessor implements BaseSpanProcessor {
     // Get all baggage entries
     const baggage = propagation.getBaggage(ctx);
     if (!baggage) {
+      return;
+    }
+
+    // Only process GenAI spans — those that carry a gen_ai.operation.name
+    // either as a span attribute or as a baggage entry.
+    const hasGenAiOperationAttr = existingAttrs.has(
+      OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY,
+    );
+    const hasGenAiOperationBaggage =
+      baggage.getEntry(OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY)?.value != null;
+    if (!hasGenAiOperationAttr && !hasGenAiOperationBaggage) {
       return;
     }
 

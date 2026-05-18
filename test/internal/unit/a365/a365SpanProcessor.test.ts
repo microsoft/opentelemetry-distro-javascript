@@ -16,6 +16,25 @@ import {
   INVOKE_AGENT_ATTRIBUTES,
 } from "../../../../src/a365/index.js";
 
+/**
+ * Helper: creates baggage with gen_ai.operation.name set plus any additional entries.
+ */
+function createGenAiBaggage(
+  operationName: string,
+  extra?: Record<string, string>,
+) {
+  let baggage = propagation.createBaggage();
+  baggage = baggage.setEntry(OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY, {
+    value: operationName,
+  });
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) {
+      baggage = baggage.setEntry(key, { value });
+    }
+  }
+  return baggage;
+}
+
 describe("A365SpanProcessor", () => {
   let provider: BasicTracerProvider;
   let processor: A365SpanProcessor;
@@ -33,8 +52,8 @@ describe("A365SpanProcessor", () => {
     await provider.shutdown();
   });
 
-  describe("baggage to span attribute enrichment", () => {
-    it("should copy generic attributes from baggage to span", () => {
+  describe("GenAI span filtering", () => {
+    it("should not mutate spans without gen_ai.operation.name", () => {
       const baggageEntries = {
         [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
         [OpenTelemetryConstants.GEN_AI_AGENT_ID_KEY]: "agent-789",
@@ -44,6 +63,106 @@ describe("A365SpanProcessor", () => {
       for (const [key, value] of Object.entries(baggageEntries)) {
         baggage = baggage.setEntry(key, { value });
       }
+
+      const ctx = propagation.setBaggage(context.active(), baggage);
+
+      const tracer = provider.getTracer("test");
+      const testSpan = tracer.startSpan("HTTP GET /api/data", { kind: SpanKind.CLIENT }, ctx);
+      testSpan.end();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const attrs = spans[0].attributes;
+      expect(attrs[OpenTelemetryConstants.TENANT_ID_KEY]).toBeUndefined();
+      expect(attrs[OpenTelemetryConstants.GEN_AI_AGENT_ID_KEY]).toBeUndefined();
+      expect(attrs[OpenTelemetryConstants.GEN_AI_AGENT_NAME_KEY]).toBeUndefined();
+      expect(attrs[OpenTelemetryConstants.SESSION_ID_KEY]).toBeUndefined();
+      expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY]).toBeUndefined();
+    });
+
+    it("should not mutate spans when baggage has no gen_ai.operation.name even with other A365 baggage", () => {
+      let baggage = propagation.createBaggage();
+      baggage = baggage.setEntry(OpenTelemetryConstants.TENANT_ID_KEY, { value: "tenant-123" });
+      baggage = baggage.setEntry(OpenTelemetryConstants.GEN_AI_AGENT_ID_KEY, {
+        value: "agent-abc",
+      });
+      baggage = baggage.setEntry(OpenTelemetryConstants.SESSION_ID_KEY, {
+        value: "session-xyz",
+      });
+
+      const ctx = propagation.setBaggage(context.active(), baggage);
+
+      const tracer = provider.getTracer("test");
+      const testSpan = tracer.startSpan("db-query", { kind: SpanKind.CLIENT }, ctx);
+      testSpan.end();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const attrs = spans[0].attributes;
+      expect(attrs[OpenTelemetryConstants.TENANT_ID_KEY]).toBeUndefined();
+      expect(attrs[OpenTelemetryConstants.GEN_AI_AGENT_ID_KEY]).toBeUndefined();
+      expect(attrs[OpenTelemetryConstants.SESSION_ID_KEY]).toBeUndefined();
+      expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY]).toBeUndefined();
+      expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_LANGUAGE_KEY]).toBeUndefined();
+      expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_VERSION_KEY]).toBeUndefined();
+    });
+
+    it("should process spans that have gen_ai.operation.name as a span attribute", () => {
+      // Baggage has no gen_ai.operation.name, but the span itself does
+      let baggage = propagation.createBaggage();
+      baggage = baggage.setEntry(OpenTelemetryConstants.TENANT_ID_KEY, { value: "tenant-123" });
+
+      const ctx = propagation.setBaggage(context.active(), baggage);
+
+      const tracer = provider.getTracer("microsoft-otel-openai-agents");
+      const testSpan = tracer.startSpan(
+        "invoke_agent test",
+        {
+          kind: SpanKind.CLIENT,
+          attributes: {
+            [OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]: "invoke_agent",
+          },
+        },
+        ctx,
+      );
+      testSpan.end();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const attrs = spans[0].attributes;
+      expect(attrs[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+      expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY]).toBe(
+        OpenTelemetryConstants.TELEMETRY_SDK_NAME_VALUE,
+      );
+    });
+
+    it("should process spans from any tracer source when gen_ai.operation.name is present in baggage", () => {
+      const baggage = createGenAiBaggage("chat", {
+        [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+      });
+      const ctx = propagation.setBaggage(context.active(), baggage);
+
+      // Use a non-A365 tracer name (e.g. LangChain instrumentor)
+      const tracer = provider.getTracer("microsoft-otel-langchain");
+      const testSpan = tracer.startSpan("chat span", { kind: SpanKind.CLIENT }, ctx);
+      testSpan.end();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const attrs = spans[0].attributes;
+      expect(attrs[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+      expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY]).toBe(
+        OpenTelemetryConstants.TELEMETRY_SDK_NAME_VALUE,
+      );
+    });
+  });
+
+  describe("baggage to span attribute enrichment", () => {
+    it("should copy generic attributes from baggage to span", () => {
+      const baggage = createGenAiBaggage("chat", {
+        [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+        [OpenTelemetryConstants.GEN_AI_AGENT_ID_KEY]: "agent-789",
+      });
 
       const ctx = propagation.setBaggage(context.active(), baggage);
 
@@ -59,9 +178,8 @@ describe("A365SpanProcessor", () => {
     });
 
     it("should copy sessionId from baggage to span", () => {
-      let baggage = propagation.createBaggage();
-      baggage = baggage.setEntry(OpenTelemetryConstants.SESSION_ID_KEY, {
-        value: "session-abc",
+      const baggage = createGenAiBaggage("chat", {
+        [OpenTelemetryConstants.SESSION_ID_KEY]: "session-abc",
       });
 
       const ctx = propagation.setBaggage(context.active(), baggage);
@@ -76,9 +194,8 @@ describe("A365SpanProcessor", () => {
     });
 
     it("should copy sessionDescription from baggage to span", () => {
-      let baggage = propagation.createBaggage();
-      baggage = baggage.setEntry(OpenTelemetryConstants.SESSION_DESCRIPTION_KEY, {
-        value: "Test session description",
+      const baggage = createGenAiBaggage("chat", {
+        [OpenTelemetryConstants.SESSION_DESCRIPTION_KEY]: "Test session description",
       });
 
       const ctx = propagation.setBaggage(context.active(), baggage);
@@ -95,17 +212,13 @@ describe("A365SpanProcessor", () => {
     });
 
     it("should copy invoke agent attributes for invoke_agent operations", () => {
-      const baggageEntries = {
-        [OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]:
-          OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME,
-        [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
-        [OpenTelemetryConstants.USER_ID_KEY]: "caller-456",
-      };
-
-      let baggage = propagation.createBaggage();
-      for (const [key, value] of Object.entries(baggageEntries)) {
-        baggage = baggage.setEntry(key, { value });
-      }
+      const baggage = createGenAiBaggage(
+        OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME,
+        {
+          [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+          [OpenTelemetryConstants.USER_ID_KEY]: "caller-456",
+        },
+      );
 
       const ctx = propagation.setBaggage(context.active(), baggage);
 
@@ -121,9 +234,8 @@ describe("A365SpanProcessor", () => {
     });
 
     it("should not overwrite existing span attributes", () => {
-      let baggage = propagation.createBaggage();
-      baggage = baggage.setEntry(OpenTelemetryConstants.TENANT_ID_KEY, {
-        value: "tenant-from-baggage",
+      const baggage = createGenAiBaggage("chat", {
+        [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-from-baggage",
       });
 
       const ctx = propagation.setBaggage(context.active(), baggage);
@@ -149,6 +261,9 @@ describe("A365SpanProcessor", () => {
 
     it("should ignore empty baggage values", () => {
       let baggage = propagation.createBaggage();
+      baggage = baggage.setEntry(OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY, {
+        value: "chat",
+      });
       baggage = baggage.setEntry(OpenTelemetryConstants.TENANT_ID_KEY, { value: "" });
 
       const ctx = propagation.setBaggage(context.active(), baggage);
@@ -163,8 +278,8 @@ describe("A365SpanProcessor", () => {
       expect(attrs[OpenTelemetryConstants.TENANT_ID_KEY]).toBeUndefined();
     });
 
-    it("should set telemetry SDK attributes", () => {
-      const baggage = propagation.createBaggage();
+    it("should set telemetry SDK attributes on GenAI spans", () => {
+      const baggage = createGenAiBaggage("chat");
       const ctx = propagation.setBaggage(context.active(), baggage);
       const tracer = provider.getTracer("test");
       const testSpan = tracer.startSpan("test-span", { kind: SpanKind.CLIENT }, ctx);
@@ -182,6 +297,36 @@ describe("A365SpanProcessor", () => {
       expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_VERSION_KEY]).toBe(
         OpenTelemetryConstants.TELEMETRY_SDK_VERSION_VALUE,
       );
+    });
+
+    it("should enrich all four GenAI operation types", () => {
+      const operations = [
+        OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME,
+        OpenTelemetryConstants.EXECUTE_TOOL_OPERATION_NAME,
+        OpenTelemetryConstants.OUTPUT_MESSAGES_OPERATION_NAME,
+        OpenTelemetryConstants.CHAT_OPERATION_NAME,
+      ];
+
+      for (const op of operations) {
+        memoryExporter.reset();
+        const baggage = createGenAiBaggage(op, {
+          [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+          [OpenTelemetryConstants.GEN_AI_AGENT_ID_KEY]: "agent-abc",
+        });
+        const ctx = propagation.setBaggage(context.active(), baggage);
+        const tracer = provider.getTracer("test");
+        const span = tracer.startSpan(`${op} span`, { kind: SpanKind.CLIENT }, ctx);
+        span.end();
+
+        const spans = memoryExporter.getFinishedSpans();
+        expect(spans).toHaveLength(1);
+        const attrs = spans[0].attributes;
+        expect(attrs[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+        expect(attrs[OpenTelemetryConstants.GEN_AI_AGENT_ID_KEY]).toBe("agent-abc");
+        expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY]).toBe(
+          OpenTelemetryConstants.TELEMETRY_SDK_NAME_VALUE,
+        );
+      }
     });
   });
 
