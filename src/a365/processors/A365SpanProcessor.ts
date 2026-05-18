@@ -20,6 +20,14 @@ import type {
 import { OpenTelemetryConstants } from "../constants.js";
 import { GENERIC_ATTRIBUTES, INVOKE_AGENT_ATTRIBUTES } from "./util.js";
 
+/** Known GenAI operation names used to filter spans in the processor. */
+const GENAI_OPERATION_NAMES = new Set<string>([
+  OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME,
+  OpenTelemetryConstants.EXECUTE_TOOL_OPERATION_NAME,
+  OpenTelemetryConstants.CHAT_OPERATION_NAME,
+  OpenTelemetryConstants.OUTPUT_MESSAGES_OPERATION_NAME,
+]);
+
 /**
  * Copies relevant baggage entries to span attributes on span start.
  *
@@ -31,9 +39,9 @@ export class A365SpanProcessor implements BaseSpanProcessor {
   /**
    * Called when a span is started.
    * Copies relevant baggage entries to span attributes.
-   * Only GenAI spans are processed (those that have a `gen_ai.operation.name`
-   * attribute or baggage entry, i.e. invoke_agent, execute_tool, inference,
-   * and output_messages spans); all other spans pass through unmodified.
+   * Only GenAI spans are processed (those with a known `gen_ai.operation.name`
+   * span attribute: invoke_agent, execute_tool, chat, output_messages);
+   * all other spans pass through unmodified.
    */
   onStart(span: Span, parentContext?: Context): void {
     const ctx = parentContext;
@@ -59,14 +67,13 @@ export class A365SpanProcessor implements BaseSpanProcessor {
       return;
     }
 
-    // Only process GenAI spans — those that carry a gen_ai.operation.name
-    // either as a span attribute or as a baggage entry.
-    const hasGenAiOperationAttr = existingAttrs.has(
-      OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY,
-    );
-    const hasGenAiOperationBaggage =
-      baggage.getEntry(OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY)?.value != null;
-    if (!hasGenAiOperationAttr && !hasGenAiOperationBaggage) {
+    // Only process GenAI spans — those with a known gen_ai.operation.name
+    // span attribute (invoke_agent, execute_tool, chat, output_messages).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const operationNameAttr = (span as any).attributes?.[
+      OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY
+    ];
+    if (!GENAI_OPERATION_NAMES.has(operationNameAttr)) {
       return;
     }
 
