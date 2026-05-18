@@ -78,15 +78,10 @@ export class A365SpanProcessor implements BaseSpanProcessor {
     });
 
     // Determine if this is an invoke_agent operation
-    const operationName =
-      baggageMap.get(OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY) ||
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (span as any).attributes?.[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY];
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const spanName = (span as any).name || "";
     const isInvokeAgent =
-      operationName === OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME ||
+      operationNameAttr === OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME ||
       spanName.startsWith(OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME);
 
     // Build target key set
