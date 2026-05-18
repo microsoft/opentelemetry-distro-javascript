@@ -19,10 +19,7 @@ import {
 /**
  * Helper: creates baggage with gen_ai.operation.name set plus any additional entries.
  */
-function createGenAiBaggage(
-  operationName: string,
-  extra?: Record<string, string>,
-) {
+function createGenAiBaggage(operationName: string, extra?: Record<string, string>) {
   let baggage = propagation.createBaggage();
   baggage = baggage.setEntry(OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY, {
     value: operationName,
@@ -212,13 +209,10 @@ describe("A365SpanProcessor", () => {
     });
 
     it("should copy invoke agent attributes for invoke_agent operations", () => {
-      const baggage = createGenAiBaggage(
-        OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME,
-        {
-          [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
-          [OpenTelemetryConstants.USER_ID_KEY]: "caller-456",
-        },
-      );
+      const baggage = createGenAiBaggage(OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME, {
+        [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+        [OpenTelemetryConstants.USER_ID_KEY]: "caller-456",
+      });
 
       const ctx = propagation.setBaggage(context.active(), baggage);
 
