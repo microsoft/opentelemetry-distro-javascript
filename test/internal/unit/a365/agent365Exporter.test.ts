@@ -745,6 +745,171 @@ describe("Agent365Exporter", () => {
       // DEFAULT_MAX_RETRIES = 3, so 1 initial + 3 retries = 4 total
       assert.strictEqual(fetchSpy.mock.calls.length, 4);
     });
+
+    it("should respect Retry-After header (seconds) on 429", async () => {
+      const sleepCalls: number[] = [];
+      vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: Function, ms?: number) => {
+        if (ms && ms > 0) sleepCalls.push(ms);
+        // Execute immediately for test speed
+        fn();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      });
+
+      let callCount = 0;
+      fetchSpy.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            status: 429,
+            headers: new Map([
+              ["x-ms-correlation-id", "corr"],
+              ["retry-after", "5"],
+            ]),
+          });
+        }
+        return Promise.resolve({
+          status: 200,
+          headers: new Map([["x-ms-correlation-id", "corr"]]),
+        });
+      });
+
+      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const result = await new Promise<number>((resolve) => {
+        exporter.export([makeSpan()], (r) => resolve(r.code));
+      });
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(callCount, 2);
+      // Retry-After of 5s = 5000ms, which exceeds the default backoff (~200-300ms)
+      assert.ok(
+        sleepCalls.some((ms) => ms >= 5000),
+        `Expected a sleep >= 5000ms, got: ${sleepCalls}`,
+      );
+    });
+
+    it("should respect Retry-After header (seconds) on 503", async () => {
+      const sleepCalls: number[] = [];
+      vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: Function, ms?: number) => {
+        if (ms && ms > 0) sleepCalls.push(ms);
+        fn();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      });
+
+      let callCount = 0;
+      fetchSpy.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            status: 503,
+            headers: new Map([
+              ["x-ms-correlation-id", "corr"],
+              ["retry-after", "10"],
+            ]),
+          });
+        }
+        return Promise.resolve({
+          status: 200,
+          headers: new Map([["x-ms-correlation-id", "corr"]]),
+        });
+      });
+
+      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const result = await new Promise<number>((resolve) => {
+        exporter.export([makeSpan()], (r) => resolve(r.code));
+      });
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(callCount, 2);
+      assert.ok(
+        sleepCalls.some((ms) => ms >= 10000),
+        `Expected a sleep >= 10000ms, got: ${sleepCalls}`,
+      );
+    });
+
+    it("should respect Retry-After header (HTTP-date format)", async () => {
+      // Pin Date.now() so the HTTP-date assertion is deterministic
+      const fakeNow = Date.now();
+      vi.spyOn(Date, "now").mockReturnValue(fakeNow);
+
+      const sleepCalls: number[] = [];
+      vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: Function, ms?: number) => {
+        if (ms && ms > 0) sleepCalls.push(ms);
+        fn();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      });
+
+      // Set Retry-After to 8 seconds from the pinned "now"
+      const futureDate = new Date(fakeNow + 8000).toUTCString();
+
+      let callCount = 0;
+      fetchSpy.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            status: 429,
+            headers: new Map([
+              ["x-ms-correlation-id", "corr"],
+              ["retry-after", futureDate],
+            ]),
+          });
+        }
+        return Promise.resolve({
+          status: 200,
+          headers: new Map([["x-ms-correlation-id", "corr"]]),
+        });
+      });
+
+      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const result = await new Promise<number>((resolve) => {
+        exporter.export([makeSpan()], (r) => resolve(r.code));
+      });
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(callCount, 2);
+      // toUTCString() has second-level precision so parsed delay can be 7000-8000ms;
+      // verify it lands in the expected range rather than matching some unrelated default.
+      assert.ok(
+        sleepCalls.some((ms) => ms >= 7000 && ms <= 9000),
+        `Expected a sleep in 7000-9000ms range, got: ${sleepCalls}`,
+      );
+    });
+
+    it("should use default backoff when Retry-After header is absent", async () => {
+      const sleepCalls: number[] = [];
+      vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: Function, ms?: number) => {
+        if (ms && ms > 0) sleepCalls.push(ms);
+        fn();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      });
+
+      let callCount = 0;
+      fetchSpy.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            status: 429,
+            headers: new Map([["x-ms-correlation-id", "corr"]]),
+          });
+        }
+        return Promise.resolve({
+          status: 200,
+          headers: new Map([["x-ms-correlation-id", "corr"]]),
+        });
+      });
+
+      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const result = await new Promise<number>((resolve) => {
+        exporter.export([makeSpan()], (r) => resolve(r.code));
+      });
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(callCount, 2);
+      // Default backoff for attempt 0 is 200 * 1 + random(0-99) = 200-299ms
+      assert.ok(
+        sleepCalls.every((ms) => ms < 1000),
+        `Expected default backoff < 1000ms, got: ${sleepCalls}`,
+      );
+    });
   });
 });
 
