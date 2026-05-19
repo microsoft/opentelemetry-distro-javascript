@@ -20,6 +20,7 @@ import { InternalConfig } from "../shared/config.js";
 import { MetricHandler } from "../azureMonitor/metrics/index.js";
 import { TraceHandler } from "../azureMonitor/traces/handler.js";
 import { LogHandler } from "../azureMonitor/logs/index.js";
+import { ConnectionStringParser } from "../azureMonitor/utils/connectionStringParser.js";
 import { AZURE_MONITOR_OPENTELEMETRY_VERSION } from "../types.js";
 import { patchOpenTelemetryInstrumentationEnable } from "../utils/opentelemetryInstrumentationPatcher.js";
 import { parseResourceDetectorsFromEnvVar } from "../utils/common.js";
@@ -376,16 +377,37 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   isShutdown = false;
   sdk.start();
 
-  // ── SDKStats: standalone pipeline for non-Azure-Monitor paths ─────
-  // When Azure Monitor is enabled the exporter package emits SDKStats
-  // itself (reading bits set above via `AZURE_MONITOR_STATSBEAT_FEATURES`).
-  // For A365-only / OTLP-only / Console-only customers we spin up our
-  // own MeterProvider + AzureMonitorStatsbeatExporter pipeline so the
-  // distro feature/instrumentation bits still reach the well-known
-  // statsbeat endpoint.
-  if (!azureMonitorEnabled) {
-    void SdkStatsManager.getInstance().initialize();
-  }
+  // ── SDKStats: standalone pipeline ─────────────────────────────────
+  // The standalone pipeline ALWAYS runs so per-export network statsbeat
+  // (`Request_*` etc. gauges) for A365 / OTLP transmits is captured.
+  //
+  // - When Azure Monitor is enabled (`networkOnly: true`): only the
+  //   network gauges are registered. The Feature / Feature.instrumentations
+  //   long-interval statsbeat is owned by the AzMon exporter, with our
+  //   distro bits bridged in via `setStatsbeatFeatures` →
+  //   `AZURE_MONITOR_STATSBEAT_FEATURES`. Network statsbeat is safe to
+  //   coexist because the (endpoint, host) attributes partition the
+  //   time series (AzMon ingestion hosts vs A365 / OTLP hosts).
+  // - When Azure Monitor is disabled: the standalone pipeline owns the
+  //   full set (feature + instrumentation + network) and ships them to
+  //   the well-known statsbeat endpoint.
+  //
+  // `cikey` is reported as a customDimension on every SDKStats
+  // observation per the spec, but ONLY when the customer is exporting
+  // to an Application Insights resource. For OTLP-only / Console-only
+  // customers we leave it undefined so the dimension is omitted
+  // entirely rather than tagged with an empty / meaningless value.
+  const sdkStatsCikey = (() => {
+    const cs =
+      config.azureMonitorExporterOptions?.connectionString ??
+      process.env["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+    if (!cs) return undefined;
+    return ConnectionStringParser.parse(cs).instrumentationkey || undefined;
+  })();
+  void SdkStatsManager.getInstance().initialize({
+    networkOnly: azureMonitorEnabled,
+    cikey: sdkStatsCikey,
+  });
 
   // Initialize GenAI instrumentations after providers are registered so any
   // tracer they capture is backed by the active SDK provider.

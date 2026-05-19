@@ -5,6 +5,21 @@ import { describe, it, beforeEach, expect } from "vitest";
 import { MeterProvider } from "@opentelemetry/sdk-metrics";
 
 import {
+  REQUEST_DURATION_NAME,
+  REQUEST_EXCEPTION_NAME,
+  REQUEST_FAILURE_NAME,
+  REQUEST_RETRY_NAME,
+  REQUEST_SUCCESS_NAME,
+  REQUEST_THROTTLE_NAME,
+  _resetAllForTest as _resetNetworkStatsForTest,
+  recordDuration,
+  recordException,
+  recordFailure,
+  recordRetry,
+  recordSuccess,
+  recordThrottle,
+} from "../../../../src/sdkstats/networkStats.js";
+import {
   FEATURE_TYPE_FEATURE,
   FEATURE_TYPE_INSTRUMENTATION,
   SdkStatsMetrics,
@@ -140,7 +155,7 @@ describe("sdkstats/metrics", () => {
       exportIntervalMillis: 60_000,
     });
     const meterProvider = new MeterProvider({ readers: [reader] });
-    new SdkStatsMetrics(meterProvider, "9.9.9-test");
+    new SdkStatsMetrics(meterProvider, { distroVersion: "9.9.9-test" });
 
     await meterProvider.forceFlush();
 
@@ -151,5 +166,115 @@ describe("sdkstats/metrics", () => {
     expect(featureMetric?.dataPoints[0]?.attributes.version).toBe("9.9.9-test");
 
     await meterProvider.shutdown();
+  });
+
+  describe("networkOnly mode", () => {
+    it("skips Feature/Feature.instrumentations gauges but still registers network gauges", async () => {
+      // Set bits that would normally trigger feature/instrumentation observations.
+      setSdkStatsFeature(StatsbeatFeature.DISTRO);
+      setSdkStatsInstrumentation(StatsbeatInstrumentation.MONGODB);
+      // Drop a network counter so a request_success_count observation will fire.
+      _resetNetworkStatsForTest();
+      recordSuccess("a365", "contoso.example.com");
+
+      const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
+      const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
+      const reader = new PeriodicExportingMetricReader({
+        exporter,
+        exportIntervalMillis: 60_000,
+      });
+      const meterProvider = new MeterProvider({ readers: [reader] });
+      new SdkStatsMetrics(meterProvider, { networkOnly: true });
+
+      await meterProvider.forceFlush();
+
+      const names = exporter
+        .getMetrics()
+        .flatMap((rm) => rm.scopeMetrics.flatMap((sm) => sm.metrics))
+        .map((m) => m.descriptor.name);
+
+      expect(names).not.toContain("Feature");
+      expect(names).not.toContain("Feature.instrumentations");
+      expect(names).toContain(REQUEST_SUCCESS_NAME);
+
+      await meterProvider.shutdown();
+      _resetNetworkStatsForTest();
+    });
+  });
+
+  describe("network gauges (default mode)", () => {
+    it("emits one observation per drained key, attaches endpoint + host + statusCode/exceptionType, and clears after collection", async () => {
+      _resetNetworkStatsForTest();
+      recordSuccess("a365", "a365.example.com");
+      recordSuccess("a365", "a365.example.com");
+      recordFailure("a365", "a365.example.com", 503);
+      recordRetry("a365", "a365.example.com", 503);
+      recordRetry("a365", "a365.example.com", 503);
+      recordThrottle("otlp", "otlp.example.com", 402);
+      recordException("otlp", "otlp.example.com", "AbortError");
+      recordDuration("a365", "a365.example.com", 1.25);
+
+      const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
+      const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
+      const reader = new PeriodicExportingMetricReader({
+        exporter,
+        exportIntervalMillis: 60_000,
+      });
+      const meterProvider = new MeterProvider({ readers: [reader] });
+      new SdkStatsMetrics(meterProvider);
+
+      await meterProvider.forceFlush();
+
+      const byName = (name: string) =>
+        exporter
+          .getMetrics()
+          .flatMap((rm) => rm.scopeMetrics.flatMap((sm) => sm.metrics))
+          .filter((m) => m.descriptor.name === name)
+          .flatMap((m) => m.dataPoints);
+
+      const success = byName(REQUEST_SUCCESS_NAME);
+      expect(success).toHaveLength(1);
+      expect(success[0].value).toBe(2);
+      expect(success[0].attributes.endpoint).toBe("a365");
+      expect(success[0].attributes.host).toBe("a365.example.com");
+      expect(success[0].attributes.statusCode).toBeUndefined();
+
+      const failure = byName(REQUEST_FAILURE_NAME);
+      expect(failure).toHaveLength(1);
+      expect(failure[0].value).toBe(1);
+      expect(failure[0].attributes.endpoint).toBe("a365");
+      expect(failure[0].attributes.host).toBe("a365.example.com");
+      expect(failure[0].attributes.statusCode).toBe("503");
+
+      const retry = byName(REQUEST_RETRY_NAME);
+      expect(retry).toHaveLength(1);
+      expect(retry[0].value).toBe(2);
+      expect(retry[0].attributes.statusCode).toBe("503");
+
+      const throttle = byName(REQUEST_THROTTLE_NAME);
+      expect(throttle).toHaveLength(1);
+      expect(throttle[0].attributes.endpoint).toBe("otlp");
+      expect(throttle[0].attributes.host).toBe("otlp.example.com");
+      expect(throttle[0].attributes.statusCode).toBe("402");
+
+      const exception = byName(REQUEST_EXCEPTION_NAME);
+      expect(exception).toHaveLength(1);
+      expect(exception[0].attributes.exceptionType).toBe("AbortError");
+
+      const duration = byName(REQUEST_DURATION_NAME);
+      expect(duration).toHaveLength(1);
+      expect(duration[0].value).toBeCloseTo(1.25);
+
+      // Common dimensions per spec.
+      for (const dp of [...success, ...failure, ...retry, ...throttle, ...exception, ...duration]) {
+        expect(dp.attributes.rp).toBe("unknown");
+        expect(dp.attributes.attach).toBe("Manual");
+        expect(dp.attributes.cikey).toBeUndefined();
+        expect(dp.attributes.language).toBe("node");
+      }
+
+      await meterProvider.shutdown();
+      _resetNetworkStatsForTest();
+    });
   });
 });

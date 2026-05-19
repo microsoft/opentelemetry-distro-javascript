@@ -5,12 +5,18 @@ import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
-import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import type { SpanExporter, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
-import type { MetricReader } from "@opentelemetry/sdk-metrics";
+import type { MetricReader, PushMetricExporter } from "@opentelemetry/sdk-metrics";
 import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
-import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
+import type { LogRecordExporter, LogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { Logger } from "../shared/logging/index.js";
+import {
+  NetworkStatsLogExporter,
+  NetworkStatsMetricExporter,
+  NetworkStatsSpanExporter,
+  isSdkStatsEnabled,
+} from "../sdkstats/index.js";
 
 const OTEL_EXPORTER_OTLP_ENDPOINT = "OTEL_EXPORTER_OTLP_ENDPOINT";
 const OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT";
@@ -125,12 +131,19 @@ export function createOtlpComponents(): OtlpComponents {
   const components: OtlpComponents = {};
 
   Logger.getInstance().info("OTLP export enabled for traces, metrics, and logs.");
+  // When SDKStats is enabled, decorate each OTLP exporter with the
+  // matching NetworkStats* wrapper so per-export success / failure /
+  // exception / duration counters reach the standalone SDKStats pipeline.
+  const recordNetworkStats = isSdkStatsEnabled();
 
   // Trace exporter — reads OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
   // OTEL_EXPORTER_OTLP_HEADERS, OTEL_EXPORTER_OTLP_TRACES_HEADERS,
   // OTEL_EXPORTER_OTLP_TIMEOUT, OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
   // OTEL_EXPORTER_OTLP_COMPRESSION, OTEL_EXPORTER_OTLP_TRACES_COMPRESSION
-  const traceExporter = new OTLPTraceExporter();
+  let traceExporter: SpanExporter = new OTLPTraceExporter();
+  if (recordNetworkStats) {
+    traceExporter = new NetworkStatsSpanExporter(traceExporter);
+  }
   components.spanProcessor = new BatchSpanProcessor(traceExporter);
 
   // Metric exporter — reads OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
@@ -139,7 +152,10 @@ export function createOtlpComponents(): OtlpComponents {
   // OTEL_EXPORTER_OTLP_COMPRESSION, OTEL_EXPORTER_OTLP_METRICS_COMPRESSION,
   // OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,
   // OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION
-  const metricExporter = new OTLPMetricExporter();
+  let metricExporter: PushMetricExporter = new OTLPMetricExporter();
+  if (recordNetworkStats) {
+    metricExporter = new NetworkStatsMetricExporter(metricExporter);
+  }
   components.metricReader = new PeriodicExportingMetricReader({
     exporter: metricExporter,
   });
@@ -148,7 +164,10 @@ export function createOtlpComponents(): OtlpComponents {
   // OTEL_EXPORTER_OTLP_HEADERS, OTEL_EXPORTER_OTLP_LOGS_HEADERS,
   // OTEL_EXPORTER_OTLP_TIMEOUT, OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
   // OTEL_EXPORTER_OTLP_COMPRESSION, OTEL_EXPORTER_OTLP_LOGS_COMPRESSION
-  const logExporter = new OTLPLogExporter();
+  let logExporter: LogRecordExporter = new OTLPLogExporter();
+  if (recordNetworkStats) {
+    logExporter = new NetworkStatsLogExporter(logExporter);
+  }
   components.logRecordProcessor = new BatchLogRecordProcessor(logExporter);
 
   return components;

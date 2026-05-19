@@ -33,3 +33,6 @@ npm-debug.log*
 
 # Temp
 tmp/
+
+# Internal planning doc — keep out of the repo
+NETWORK_SDKSTATS_PLAN.md

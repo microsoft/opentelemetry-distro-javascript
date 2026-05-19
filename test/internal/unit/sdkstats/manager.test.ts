@@ -55,7 +55,7 @@ describe("sdkstats/manager", () => {
     expect(await manager.shutdown()).toBe(false);
   });
 
-  it("uses the spec-compliant 24h long-export interval by default", async () => {
+  it("uses the spec-compliant 15-minute short-export interval by default", async () => {
     const manager = SdkStatsManager.getInstance();
     await manager.initialize();
     // Reach into the private MeterProvider's reader to confirm interval.
@@ -63,11 +63,11 @@ describe("sdkstats/manager", () => {
     const provider = (manager as any)._meterProvider;
     const reader = provider?._sharedState?.metricCollectors?.[0]?._metricReader;
     const intervalMs = reader?._exportInterval;
-    expect(intervalMs).toBe(24 * 60 * 60 * 1000);
+    expect(intervalMs).toBe(15 * 60 * 1000);
   });
 
-  it("honours APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL override (seconds)", async () => {
-    process.env["APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL"] = "60";
+  it("honours APPLICATIONINSIGHTS_STATS_SHORT_EXPORT_INTERVAL override (seconds)", async () => {
+    process.env["APPLICATIONINSIGHTS_STATS_SHORT_EXPORT_INTERVAL"] = "60";
     try {
       const manager = SdkStatsManager.getInstance();
       await manager.initialize();
@@ -76,7 +76,7 @@ describe("sdkstats/manager", () => {
       const reader = provider?._sharedState?.metricCollectors?.[0]?._metricReader;
       expect(reader?._exportInterval).toBe(60_000);
     } finally {
-      delete process.env["APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL"];
+      delete process.env["APPLICATIONINSIGHTS_STATS_SHORT_EXPORT_INTERVAL"];
     }
   });
 
