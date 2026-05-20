@@ -748,12 +748,14 @@ describe("Agent365Exporter", () => {
 
     it("should respect Retry-After header (seconds) on 429", async () => {
       const sleepCalls: number[] = [];
-      vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: Function, ms?: number) => {
-        if (ms && ms > 0) sleepCalls.push(ms);
-        // Execute immediately for test speed
-        fn();
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      });
+      vi.spyOn(globalThis, "setTimeout").mockImplementation(
+        (fn: (...args: unknown[]) => void, ms?: number) => {
+          if (ms && ms > 0) sleepCalls.push(ms);
+          // Execute immediately for test speed
+          fn();
+          return 0 as unknown as ReturnType<typeof setTimeout>;
+        },
+      );
 
       let callCount = 0;
       fetchSpy.mockImplementation(() => {
@@ -789,11 +791,13 @@ describe("Agent365Exporter", () => {
 
     it("should respect Retry-After header (seconds) on 503", async () => {
       const sleepCalls: number[] = [];
-      vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: Function, ms?: number) => {
-        if (ms && ms > 0) sleepCalls.push(ms);
-        fn();
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      });
+      vi.spyOn(globalThis, "setTimeout").mockImplementation(
+        (fn: (...args: unknown[]) => void, ms?: number) => {
+          if (ms && ms > 0) sleepCalls.push(ms);
+          fn();
+          return 0 as unknown as ReturnType<typeof setTimeout>;
+        },
+      );
 
       let callCount = 0;
       fetchSpy.mockImplementation(() => {
@@ -832,11 +836,13 @@ describe("Agent365Exporter", () => {
       vi.spyOn(Date, "now").mockReturnValue(fakeNow);
 
       const sleepCalls: number[] = [];
-      vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: Function, ms?: number) => {
-        if (ms && ms > 0) sleepCalls.push(ms);
-        fn();
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      });
+      vi.spyOn(globalThis, "setTimeout").mockImplementation(
+        (fn: (...args: unknown[]) => void, ms?: number) => {
+          if (ms && ms > 0) sleepCalls.push(ms);
+          fn();
+          return 0 as unknown as ReturnType<typeof setTimeout>;
+        },
+      );
 
       // Set Retry-After to 8 seconds from the pinned "now"
       const futureDate = new Date(fakeNow + 8000).toUTCString();
@@ -876,11 +882,13 @@ describe("Agent365Exporter", () => {
 
     it("should use default backoff when Retry-After header is absent", async () => {
       const sleepCalls: number[] = [];
-      vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: Function, ms?: number) => {
-        if (ms && ms > 0) sleepCalls.push(ms);
-        fn();
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      });
+      vi.spyOn(globalThis, "setTimeout").mockImplementation(
+        (fn: (...args: unknown[]) => void, ms?: number) => {
+          if (ms && ms > 0) sleepCalls.push(ms);
+          fn();
+          return 0 as unknown as ReturnType<typeof setTimeout>;
+        },
+      );
 
       let callCount = 0;
       fetchSpy.mockImplementation(() => {
