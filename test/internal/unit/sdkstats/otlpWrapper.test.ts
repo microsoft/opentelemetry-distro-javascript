@@ -14,9 +14,6 @@ import {
   NetworkStatsSpanExporter,
 } from "../../../../src/sdkstats/otlpWrapper.js";
 import {
-  REQUEST_DURATION_NAME,
-  REQUEST_EXCEPTION_NAME,
-  REQUEST_FAILURE_NAME,
   REQUEST_SUCCESS_NAME,
   _resetAllForTest,
   drain,
@@ -39,20 +36,11 @@ function clearEndpointEnv(): void {
   delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT;
 }
 
-function makeFakeSpanExporter(
-  result: ExportResult | "throw" | Error,
-): SpanExporter & { exported: number } {
+function makeFakeSpanExporter(result: ExportResult): SpanExporter & { exported: number } {
   return {
     exported: 0,
     export(_spans: ReadableSpan[], cb: (r: ExportResult) => void): void {
       this.exported++;
-      if (result === "throw") {
-        throw new TypeError("boom");
-      }
-      if (result instanceof Error) {
-        cb({ code: ExportResultCode.FAILED, error: result });
-        return;
-      }
       cb(result);
     },
     shutdown(): Promise<void> {
@@ -76,7 +64,7 @@ describe("sdkstats/otlpWrapper", () => {
   });
 
   describe("NetworkStatsSpanExporter", () => {
-    it("records success + duration on SUCCESS", async () => {
+    it("records success on SUCCESS", async () => {
       const inner = makeFakeSpanExporter({ code: ExportResultCode.SUCCESS });
       const wrapper = new NetworkStatsSpanExporter(inner);
 
@@ -90,28 +78,14 @@ describe("sdkstats/otlpWrapper", () => {
 
       const success = drain(REQUEST_SUCCESS_NAME);
       expect([...success.entries()]).toEqual([[[ENDPOINT, HOST], 1]]);
-      const dur = drain(REQUEST_DURATION_NAME);
-      expect([...dur.keys()][0]).toEqual([ENDPOINT, HOST]);
     });
 
-    it("records failure(0) + duration on FAILED result (no HTTP status code surfaced)", async () => {
+    it("does not record success on FAILED result", async () => {
       const inner = makeFakeSpanExporter({ code: ExportResultCode.FAILED });
       const wrapper = new NetworkStatsSpanExporter(inner);
       await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
 
-      const failure = drain(REQUEST_FAILURE_NAME);
-      expect([...failure.entries()]).toEqual([[[ENDPOINT, HOST, "0"], 1]]);
-    });
-
-    it("records exception + duration and re-throws on a synchronous throw", async () => {
-      const inner = makeFakeSpanExporter("throw");
-      const wrapper = new NetworkStatsSpanExporter(inner);
-
-      expect(() => wrapper.export([], () => {})).toThrow(TypeError);
-      const exc = drain(REQUEST_EXCEPTION_NAME);
-      expect([...exc.entries()]).toEqual([[[ENDPOINT, HOST, "TypeError"], 1]]);
-      const dur = drain(REQUEST_DURATION_NAME);
-      expect(dur.size).toBe(1);
+      expect(drain(REQUEST_SUCCESS_NAME).size).toBe(0);
     });
 
     it("forwards forceFlush and shutdown", async () => {
@@ -144,7 +118,7 @@ describe("sdkstats/otlpWrapper", () => {
       };
     }
 
-    it("records success + duration", async () => {
+    it("records success on SUCCESS", async () => {
       const wrapper = new NetworkStatsMetricExporter(
         makeMetricExporter({ code: ExportResultCode.SUCCESS }),
       );
@@ -186,7 +160,7 @@ describe("sdkstats/otlpWrapper", () => {
       };
     }
 
-    it("records success + duration on SUCCESS", async () => {
+    it("records success on SUCCESS", async () => {
       const wrapper = new NetworkStatsLogExporter(
         makeLogExporter({ code: ExportResultCode.SUCCESS }),
       );
@@ -194,12 +168,12 @@ describe("sdkstats/otlpWrapper", () => {
       expect([...drain(REQUEST_SUCCESS_NAME).entries()]).toEqual([[[ENDPOINT, HOST], 1]]);
     });
 
-    it("records failure(0) on FAILED result", async () => {
+    it("does not record success on FAILED result", async () => {
       const wrapper = new NetworkStatsLogExporter(
         makeLogExporter({ code: ExportResultCode.FAILED }),
       );
       await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
-      expect([...drain(REQUEST_FAILURE_NAME).entries()]).toEqual([[[ENDPOINT, HOST, "0"], 1]]);
+      expect(drain(REQUEST_SUCCESS_NAME).size).toBe(0);
     });
   });
 

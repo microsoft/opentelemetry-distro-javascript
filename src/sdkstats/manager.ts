@@ -37,9 +37,9 @@ import { SdkStatsMetrics } from "./metrics.js";
  * `azure.monitor.opentelemetry.exporter.statsbeat._utils`).
  *
  * The pipeline emits both Feature/Feature.instrumentations gauges
- * (when not in `networkOnly` mode) and the six `request_*` network
- * gauges; the network counters dominate cadence requirements, so the
- * single shared interval defaults to short rather than long.
+ * (when not in `networkOnly` mode) and the `Request_Success_Count`
+ * network gauge; the network counter dominates cadence requirements,
+ * so the single shared interval defaults to short rather than long.
  *
  * @internal
  */
@@ -104,7 +104,7 @@ export class SdkStatsManager {
    * Set up SDKStats export via the Azure Monitor statsbeat endpoint.
    *
    * @param options.networkOnly When `true`, the {@link SdkStatsMetrics}
-   *   instance only registers the six network gauges and skips the
+   *   instance only registers the network gauge(s) and skips the
    *   feature/instrumentation gauges. Used on the Azure-Monitor-enabled
    *   path because the AzMon exporter's own long-interval statsbeat
    *   already emits those gauges (with our distro bits bridged in via

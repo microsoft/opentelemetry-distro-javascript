@@ -4,22 +4,14 @@
 /**
  * Network statsbeat accumulator for SDK self-telemetry.
  *
- * Per-export success / failure / retry / throttle / exception counts and
- * cumulative request duration for telemetry exporters. Exporters call the
- * `record*` functions after each transmit; the {@link SdkStatsMetrics}
- * observable-gauge callbacks drain the accumulated counts on each export
- * interval.
+ * Per-export success counts for telemetry exporters. Exporters call
+ * {@link recordSuccess} after each successful transmit; the
+ * {@link SdkStatsMetrics} observable-gauge callbacks drain the
+ * accumulated counts on each export interval.
  *
  * Mirrors `src/microsoft/opentelemetry/_sdkstats/_utils.py` from the Python
  * distro (microsoft/opentelemetry-distro-python#144).
  */
-
-/**
- * HTTP status codes treated as throttling for SDKStats purposes.
- *
- * @internal
- */
-export const THROTTLE_STATUS_CODES: ReadonlySet<number> = new Set([402]);
 
 // Metric names must match the AzMon statsbeat backend's recognized
 // schema (see `StatsbeatCounter` enum in
@@ -29,25 +21,13 @@ export const THROTTLE_STATUS_CODES: ReadonlySet<number> = new Set([402]);
 // dashboards. The constants below intentionally match the wire-format
 // names — do NOT rename them to lowercase.
 export const REQUEST_SUCCESS_NAME = "Request_Success_Count";
-export const REQUEST_FAILURE_NAME = "Request_Failure_Count";
-export const REQUEST_RETRY_NAME = "Retry_Count";
-export const REQUEST_THROTTLE_NAME = "Throttle_Count";
-export const REQUEST_EXCEPTION_NAME = "Exception_Count";
-export const REQUEST_DURATION_NAME = "Request_Duration";
 
 /**
- * Names of all six network statsbeat metrics, in registration order.
+ * Names of registered network statsbeat metrics, in registration order.
  *
  * @internal
  */
-export const NETWORK_METRIC_NAMES = [
-  REQUEST_SUCCESS_NAME,
-  REQUEST_FAILURE_NAME,
-  REQUEST_RETRY_NAME,
-  REQUEST_THROTTLE_NAME,
-  REQUEST_EXCEPTION_NAME,
-  REQUEST_DURATION_NAME,
-] as const;
+export const NETWORK_METRIC_NAMES = [REQUEST_SUCCESS_NAME] as const;
 
 export type NetworkMetricName = (typeof NETWORK_METRIC_NAMES)[number];
 
@@ -55,26 +35,17 @@ export type NetworkMetricName = (typeof NETWORK_METRIC_NAMES)[number];
  * Composite key for an aggregated network statsbeat counter.
  *
  * Per the Application Insights SDKStats spec the per-key dimensions are
- * `endpoint` (category, e.g. "otlp", "a365"), `host` (stamp-specific
- * region or hostname), and optionally `statusCode` / `exceptionType`.
- *
- * - 2-element tuples key on `[endpoint, host]` (success / duration).
- * - 3-element tuples key on `[endpoint, host, statusCode | exceptionType]`
- *   (failure / retry / throttle / exception).
+ * `endpoint` (category, e.g. "otlp", "a365") and `host` (stamp-specific
+ * region or hostname).
  *
  * @internal
  */
-export type NetworkKey = readonly [string, string] | readonly [string, string, string];
+export type NetworkKey = readonly [string, string];
 
 // Single-threaded JS execution → no lock needed (Python uses one because of
 // the GIL + threads; Node.js doesn't share JS objects across worker threads).
 const REQUESTS_MAP: Record<NetworkMetricName, Map<string, number>> = {
   [REQUEST_SUCCESS_NAME]: new Map(),
-  [REQUEST_FAILURE_NAME]: new Map(),
-  [REQUEST_RETRY_NAME]: new Map(),
-  [REQUEST_THROTTLE_NAME]: new Map(),
-  [REQUEST_EXCEPTION_NAME]: new Map(),
-  [REQUEST_DURATION_NAME]: new Map(),
 };
 
 // `Map` keys are compared by identity for arrays/objects, so we serialize
@@ -88,8 +59,7 @@ function encodeKey(key: NetworkKey): string {
 
 function decodeKey(encoded: string): NetworkKey {
   const parts = encoded.split(KEY_SEPARATOR);
-  if (parts.length === 2) return [parts[0], parts[1]] as const;
-  return [parts[0], parts[1], parts[2]] as const;
+  return [parts[0], parts[1]] as const;
 }
 
 function bump(metric: NetworkMetricName, key: NetworkKey, value = 1): void {
@@ -100,30 +70,6 @@ function bump(metric: NetworkMetricName, key: NetworkKey, value = 1): void {
 
 export function recordSuccess(endpoint: string, host: string): void {
   bump(REQUEST_SUCCESS_NAME, [endpoint, host]);
-}
-
-export function recordFailure(endpoint: string, host: string, statusCode: number | string): void {
-  bump(REQUEST_FAILURE_NAME, [endpoint, host, String(statusCode)]);
-}
-
-export function recordRetry(endpoint: string, host: string, statusCode: number | string): void {
-  bump(REQUEST_RETRY_NAME, [endpoint, host, String(statusCode)]);
-}
-
-export function recordThrottle(
-  endpoint: string,
-  host: string,
-  statusCode: number | string = 402,
-): void {
-  bump(REQUEST_THROTTLE_NAME, [endpoint, host, String(statusCode)]);
-}
-
-export function recordException(endpoint: string, host: string, exceptionType: string): void {
-  bump(REQUEST_EXCEPTION_NAME, [endpoint, host, exceptionType]);
-}
-
-export function recordDuration(endpoint: string, host: string, durationSeconds: number): void {
-  bump(REQUEST_DURATION_NAME, [endpoint, host], durationSeconds);
 }
 
 /**

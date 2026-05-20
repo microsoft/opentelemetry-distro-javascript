@@ -5,19 +5,9 @@ import { describe, it, beforeEach, expect } from "vitest";
 import { MeterProvider } from "@opentelemetry/sdk-metrics";
 
 import {
-  REQUEST_DURATION_NAME,
-  REQUEST_EXCEPTION_NAME,
-  REQUEST_FAILURE_NAME,
-  REQUEST_RETRY_NAME,
   REQUEST_SUCCESS_NAME,
-  REQUEST_THROTTLE_NAME,
   _resetAllForTest as _resetNetworkStatsForTest,
-  recordDuration,
-  recordException,
-  recordFailure,
-  recordRetry,
   recordSuccess,
-  recordThrottle,
 } from "../../../../src/sdkstats/networkStats.js";
 import {
   FEATURE_TYPE_FEATURE,
@@ -203,16 +193,10 @@ describe("sdkstats/metrics", () => {
   });
 
   describe("network gauges (default mode)", () => {
-    it("emits one observation per drained key, attaches endpoint + host + statusCode/exceptionType, and clears after collection", async () => {
+    it("emits one observation per drained key, attaches endpoint + host, and clears after collection", async () => {
       _resetNetworkStatsForTest();
       recordSuccess("a365", "a365.example.com");
       recordSuccess("a365", "a365.example.com");
-      recordFailure("a365", "a365.example.com", 503);
-      recordRetry("a365", "a365.example.com", 503);
-      recordRetry("a365", "a365.example.com", 503);
-      recordThrottle("otlp", "otlp.example.com", 402);
-      recordException("otlp", "otlp.example.com", "AbortError");
-      recordDuration("a365", "a365.example.com", 1.25);
 
       const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
       const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
@@ -239,34 +223,8 @@ describe("sdkstats/metrics", () => {
       expect(success[0].attributes.host).toBe("a365.example.com");
       expect(success[0].attributes.statusCode).toBeUndefined();
 
-      const failure = byName(REQUEST_FAILURE_NAME);
-      expect(failure).toHaveLength(1);
-      expect(failure[0].value).toBe(1);
-      expect(failure[0].attributes.endpoint).toBe("a365");
-      expect(failure[0].attributes.host).toBe("a365.example.com");
-      expect(failure[0].attributes.statusCode).toBe("503");
-
-      const retry = byName(REQUEST_RETRY_NAME);
-      expect(retry).toHaveLength(1);
-      expect(retry[0].value).toBe(2);
-      expect(retry[0].attributes.statusCode).toBe("503");
-
-      const throttle = byName(REQUEST_THROTTLE_NAME);
-      expect(throttle).toHaveLength(1);
-      expect(throttle[0].attributes.endpoint).toBe("otlp");
-      expect(throttle[0].attributes.host).toBe("otlp.example.com");
-      expect(throttle[0].attributes.statusCode).toBe("402");
-
-      const exception = byName(REQUEST_EXCEPTION_NAME);
-      expect(exception).toHaveLength(1);
-      expect(exception[0].attributes.exceptionType).toBe("AbortError");
-
-      const duration = byName(REQUEST_DURATION_NAME);
-      expect(duration).toHaveLength(1);
-      expect(duration[0].value).toBeCloseTo(1.25);
-
       // Common dimensions per spec.
-      for (const dp of [...success, ...failure, ...retry, ...throttle, ...exception, ...duration]) {
+      for (const dp of success) {
         expect(dp.attributes.rp).toBe("unknown");
         expect(dp.attributes.attach).toBe("Manual");
         expect(dp.attributes.cikey).toBeUndefined();

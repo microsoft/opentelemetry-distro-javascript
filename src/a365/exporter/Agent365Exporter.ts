@@ -21,17 +21,7 @@ import {
   chunkBySize,
 } from "./utils.js";
 import { getA365Logger } from "../logging.js";
-import {
-  THROTTLE_STATUS_CODES,
-  isSdkStatsEnabled,
-  recordDuration,
-  recordException,
-  recordFailure,
-  recordRetry,
-  recordSuccess,
-  recordThrottle,
-  shortHost,
-} from "../../sdkstats/index.js";
+import { isSdkStatsEnabled, recordSuccess, shortHost } from "../../sdkstats/index.js";
 
 const DEFAULT_MAX_RETRIES = 3;
 
@@ -274,7 +264,6 @@ export class Agent365Exporter implements SpanExporter {
     }
 
     for (let attempt = 0; attempt <= DEFAULT_MAX_RETRIES; attempt++) {
-      const startTime = Date.now();
       try {
         const response = await fetch(url, {
           method: "POST",
@@ -282,10 +271,6 @@ export class Agent365Exporter implements SpanExporter {
           body,
           signal: AbortSignal.timeout(this.options.httpRequestTimeoutMilliseconds),
         });
-
-        if (recordA365Stats) {
-          recordDuration(endpointCategory, host, (Date.now() - startTime) / 1000);
-        }
 
         const correlationId =
           response.headers.get("x-ms-correlation-id") ??
@@ -305,11 +290,6 @@ export class Agent365Exporter implements SpanExporter {
           [408, 429].includes(response.status) ||
           (response.status >= 500 && response.status < 600)
         ) {
-          if (recordA365Stats) {
-            // 402 (throttle) is not in the retryable set, so it never
-            // lands here — only true retries.
-            recordRetry(endpointCategory, host, response.status);
-          }
           if (attempt < DEFAULT_MAX_RETRIES) {
             const sleepMs = 200 * (attempt + 1) + Math.floor(Math.random() * 100);
             this.logger.warn(
@@ -318,17 +298,6 @@ export class Agent365Exporter implements SpanExporter {
             await sleep(sleepMs);
             continue;
           }
-          // Retries exhausted: also record a final failure so dashboards
-          // see this as a terminal failure (not just a retry blip).
-          if (recordA365Stats) {
-            recordFailure(endpointCategory, host, response.status);
-          }
-        } else if (recordA365Stats) {
-          if (THROTTLE_STATUS_CODES.has(response.status)) {
-            recordThrottle(endpointCategory, host, response.status);
-          } else {
-            recordFailure(endpointCategory, host, response.status);
-          }
         }
 
         this.logger.error(
@@ -336,14 +305,6 @@ export class Agent365Exporter implements SpanExporter {
         );
         return { ok: false, correlationId };
       } catch (error) {
-        if (recordA365Stats) {
-          recordDuration(endpointCategory, host, (Date.now() - startTime) / 1000);
-          recordException(
-            endpointCategory,
-            host,
-            error instanceof Error ? error.name || error.constructor.name || "Error" : typeof error,
-          );
-        }
         this.logger.error("[Agent365Exporter] Request error:", error);
         if (attempt < DEFAULT_MAX_RETRIES) {
           await sleep(200 * (attempt + 1));

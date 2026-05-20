@@ -379,7 +379,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
 
   // ── SDKStats: standalone pipeline ─────────────────────────────────
   // The standalone pipeline ALWAYS runs so per-export network statsbeat
-  // (`Request_*` etc. gauges) for A365 / OTLP transmits is captured.
+  // (`Request_Success_Count` gauge) for A365 / OTLP transmits is captured.
   //
   // - When Azure Monitor is enabled (`networkOnly: true`): only the
   //   network gauges are registered. The Feature / Feature.instrumentations

@@ -7,7 +7,7 @@
  * The upstream OTLP HTTP exporters do not surface HTTP status codes — only
  * the {@link ExportResult} enum and any raised exception. The decorators
  * here capture that signal so the network statsbeat pipeline can record
- * success / failure / exception / duration counts per endpoint.
+ * success counts per endpoint.
  *
  * Mirrors `src/microsoft/opentelemetry/_sdkstats/_otlp_wrapper.py` from the
  * Python distro (microsoft/opentelemetry-distro-python#144).
@@ -25,13 +25,7 @@ import type {
 import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordExporter, ReadableLogRecord } from "@opentelemetry/sdk-logs";
 
-import {
-  recordDuration,
-  recordException,
-  recordFailure,
-  recordSuccess,
-  shortHost,
-} from "./networkStats.js";
+import { recordSuccess, shortHost } from "./networkStats.js";
 
 /** Per spec, `endpoint` is a category label, not the destination URL. */
 const OTLP_ENDPOINT_CATEGORY = "otlp";
@@ -61,12 +55,8 @@ function resolveShortHost(signal: "traces" | "metrics" | "logs"): string {
 /**
  * Common bookkeeping for an export attempt.
  *
- * The OTel JS exporter contract is callback-based, not promise-based, and
- * the HTTP exporters surface no status code — only an {@link ExportResult}.
- * On `ExportResultCode.SUCCESS` we record a success; otherwise we record
- * failure with a placeholder `statusCode=0` (matching the Python distro).
- * Synchronous throws and async-completed errors are both recorded as
- * exceptions keyed by the error class name.
+ * On `ExportResultCode.SUCCESS` we record a success count. Other outcomes
+ * (failure, exception, duration) will be added in a future PR.
  */
 function wrapExport<T>(
   host: string,
@@ -74,37 +64,14 @@ function wrapExport<T>(
   resultCallback: (result: ExportResult) => void,
   _items: T,
 ): void {
-  const start = Date.now();
-  let settled = false;
   const settle = (result: ExportResult): void => {
-    if (settled) return;
-    settled = true;
-    recordDuration(OTLP_ENDPOINT_CATEGORY, host, (Date.now() - start) / 1000);
     if (result.code === ExportResultCode.SUCCESS) {
       recordSuccess(OTLP_ENDPOINT_CATEGORY, host);
-    } else {
-      // The HTTP exporters don't expose an HTTP status code, so record
-      // failures with statusCode=0 (matches Python distro).
-      recordFailure(OTLP_ENDPOINT_CATEGORY, host, 0);
     }
     resultCallback(result);
   };
 
-  try {
-    inner(settle);
-  } catch (err) {
-    settled = true;
-    recordDuration(OTLP_ENDPOINT_CATEGORY, host, (Date.now() - start) / 1000);
-    recordException(OTLP_ENDPOINT_CATEGORY, host, errorName(err));
-    throw err;
-  }
-}
-
-function errorName(err: unknown): string {
-  if (err instanceof Error) {
-    return err.name || err.constructor.name || "Error";
-  }
-  return typeof err;
+  inner(settle);
 }
 
 /**

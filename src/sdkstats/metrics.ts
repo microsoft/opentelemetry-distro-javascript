@@ -20,12 +20,7 @@ import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
 import { getSdkStatsFeatureFlags, getSdkStatsInstrumentationFlags } from "./state.js";
 import {
   NETWORK_METRIC_NAMES,
-  REQUEST_DURATION_NAME,
-  REQUEST_EXCEPTION_NAME,
-  REQUEST_FAILURE_NAME,
-  REQUEST_RETRY_NAME,
   REQUEST_SUCCESS_NAME,
-  REQUEST_THROTTLE_NAME,
   drain,
   type NetworkMetricName,
 } from "./networkStats.js";
@@ -44,15 +39,10 @@ const INSTRUMENTATION_METRIC_NAME = "Feature.instrumentations";
 const STATSBEAT_LANGUAGE = "node";
 
 /**
- * Per-metric configuration for the six network statsbeat gauges.
- *
- * - `secondAttr` — name of the additional dimension (`statusCode` or
- *   `exceptionType`) reported alongside `endpoint`. `undefined` means the
- *   metric is keyed on `endpoint` only.
+ * Per-metric configuration for the network statsbeat gauges.
  */
 interface NetworkGaugeSpec {
   metric: NetworkMetricName;
-  secondAttr?: "statusCode" | "exceptionType";
   unit: string;
   description: string;
 }
@@ -62,35 +52,6 @@ const NETWORK_GAUGE_SPECS: readonly NetworkGaugeSpec[] = [
     metric: REQUEST_SUCCESS_NAME,
     unit: "count",
     description: "Number of successful HTTP exports per endpoint",
-  },
-  {
-    metric: REQUEST_FAILURE_NAME,
-    secondAttr: "statusCode",
-    unit: "count",
-    description: "Number of failed HTTP exports per endpoint and status code",
-  },
-  {
-    metric: REQUEST_RETRY_NAME,
-    secondAttr: "statusCode",
-    unit: "count",
-    description: "Number of retried HTTP exports per endpoint and status code",
-  },
-  {
-    metric: REQUEST_THROTTLE_NAME,
-    secondAttr: "statusCode",
-    unit: "count",
-    description: "Number of throttled HTTP exports per endpoint and status code",
-  },
-  {
-    metric: REQUEST_EXCEPTION_NAME,
-    secondAttr: "exceptionType",
-    unit: "count",
-    description: "Number of HTTP exports that raised an exception, per endpoint and exception type",
-  },
-  {
-    metric: REQUEST_DURATION_NAME,
-    unit: "s",
-    description: "Cumulative HTTP export duration per endpoint",
   },
 ];
 
@@ -121,7 +82,7 @@ export interface SdkStatsMetricsOptions {
    * bits bridged in via `AZURE_MONITOR_STATSBEAT_FEATURES`); registering
    * them here would double-count.
    *
-   * The six network statsbeat gauges (`Request_*` etc.) are always
+   * The network statsbeat gauge (`Request_Success_Count`) is always
    * registered regardless of this flag — coexistence with AzMon's own
    * network statsbeat is safe because the (endpoint, host) attributes
    * partition the time series.
@@ -217,17 +178,11 @@ export class SdkStatsMetrics {
   private makeNetworkCallback(spec: NetworkGaugeSpec): (result: ObservableResult) => void {
     return (result: ObservableResult): void => {
       for (const [key, value] of drain(spec.metric)) {
-        // Key layout (from networkStats.ts):
-        //   [endpoint, host]                        → success / duration
-        //   [endpoint, host, statusCode|exceptionType] → others
         const attrs: Record<string, string | number> = {
           ...this.commonAttributes,
           endpoint: key[0],
           host: key[1],
         };
-        if (spec.secondAttr && key.length === 3) {
-          attrs[spec.secondAttr] = key[2];
-        }
         result.observe(value, attrs);
       }
     };

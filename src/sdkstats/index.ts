@@ -35,20 +35,9 @@ export type { SdkStatsMetricsOptions } from "./metrics.js";
 export { SdkStatsManager } from "./manager.js";
 
 export {
-  THROTTLE_STATUS_CODES,
   REQUEST_SUCCESS_NAME,
-  REQUEST_FAILURE_NAME,
-  REQUEST_RETRY_NAME,
-  REQUEST_THROTTLE_NAME,
-  REQUEST_EXCEPTION_NAME,
-  REQUEST_DURATION_NAME,
   NETWORK_METRIC_NAMES,
   recordSuccess,
-  recordFailure,
-  recordRetry,
-  recordThrottle,
-  recordException,
-  recordDuration,
   drain,
   shortHost,
   _resetAllForTest as _resetNetworkStatsForTest,
