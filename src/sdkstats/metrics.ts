@@ -18,11 +18,7 @@ import type { ObservableResult } from "@opentelemetry/api";
 
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
 import { getSdkStatsFeatureFlags, getSdkStatsInstrumentationFlags } from "./state.js";
-import {
-  REQUEST_SUCCESS_NAME,
-  drain,
-  type NetworkMetricName,
-} from "./networkStats.js";
+import { REQUEST_SUCCESS_NAME, drain, type NetworkMetricName } from "./networkStats.js";
 
 /**
  * Feature SDKStats `type` dimension values, per the Application Insights
