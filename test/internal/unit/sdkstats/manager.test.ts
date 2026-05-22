@@ -9,6 +9,13 @@ import {
   _resetSdkStatsStateForTest,
 } from "../../../../src/sdkstats/state.js";
 
+function getReaderInterval(provider: unknown): number | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = provider as any;
+  const reader = p?._sharedState?.metricCollectors?.[0]?._metricReader;
+  return reader?._exportInterval;
+}
+
 describe("sdkstats/manager", () => {
   beforeEach(() => {
     _resetSdkStatsStateForTest();
@@ -55,28 +62,47 @@ describe("sdkstats/manager", () => {
     expect(await manager.shutdown()).toBe(false);
   });
 
-  it("uses the spec-compliant 24h long-export interval by default", async () => {
+  it("uses a 24-hour long-interval for Feature gauges and 15-minute short-interval for network gauges", async () => {
     const manager = SdkStatsManager.getInstance();
     await manager.initialize();
-    // Reach into the private MeterProvider's reader to confirm interval.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const provider = (manager as any)._meterProvider;
-    const reader = provider?._sharedState?.metricCollectors?.[0]?._metricReader;
-    const intervalMs = reader?._exportInterval;
-    expect(intervalMs).toBe(24 * 60 * 60 * 1000);
+    const longProvider = (manager as any)._longMeterProvider;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shortProvider = (manager as any)._shortMeterProvider;
+    expect(getReaderInterval(longProvider)).toBe(24 * 60 * 60 * 1000);
+    expect(getReaderInterval(shortProvider)).toBe(15 * 60 * 1000);
+  });
+
+  it("skips the long-interval provider when networkOnly is true", async () => {
+    const manager = SdkStatsManager.getInstance();
+    await manager.initialize({ networkOnly: true });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((manager as any)._longMeterProvider).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((manager as any)._shortMeterProvider).toBeDefined();
   });
 
   it("honours APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL override (seconds)", async () => {
-    process.env["APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL"] = "60";
+    process.env["APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL"] = "3600";
     try {
       const manager = SdkStatsManager.getInstance();
       await manager.initialize();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const provider = (manager as any)._meterProvider;
-      const reader = provider?._sharedState?.metricCollectors?.[0]?._metricReader;
-      expect(reader?._exportInterval).toBe(60_000);
+      expect(getReaderInterval((manager as any)._longMeterProvider)).toBe(3_600_000);
     } finally {
       delete process.env["APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL"];
+    }
+  });
+
+  it("honours APPLICATIONINSIGHTS_STATS_SHORT_EXPORT_INTERVAL override (seconds)", async () => {
+    process.env["APPLICATIONINSIGHTS_STATS_SHORT_EXPORT_INTERVAL"] = "60";
+    try {
+      const manager = SdkStatsManager.getInstance();
+      await manager.initialize();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect(getReaderInterval((manager as any)._shortMeterProvider)).toBe(60_000);
+    } finally {
+      delete process.env["APPLICATIONINSIGHTS_STATS_SHORT_EXPORT_INTERVAL"];
     }
   });
 

@@ -30,5 +30,22 @@ export {
 } from "./state.js";
 
 export { SdkStatsMetrics, FEATURE_TYPE_FEATURE, FEATURE_TYPE_INSTRUMENTATION } from "./metrics.js";
+export type { SdkStatsMetricsOptions } from "./metrics.js";
 
 export { SdkStatsManager } from "./manager.js";
+
+export {
+  REQUEST_SUCCESS_NAME,
+  NETWORK_METRIC_NAMES,
+  recordSuccess,
+  drain,
+  shortHost,
+  _resetAllForTest as _resetNetworkStatsForTest,
+} from "./networkStats.js";
+export type { NetworkMetricName, NetworkKey } from "./networkStats.js";
+
+export {
+  NetworkStatsSpanExporter,
+  NetworkStatsMetricExporter,
+  NetworkStatsLogExporter,
+} from "./otlpWrapper.js";

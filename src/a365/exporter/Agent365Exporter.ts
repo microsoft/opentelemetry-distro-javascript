@@ -21,6 +21,7 @@ import {
   chunkBySize,
 } from "./utils.js";
 import { getA365Logger } from "../logging.js";
+import { isSdkStatsEnabled, recordSuccess, shortHost } from "../../sdkstats/index.js";
 
 const DEFAULT_MAX_RETRIES = 3;
 
@@ -251,6 +252,17 @@ export class Agent365Exporter implements SpanExporter {
   ): Promise<{ ok: boolean; correlationId: string }> {
     let lastCorrelationId = "unknown";
 
+    // Resolve the short host (and the SDKStats kill-switch) once per call
+    // so each retry attempt records under the same key without re-parsing
+    // the URL or re-checking env on every iteration. `endpoint` is the
+    // category label per spec — A365 transmits report endpoint="a365".
+    const recordA365Stats = isSdkStatsEnabled();
+    const endpointCategory = "a365";
+    let host = url;
+    if (recordA365Stats) {
+      host = shortHost(url);
+    }
+
     for (let attempt = 0; attempt <= DEFAULT_MAX_RETRIES; attempt++) {
       try {
         const response = await fetch(url, {
@@ -267,6 +279,9 @@ export class Agent365Exporter implements SpanExporter {
         lastCorrelationId = correlationId;
 
         if (response.status >= 200 && response.status < 300) {
+          if (recordA365Stats) {
+            recordSuccess(endpointCategory, host);
+          }
           return { ok: true, correlationId };
         }
 

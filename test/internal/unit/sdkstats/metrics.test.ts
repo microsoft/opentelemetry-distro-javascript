@@ -5,6 +5,11 @@ import { describe, it, beforeEach, expect } from "vitest";
 import { MeterProvider } from "@opentelemetry/sdk-metrics";
 
 import {
+  REQUEST_SUCCESS_NAME,
+  _resetAllForTest as _resetNetworkStatsForTest,
+  recordSuccess,
+} from "../../../../src/sdkstats/networkStats.js";
+import {
   FEATURE_TYPE_FEATURE,
   FEATURE_TYPE_INSTRUMENTATION,
   SdkStatsMetrics,
@@ -140,7 +145,7 @@ describe("sdkstats/metrics", () => {
       exportIntervalMillis: 60_000,
     });
     const meterProvider = new MeterProvider({ readers: [reader] });
-    new SdkStatsMetrics(meterProvider, "9.9.9-test");
+    new SdkStatsMetrics(meterProvider, { distroVersion: "9.9.9-test" });
 
     await meterProvider.forceFlush();
 
@@ -151,5 +156,83 @@ describe("sdkstats/metrics", () => {
     expect(featureMetric?.dataPoints[0]?.attributes.version).toBe("9.9.9-test");
 
     await meterProvider.shutdown();
+  });
+
+  describe("networkOnly mode", () => {
+    it("skips Feature/Feature.instrumentations gauges but still registers network gauges", async () => {
+      // Set bits that would normally trigger feature/instrumentation observations.
+      setSdkStatsFeature(StatsbeatFeature.DISTRO);
+      setSdkStatsInstrumentation(StatsbeatInstrumentation.MONGODB);
+      // Drop a network counter so a request_success_count observation will fire.
+      _resetNetworkStatsForTest();
+      recordSuccess("a365", "contoso.example.com");
+
+      const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
+      const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
+      const reader = new PeriodicExportingMetricReader({
+        exporter,
+        exportIntervalMillis: 60_000,
+      });
+      const meterProvider = new MeterProvider({ readers: [reader] });
+      new SdkStatsMetrics(meterProvider, { networkOnly: true });
+
+      await meterProvider.forceFlush();
+
+      const names = exporter
+        .getMetrics()
+        .flatMap((rm) => rm.scopeMetrics.flatMap((sm) => sm.metrics))
+        .map((m) => m.descriptor.name);
+
+      expect(names).not.toContain("Feature");
+      expect(names).not.toContain("Feature.instrumentations");
+      expect(names).toContain(REQUEST_SUCCESS_NAME);
+
+      await meterProvider.shutdown();
+      _resetNetworkStatsForTest();
+    });
+  });
+
+  describe("network gauges (default mode)", () => {
+    it("emits one observation per drained key, attaches endpoint + host, and clears after collection", async () => {
+      _resetNetworkStatsForTest();
+      recordSuccess("a365", "a365.example.com");
+      recordSuccess("a365", "a365.example.com");
+
+      const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
+      const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
+      const reader = new PeriodicExportingMetricReader({
+        exporter,
+        exportIntervalMillis: 60_000,
+      });
+      const meterProvider = new MeterProvider({ readers: [reader] });
+      new SdkStatsMetrics(meterProvider);
+
+      await meterProvider.forceFlush();
+
+      const byName = (name: string) =>
+        exporter
+          .getMetrics()
+          .flatMap((rm) => rm.scopeMetrics.flatMap((sm) => sm.metrics))
+          .filter((m) => m.descriptor.name === name)
+          .flatMap((m) => m.dataPoints);
+
+      const success = byName(REQUEST_SUCCESS_NAME);
+      expect(success).toHaveLength(1);
+      expect(success[0].value).toBe(2);
+      expect(success[0].attributes.endpoint).toBe("a365");
+      expect(success[0].attributes.host).toBe("a365.example.com");
+      expect(success[0].attributes.statusCode).toBeUndefined();
+
+      // Common dimensions per spec.
+      for (const dp of success) {
+        expect(dp.attributes.rp).toBe("unknown");
+        expect(dp.attributes.attach).toBe("Manual");
+        expect(dp.attributes.cikey).toBe("N/A");
+        expect(dp.attributes.language).toBe("node");
+      }
+
+      await meterProvider.shutdown();
+      _resetNetworkStatsForTest();
+    });
   });
 });
