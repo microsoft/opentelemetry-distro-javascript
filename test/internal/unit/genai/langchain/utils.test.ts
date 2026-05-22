@@ -544,6 +544,166 @@ describe("setModelAttribute", () => {
       ),
     );
   });
+
+  // Responses API (useResponsesApi: true) — LangChain's openai provider
+  // populates response_metadata.model (canonical) and, for backwards compat
+  // with chat completion calls, also response_metadata.model_name. We must
+  // honor both shapes so non-OpenAI RAPI providers (e.g. @langchain/perplexity)
+  // and any future major where the model_name alias is dropped keep working.
+  it("RAPI v1: extracts response model from response_metadata.model when only `model` is set", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "openai", "ChatOpenAI"],
+      },
+      extra: { invocation_params: { model: "deployment-o4-mini" } },
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                response_metadata: {
+                  model: "o4-mini-2025-04-16",
+                  model_provider: "openai",
+                  id: "resp_abc",
+                },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-o4-mini",
+      ),
+      "request model should come from invocation_params.model for non-Azure RAPI clients",
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "o4-mini-2025-04-16",
+      ),
+      "response model should be sourced from response_metadata.model (RAPI canonical field)",
+    );
+  });
+
+  it("RAPI v1: prefers response_metadata.model over response_metadata.model_name when both are present", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "openai", "ChatOpenAI"],
+      },
+      extra: { invocation_params: { model: "deployment-o4-mini" } },
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                response_metadata: {
+                  model: "o4-mini-2025-04-16",
+                  // LangChain duplicates `model` into `model_name` "for
+                  // backwards compat with chat completion calls". Both
+                  // currently carry the same value, but we read the canonical
+                  // field first to avoid coupling to that alias.
+                  model_name: "o4-mini-2025-04-16",
+                  model_provider: "openai",
+                },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "o4-mini-2025-04-16",
+      ),
+    );
+  });
+
+  it("RAPI v0: extracts response model from kwargs.response_metadata.model", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "openai", "ChatOpenAI"],
+      },
+      extra: { invocation_params: { model: "deployment-o4-mini" } },
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                kwargs: {
+                  response_metadata: {
+                    model: "o4-mini-2025-04-16",
+                    model_provider: "openai",
+                  },
+                },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-o4-mini",
+      ),
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "o4-mini-2025-04-16",
+      ),
+    );
+  });
+
+  it("AzureChatOpenAI + RAPI: response_metadata.model still drives the workaround request model", () => {
+    // Combines the AzureChatOpenAI ls_model_name=gpt-3.5-turbo regression (see
+    // langchain-ai/langchainjs#10874) with the RAPI response shape. The
+    // response-side model must populate gen_ai.request.model (via the Azure
+    // workaround) AND gen_ai.response.model, even when LangChain only sets
+    // `model` (no `model_name` alias).
+    const span = makeSpan();
+    const run = makeRun({
+      serialized: {
+        id: ["langchain", "chat_models", "azure_openai", "AzureChatOpenAI"],
+      },
+      extra: { metadata: { ls_model_name: "gpt-3.5-turbo" } },
+      outputs: {
+        generations: [
+          [
+            {
+              message: {
+                response_metadata: {
+                  model: "gpt-4o-mini-2024-07-18",
+                  model_provider: "openai",
+                },
+              },
+            },
+          ],
+        ],
+      },
+    });
+    setModelAttribute(run, span);
+    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-mini-2024-07-18",
+      ),
+      "AzureChatOpenAI request model should use response_metadata.model when model_name is absent",
+    );
+    assert.ok(
+      calls.some(
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "gpt-4o-mini-2024-07-18",
+      ),
+    );
+  });
 });
 
 describe("setResponseIdAttribute", () => {
