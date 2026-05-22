@@ -59,9 +59,8 @@ export interface SdkStatsMetricsOptions {
   /**
    * Customer instrumentation key emitted as the `cikey` customDimension
    * on every SDKStats observation, per the Application Insights SDKStats
-   * spec. Omitted entirely when undefined or empty (e.g. for OTLP-only
+   * spec. Reported as `"N/A"` when undefined or empty (e.g. for OTLP-only
    * customers without an Application Insights connection string).
-   */
   cikey?: string;
   /**
    * When `true`, skip the Feature / Feature.instrumentations gauges. Used
@@ -133,11 +132,11 @@ export class SdkStatsMetrics {
 
     // Per spec/sdkstats.md the required customDimensions on every
     // SDKStats observation are: rp, attach, runtimeVersion, os,
-    // language, version (plus endpoint/host on network gauges and
-    // statusCode/exceptionType where applicable). `cikey` is only
-    // meaningful when the customer is exporting to an Application
-    // Insights resource; omit it entirely for OTLP-only / Console-only
-    // customers rather than emitting an empty string.
+    // language, version, cikey (plus endpoint/host on network gauges and
+    // statusCode/exceptionType where applicable). `cikey` is reported as
+    // "N/A" when the customer is not exporting to an Application Insights
+    // resource (e.g. OTLP-only / Console-only), so backend KQL queries
+    // don't have to filter out missing rows.
     this.commonAttributes = {
       rp: "unknown",
       attach: "Manual",
@@ -145,7 +144,7 @@ export class SdkStatsMetrics {
       os: os.type(),
       language: STATSBEAT_LANGUAGE,
       version: distroVersion || MICROSOFT_OPENTELEMETRY_VERSION,
-      ...(cikey ? { cikey } : {}),
+      cikey: cikey || "N/A",
     };
 
     // Feature / instrumentation bitmask gauges are skipped when running
