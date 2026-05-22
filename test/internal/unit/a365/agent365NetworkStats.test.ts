@@ -51,7 +51,7 @@ function exportSpan(exporter: Agent365Exporter): Promise<number> {
   return new Promise((resolve) => exporter.export([makeSpan()], (r) => resolve(r.code)));
 }
 
-describe("Agent365Exporter network statsbeat", () => {
+describe("Agent365Exporter network SDKStats", () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {

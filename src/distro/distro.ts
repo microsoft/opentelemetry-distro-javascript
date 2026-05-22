@@ -378,19 +378,19 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   sdk.start();
 
   // ── SDKStats: standalone pipeline ─────────────────────────────────
-  // The standalone pipeline ALWAYS runs so per-export network statsbeat
+  // The standalone pipeline ALWAYS runs so per-export network SDKStats
   // (`Request_Success_Count` gauge) for A365 / OTLP transmits is captured.
   //
   // - When Azure Monitor is enabled (`networkOnly: true`): only the
   //   network gauges are registered. The Feature / Feature.instrumentations
-  //   long-interval statsbeat is owned by the AzMon exporter, with our
+  //   long-interval metrics are owned by the AzMon exporter, with our
   //   distro bits bridged in via `setStatsbeatFeatures` →
-  //   `AZURE_MONITOR_STATSBEAT_FEATURES`. Network statsbeat is safe to
+  //   `AZURE_MONITOR_STATSBEAT_FEATURES`. The network pipeline is safe to
   //   coexist because the (endpoint, host) attributes partition the
   //   time series (AzMon ingestion hosts vs A365 / OTLP hosts).
   // - When Azure Monitor is disabled: the standalone pipeline owns the
   //   full set (feature + instrumentation + network) and ships them to
-  //   the well-known statsbeat endpoint.
+  //   the well-known SDKStats endpoint.
   //
   // `cikey` is reported as a customDimension on every SDKStats
   // observation per the spec, but ONLY when the customer is exporting

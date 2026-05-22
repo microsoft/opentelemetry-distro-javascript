@@ -34,7 +34,7 @@ const INSTRUMENTATION_METRIC_NAME = "Feature.instrumentations";
 const STATSBEAT_LANGUAGE = "node";
 
 /**
- * Per-metric configuration for the network statsbeat gauges.
+ * Per-metric configuration for the network SDKStats gauges.
  */
 interface NetworkGaugeSpec {
   metric: NetworkMetricName;
@@ -66,13 +66,13 @@ export interface SdkStatsMetricsOptions {
   /**
    * When `true`, skip the Feature / Feature.instrumentations gauges. Used
    * on the Azure-Monitor-enabled path because the AzMon exporter's own
-   * long-interval statsbeat already emits those gauges (with our distro
+   * long-interval SDKStats already emits those gauges (with our distro
    * bits bridged in via `AZURE_MONITOR_STATSBEAT_FEATURES`); registering
    * them here would double-count.
    *
-   * The network statsbeat gauge (`Request_Success_Count`) is always
+   * The network SDKStats gauge (`Request_Success_Count`) is always
    * registered regardless of this flag — coexistence with AzMon's own
-   * network statsbeat is safe because the (endpoint, host) attributes
+   * network SDKStats is safe because the (endpoint, host) attributes
    * partition the time series.
    */
   networkOnly?: boolean;
@@ -84,7 +84,7 @@ export interface SdkStatsMetricsOptions {
    */
   longMeterProvider?: MeterProvider;
   /**
-   * MeterProvider for short-interval gauges (network statsbeat like
+   * MeterProvider for short-interval gauges (network SDKStats like
    * `Request_Success_Count`). Gauges are registered on a meter from
    * this provider so they export at the short (15 min) cadence.
    */
@@ -94,7 +94,7 @@ export interface SdkStatsMetricsOptions {
 /**
  * Registers observable gauges that emit feature/instrumentation data
  * derived from the global SDKStats state, plus per-export network
- * statsbeat counters drained from {@link ./networkStats.js}.
+ * SDKStats counters drained from {@link ./networkStats.js}.
  */
 export class SdkStatsMetrics {
   private readonly commonAttributes: Record<string, string>;
@@ -147,7 +147,7 @@ export class SdkStatsMetrics {
     };
 
     // Feature / instrumentation bitmask gauges are skipped when running
-    // alongside the Azure Monitor exporter's own statsbeat — that pipeline
+    // alongside the Azure Monitor exporter's own SDKStats — that pipeline
     // already emits them (with our distro bits bridged in via
     // `_bridge_sdkstats_to_azure_monitor`) and would collide with these.
     // These gauges are registered on the long-interval MeterProvider.
@@ -165,7 +165,7 @@ export class SdkStatsMetrics {
       instrumentationGauge.addCallback(this.observeInstrumentations);
     }
 
-    // Network statsbeat gauges — always registered on the short-interval
+    // Network SDKStats gauges — always registered on the short-interval
     // MeterProvider. Each callback drains the counts accumulated by
     // exporters between observations and emits one Observation per
     // (endpoint, host) tuple.

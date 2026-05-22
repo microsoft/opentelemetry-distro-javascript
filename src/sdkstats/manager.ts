@@ -45,8 +45,8 @@ const DEFAULT_LONG_EXPORT_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const SDKSTATS_LONG_EXPORT_INTERVAL_ENV = "APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL";
 
 /**
- * Default short export interval (15 minutes) for network statsbeat
- * counters. Matches the Application Insights statsbeat short-interval
+ * Default short export interval (15 minutes) for network SDKStats
+ * counters. Matches the Application Insights SDKStats short-interval
  * cadence used by the Python distro (`_get_stats_short_export_interval()`
  * in `azure.monitor.opentelemetry.exporter.statsbeat._utils`).
  *
@@ -65,7 +65,7 @@ const SDKSTATS_SHORT_EXPORT_INTERVAL_ENV = "APPLICATIONINSIGHTS_STATS_SHORT_EXPO
 /**
  * Override env var: redirect SDKStats envelopes to a custom App
  * Insights connection string. When unset, SDKStats flow to the
- * Microsoft-owned statsbeat resource (`NON_EU_CONNECTION_STRING` in
+ * Microsoft-owned SDKStats resource (`NON_EU_CONNECTION_STRING` in
  * the AzMon exporter package). Primarily useful for testing.
  * Matches the Python distro env var name.
  *
@@ -153,7 +153,7 @@ export class SdkStatsManager {
       // Allow overriding the SDKStats ingestion target via env var,
       // matching the Python distro's APPLICATIONINSIGHTS_STATS_CONNECTION_STRING
       // hook. Primarily useful for testing — production should leave
-      // this unset so SDKStats flows to the Microsoft-owned statsbeat
+      // this unset so SDKStats flows to the Microsoft-owned SDKStats
       // resource (NON_EU_CONNECTION_STRING).
       const connectionString =
         process.env[SDKSTATS_CONNECTION_STRING_ENV] ?? NON_EU_CONNECTION_STRING;
@@ -177,7 +177,7 @@ export class SdkStatsManager {
         });
       }
 
-      // Short-interval pipeline (15 min) — network statsbeat gauges.
+      // Short-interval pipeline (15 min) — network SDKStats gauges.
       const shortExporter = new AzureMonitorStatsbeatExporter({
         connectionString,
         disableOfflineStorage: true,
