@@ -58,8 +58,7 @@ class SdkStatsConfiguration {
       ...this.currentSdkStatsInstrumentations,
       amqplib: sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.AMQPLIB ? true : false,
       cucumber: sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.CUCUMBER ? true : false,
-      dataloader:
-        sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.DATALOADER ? true : false,
+      dataloader: sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.DATALOADER ? true : false,
       fs: sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.FS ? true : false,
       lruMemoizer:
         sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.LRU_MEMOIZER ? true : false,
@@ -83,8 +82,7 @@ class SdkStatsConfiguration {
       koa: sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.KOA ? true : false,
       memcached: sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.MEMCACHED ? true : false,
       mysql2: sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.MYSQL2 ? true : false,
-      nestjsCore:
-        sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.NESTJS_CORE ? true : false,
+      nestjsCore: sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.NESTJS_CORE ? true : false,
       net: sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.NET ? true : false,
       pino: sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.PINO ? true : false,
       restify: sdkStatsEnv!.instrumentation & SdkStatsInstrumentation.RESTIFY ? true : false,

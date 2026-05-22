@@ -57,9 +57,7 @@ describe("sdkstats/state", () => {
       setSdkStatsFeature(SdkStatsFeature.DISTRO);
       expect(getSdkStatsFeatureFlags()).toBe(SdkStatsFeature.DISTRO);
       setSdkStatsFeature(SdkStatsFeature.LIVE_METRICS);
-      expect(getSdkStatsFeatureFlags()).toBe(
-        SdkStatsFeature.DISTRO | SdkStatsFeature.LIVE_METRICS,
-      );
+      expect(getSdkStatsFeatureFlags()).toBe(SdkStatsFeature.DISTRO | SdkStatsFeature.LIVE_METRICS);
     });
 
     it("ORs in distro-specific values without colliding with SdkStatsFeature", () => {
