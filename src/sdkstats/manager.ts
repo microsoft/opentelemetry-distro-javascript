@@ -3,11 +3,11 @@
 
 /**
  * SDKStats manager — sends SDK self-telemetry to the Application Insights
- * statsbeat ingestion endpoint, independent of the customer's telemetry
+ * SDKStats ingestion endpoint, independent of the customer's telemetry
  * pipeline.
  *
  * When the full Azure Monitor pipeline is enabled, the exporter package's
- * own statsbeat machinery handles SDKStats emission and the distro just
+ * own SDKStats machinery handles SDKStats emission and the distro just
  * publishes its bits via the `AZURE_MONITOR_STATSBEAT_FEATURES` env var
  * for the exporter to read. For A365-only, OTLP-only, or Console-only
  * customers this manager spins up a standalone `MeterProvider` →
@@ -111,7 +111,7 @@ export class SdkStatsManager {
   }
 
   /**
-   * Set up SDKStats export via the Azure Monitor statsbeat endpoint.
+   * Set up SDKStats export via the Azure Monitor SDKStats endpoint.
    *
    * Returns `true` if the standalone pipeline was initialized (or was
    * already initialized), `false` if SDKStats are disabled via env var
@@ -129,9 +129,9 @@ export class SdkStatsManager {
       // The exporter package's `exports` map blocks subpath imports, so
       // we resolve the package's own package.json to find its install
       // location on disk and require the internal modules by absolute
-      // path. The statsbeat exporter is the correct vehicle for SDKStats
-      // — it tags envelopes with the statsbeat ikey/endpoint and avoids
-      // recursive statsbeat-of-statsbeat reporting via its
+      // path. The AzureMonitorStatsbeatExporter is the correct vehicle for
+      // SDKStats — it tags envelopes with the SDKStats ikey/endpoint and
+      // avoids recursive SDKStats-of-SDKStats reporting via its
       // `isStatsbeatExporter` flag.
       const baseUrl = getModuleParentURL() ?? pathToFileURL(process.cwd() + "/").href;
       const requireFromHere = createRequire(baseUrl);
@@ -140,15 +140,15 @@ export class SdkStatsManager {
       );
       const exporterPackageDir = dirname(exporterPackageJsonPath);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const statsbeatExporterModule: any = requireFromHere(
+      const sdkStatsExporterModule: any = requireFromHere(
         join(exporterPackageDir, "dist", "esm", "export", "statsbeat", "statsbeatExporter.js"),
       );
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const statsbeatTypesModule: any = requireFromHere(
+      const sdkStatsTypesModule: any = requireFromHere(
         join(exporterPackageDir, "dist", "esm", "export", "statsbeat", "types.js"),
       );
-      const AzureMonitorStatsbeatExporter = statsbeatExporterModule.AzureMonitorStatsbeatExporter;
-      const NON_EU_CONNECTION_STRING = statsbeatTypesModule.NON_EU_CONNECTION_STRING;
+      const AzureMonitorStatsbeatExporter = sdkStatsExporterModule.AzureMonitorStatsbeatExporter;
+      const NON_EU_CONNECTION_STRING = sdkStatsTypesModule.NON_EU_CONNECTION_STRING;
 
       // Allow overriding the SDKStats ingestion target via env var,
       // matching the Python distro's APPLICATIONINSIGHTS_STATS_CONNECTION_STRING

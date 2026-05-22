@@ -3,12 +3,12 @@
 
 /**
  * Azure Monitor–specific initialization that runs alongside the distro.
- * Statsbeat, Browser SDK Loader, and Live Metrics SDK prefix are
+ * SDK Stats, Browser SDK Loader, and Live Metrics SDK prefix are
  * Azure Monitor concerns — not part of the generic OTel distro lifecycle.
  */
 
 import type { InternalConfig } from "../shared/config.js";
-import type { StatsbeatFeatures } from "../types.js";
+import type { SdkStatsFeatures } from "../types.js";
 import { BrowserSdkLoader } from "./browserSdkLoader/browserSdkLoader.js";
 import { setSdkPrefix } from "./metrics/quickpulse/utils.js";
 import { Logger } from "../shared/logging/index.js";
@@ -53,12 +53,12 @@ export function validateAzureMonitorConfig(config: InternalConfig): boolean {
 }
 
 /**
- * Compute Azure Monitor–specific statsbeat features from the config.
+ * Compute Azure Monitor–specific SDK Stats features from the config.
  * Does not write to the env var — the caller consolidates all features.
  *
  * @internal
  */
-export function getAzureMonitorStatsbeatFeatures(config: InternalConfig): StatsbeatFeatures {
+export function getAzureMonitorSdkStatsFeatures(config: InternalConfig): SdkStatsFeatures {
   const resourceAttributes = config.resource.attributes;
   const aksResourceDetected =
     SEMRESATTRS_K8S_CLUSTER_NAME in resourceAttributes ||

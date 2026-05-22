@@ -51,7 +51,7 @@ import type {
 } from "./types.js";
 import { QuickPulseOpenTelemetryMetricNames } from "./types.js";
 import { hrTimeToMilliseconds, suppressTracing } from "@opentelemetry/core";
-import { getInstance } from "../../../utils/statsbeat.js";
+import { getInstance } from "../../../utils/sdkStats.js";
 import type { CollectionConfigurationError } from "../../generated/index.js";
 import { Filter } from "./filtering/filter.js";
 import { Validator } from "./filtering/validator.js";
@@ -127,7 +127,7 @@ export class LiveMetrics {
   private lastExceptionRate: { count: number; time: number } = { count: 0, time: 0 };
   private lastCpuUsage: NodeJS.CpuUsage;
   private lastHrTime: bigint;
-  private statsbeatOptionsUpdated = false;
+  private sdkStatsOptionsUpdated = false;
   private etag: string = "";
   private errorTracker: CollectionConfigurationErrorTracker =
     new CollectionConfigurationErrorTracker();
@@ -282,10 +282,10 @@ export class LiveMetrics {
     if (this.meterProvider) {
       return;
     }
-    // Turn on live metrics active collection for statsbeat
-    if (!this.statsbeatOptionsUpdated) {
-      getInstance().setStatsbeatFeatures({}, { liveMetrics: true });
-      this.statsbeatOptionsUpdated = true;
+    // Turn on live metrics active collection for SDK Stats
+    if (!this.sdkStatsOptionsUpdated) {
+      getInstance().setSdkStatsFeatures({}, { liveMetrics: true });
+      this.sdkStatsOptionsUpdated = true;
     }
     this.totalDependencyCount = 0;
     this.totalExceptionCount = 0;

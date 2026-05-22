@@ -16,7 +16,7 @@ import {
   setSdkStatsInstrumentation,
   setSdkStatsShutdown,
 } from "../../../../src/sdkstats/state.js";
-import { StatsbeatFeature, StatsbeatInstrumentation } from "../../../../src/types.js";
+import { SdkStatsFeature, SdkStatsInstrumentation } from "../../../../src/types.js";
 
 describe("sdkstats/state", () => {
   beforeEach(() => {
@@ -53,21 +53,21 @@ describe("sdkstats/state", () => {
       expect(getSdkStatsFeatureFlags()).toBe(0);
     });
 
-    it("ORs in shared StatsbeatFeature values", () => {
-      setSdkStatsFeature(StatsbeatFeature.DISTRO);
-      expect(getSdkStatsFeatureFlags()).toBe(StatsbeatFeature.DISTRO);
-      setSdkStatsFeature(StatsbeatFeature.LIVE_METRICS);
+    it("ORs in shared SdkStatsFeature values", () => {
+      setSdkStatsFeature(SdkStatsFeature.DISTRO);
+      expect(getSdkStatsFeatureFlags()).toBe(SdkStatsFeature.DISTRO);
+      setSdkStatsFeature(SdkStatsFeature.LIVE_METRICS);
       expect(getSdkStatsFeatureFlags()).toBe(
-        StatsbeatFeature.DISTRO | StatsbeatFeature.LIVE_METRICS,
+        SdkStatsFeature.DISTRO | SdkStatsFeature.LIVE_METRICS,
       );
     });
 
-    it("ORs in distro-specific values without colliding with StatsbeatFeature", () => {
-      setSdkStatsFeature(StatsbeatFeature.DISTRO);
+    it("ORs in distro-specific values without colliding with SdkStatsFeature", () => {
+      setSdkStatsFeature(SdkStatsFeature.DISTRO);
       setSdkStatsFeature(SdkStatsDistroFeature.A365_EXPORT);
       setSdkStatsFeature(SdkStatsDistroFeature.OTLP_EXPORT);
       const expected =
-        StatsbeatFeature.DISTRO |
+        SdkStatsFeature.DISTRO |
         SdkStatsDistroFeature.A365_EXPORT |
         SdkStatsDistroFeature.OTLP_EXPORT;
       expect(getSdkStatsFeatureFlags()).toBe(expected);
@@ -83,10 +83,10 @@ describe("sdkstats/state", () => {
   describe("instrumentation bitmask", () => {
     it("starts at 0 and ORs in values", () => {
       expect(getSdkStatsInstrumentationFlags()).toBe(0);
-      setSdkStatsInstrumentation(StatsbeatInstrumentation.MONGODB);
-      setSdkStatsInstrumentation(StatsbeatInstrumentation.REDIS);
+      setSdkStatsInstrumentation(SdkStatsInstrumentation.MONGODB);
+      setSdkStatsInstrumentation(SdkStatsInstrumentation.REDIS);
       expect(getSdkStatsInstrumentationFlags()).toBe(
-        StatsbeatInstrumentation.MONGODB | StatsbeatInstrumentation.REDIS,
+        SdkStatsInstrumentation.MONGODB | SdkStatsInstrumentation.REDIS,
       );
     });
   });
@@ -109,7 +109,7 @@ describe("sdkstats/state", () => {
   describe("_resetSdkStatsStateForTest", () => {
     it("clears all bitmasks and the shutdown flag", () => {
       setSdkStatsFeature(SdkStatsDistroFeature.A365_EXPORT);
-      setSdkStatsInstrumentation(StatsbeatInstrumentation.MONGODB);
+      setSdkStatsInstrumentation(SdkStatsInstrumentation.MONGODB);
       setSdkStatsShutdown(true);
       _resetSdkStatsStateForTest();
       expect(getSdkStatsFeatureFlags()).toBe(0);

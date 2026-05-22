@@ -21,8 +21,8 @@ import {
 } from "../../../../src/sdkstats/state.js";
 import {
   MICROSOFT_OPENTELEMETRY_VERSION,
-  StatsbeatFeature,
-  StatsbeatInstrumentation,
+  SdkStatsFeature,
+  SdkStatsInstrumentation,
 } from "../../../../src/types.js";
 import { SdkStatsDistroFeature } from "../../../../src/sdkstats/state.js";
 
@@ -64,7 +64,7 @@ describe("sdkstats/metrics", () => {
   });
 
   it("emits a Feature observation with the OR'd feature bitmask and common dims", async () => {
-    setSdkStatsFeature(StatsbeatFeature.DISTRO);
+    setSdkStatsFeature(SdkStatsFeature.DISTRO);
     setSdkStatsFeature(SdkStatsDistroFeature.A365_EXPORT);
     setSdkStatsFeature(SdkStatsDistroFeature.OTLP_EXPORT);
 
@@ -97,7 +97,7 @@ describe("sdkstats/metrics", () => {
     expect(typeof point.attributes.os).toBe("string");
 
     const expectedBits =
-      StatsbeatFeature.DISTRO |
+      SdkStatsFeature.DISTRO |
       SdkStatsDistroFeature.A365_EXPORT |
       SdkStatsDistroFeature.OTLP_EXPORT;
     // Bitmask is sent as a string per spec (customDimensions are string-typed).
@@ -107,8 +107,8 @@ describe("sdkstats/metrics", () => {
   });
 
   it("emits a Feature.instrumentations observation tagged with type=1", async () => {
-    setSdkStatsInstrumentation(StatsbeatInstrumentation.MONGODB);
-    setSdkStatsInstrumentation(StatsbeatInstrumentation.REDIS);
+    setSdkStatsInstrumentation(SdkStatsInstrumentation.MONGODB);
+    setSdkStatsInstrumentation(SdkStatsInstrumentation.REDIS);
 
     const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
     const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
@@ -130,14 +130,14 @@ describe("sdkstats/metrics", () => {
     const point = instrMetrics[0].dataPoints[0];
     expect(point.attributes.type).toBe(FEATURE_TYPE_INSTRUMENTATION);
     expect(point.attributes.feature).toBe(
-      String(StatsbeatInstrumentation.MONGODB | StatsbeatInstrumentation.REDIS),
+      String(SdkStatsInstrumentation.MONGODB | SdkStatsInstrumentation.REDIS),
     );
 
     await meterProvider.shutdown();
   });
 
   it("uses the supplied distro version when provided", async () => {
-    setSdkStatsFeature(StatsbeatFeature.DISTRO);
+    setSdkStatsFeature(SdkStatsFeature.DISTRO);
     const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
     const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
     const reader = new PeriodicExportingMetricReader({
@@ -161,8 +161,8 @@ describe("sdkstats/metrics", () => {
   describe("networkOnly mode", () => {
     it("skips Feature/Feature.instrumentations gauges but still registers network gauges", async () => {
       // Set bits that would normally trigger feature/instrumentation observations.
-      setSdkStatsFeature(StatsbeatFeature.DISTRO);
-      setSdkStatsInstrumentation(StatsbeatInstrumentation.MONGODB);
+      setSdkStatsFeature(SdkStatsFeature.DISTRO);
+      setSdkStatsInstrumentation(SdkStatsInstrumentation.MONGODB);
       // Drop a network counter so a request_success_count observation will fire.
       _resetNetworkStatsForTest();
       recordSuccess("a365", "contoso.example.com");

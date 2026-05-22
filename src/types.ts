@@ -135,10 +135,10 @@ export interface OpenAIAgentsInstrumentationConfig extends InstrumentationConfig
 export interface LangChainInstrumentationConfig extends InstrumentationConfig {}
 
 /**
- * Statsbeat Features Configuration interface
+ * SDK Stats Features Configuration interface
  * @internal
  */
-export interface StatsbeatFeatures {
+export interface SdkStatsFeatures {
   diskRetry?: boolean;
   aadHandling?: boolean;
   browserSdkLoader?: boolean;
@@ -153,10 +153,10 @@ export interface StatsbeatFeatures {
 }
 
 /**
- * Statsbeat Features Mapping
+ * SDK Stats Features Mapping
  * @internal
  */
-export const StatsbeatFeaturesMap = new Map<string, number>([
+export const SdkStatsFeaturesMap = new Map<string, number>([
   ["diskRetry", 1],
   ["aadHandling", 2],
   ["browserSdkLoader", 4],
@@ -171,10 +171,10 @@ export const StatsbeatFeaturesMap = new Map<string, number>([
 ]);
 
 /**
- * Statsbeat Instrumentations Configuration interface
+ * SDK Stats Instrumentations Configuration interface
  * @internal
  */
-export interface StatsbeatInstrumentations {
+export interface SdkStatsInstrumentations {
   /** Azure Monitor Supported Instrumentations */
   azureSdk?: boolean;
   mongoDb?: boolean;
@@ -215,10 +215,10 @@ export interface StatsbeatInstrumentations {
 }
 
 /**
- * Statsbeat Instrumentation and Feature Option interface
+ * SDK Stats Instrumentation and Feature Option interface
  * @internal
  */
-export interface StatsbeatOption {
+export interface SdkStatsOption {
   option: string;
   value: boolean;
 }
@@ -273,7 +273,7 @@ export const AzureMonitorSampleRate = "microsoft.sample_rate";
  */
 export const APPLICATIONINSIGHTS_SDKSTATS_DISABLED = "APPLICATIONINSIGHTS_SDKSTATS_DISABLED";
 
-export enum StatsbeatFeature {
+export enum SdkStatsFeature {
   NONE = 0,
   DISK_RETRY = 1,
   AAD_HANDLING = 2,
@@ -288,7 +288,7 @@ export enum StatsbeatFeature {
   OTLP = 1024,
 }
 
-export enum StatsbeatInstrumentation {
+export enum SdkStatsInstrumentation {
   /** Azure Monitor Supported Instrumentations */
   NONE = 0,
   AZURE_CORE_TRACING = 1,
@@ -331,41 +331,41 @@ export enum StatsbeatInstrumentation {
 }
 
 /**
- * Statsbeat Instrumentation Mapping
+ * SDK Stats Instrumentation Mapping
  * @internal
  */
-export const StatsbeatInstrumentationMap = new Map<string, number>([
-  ["@opentelemetry/instrumentation-amqplib", StatsbeatInstrumentation.AMQPLIB],
-  ["@opentelemetry/instrumentation-cucumber", StatsbeatInstrumentation.CUCUMBER],
-  ["@opentelemetry/instrumentation-dataloader", StatsbeatInstrumentation.DATALOADER],
-  ["@opentelemetry/instrumentation-fs", StatsbeatInstrumentation.FS],
-  ["@opentelemetry/instrumentation-lru-memoizer", StatsbeatInstrumentation.LRU_MEMOIZER],
-  ["@opentelemetry/instrumentation-mongoose", StatsbeatInstrumentation.MONGOOSE],
-  ["@opentelemetry/instrumentation-runtime-node", StatsbeatInstrumentation.RUNTIME_NODE],
-  ["@opentelemetry/instrumentation-socket.io", StatsbeatInstrumentation.SOCKET_IO],
-  ["@opentelemetry/instrumentation-tedious", StatsbeatInstrumentation.TEDIOUS],
-  ["@opentelemetry/instrumentation-undici", StatsbeatInstrumentation.UNDICI],
-  ["@opentelemetry/instrumentation-cassandra-driver", StatsbeatInstrumentation.CASSANDRA],
-  ["@opentelemetry/instrumentation-connect", StatsbeatInstrumentation.CONNECT],
-  ["@opentelemetry/instrumentation-dns", StatsbeatInstrumentation.DNS],
-  ["@opentelemetry/instrumentation-express", StatsbeatInstrumentation.EXPRESS],
-  ["@opentelemetry/instrumentation-fastify", StatsbeatInstrumentation.FASTIFY],
-  ["@opentelemetry/instrumentation-generic-pool", StatsbeatInstrumentation.GENERIC_POOL],
-  ["@opentelemetry/instrumentation-graphql", StatsbeatInstrumentation.GRAPHQL],
-  ["@opentelemetry/instrumentation-hapi", StatsbeatInstrumentation.HAPI],
-  ["@opentelemetry/instrumentation-ioredis", StatsbeatInstrumentation.IOREDIS],
-  ["@opentelemetry/instrumentation-knex", StatsbeatInstrumentation.KNEX],
-  ["@opentelemetry/instrumentation-koa", StatsbeatInstrumentation.KOA],
-  ["@opentelemetry/instrumentation-memcached", StatsbeatInstrumentation.MEMCACHED],
-  ["@opentelemetry/instrumentation-mysql2", StatsbeatInstrumentation.MYSQL2],
-  ["@opentelemetry/instrumentation-nestjs-core", StatsbeatInstrumentation.NESTJS_CORE],
-  ["@opentelemetry/instrumentation-net", StatsbeatInstrumentation.NET],
-  ["@opentelemetry/instrumentation-pino", StatsbeatInstrumentation.PINO],
-  ["@opentelemetry/instrumentation-restify", StatsbeatInstrumentation.RESTIFY],
-  ["@opentelemetry/instrumentation-router", StatsbeatInstrumentation.ROUTER],
+export const SdkStatsInstrumentationMap = new Map<string, number>([
+  ["@opentelemetry/instrumentation-amqplib", SdkStatsInstrumentation.AMQPLIB],
+  ["@opentelemetry/instrumentation-cucumber", SdkStatsInstrumentation.CUCUMBER],
+  ["@opentelemetry/instrumentation-dataloader", SdkStatsInstrumentation.DATALOADER],
+  ["@opentelemetry/instrumentation-fs", SdkStatsInstrumentation.FS],
+  ["@opentelemetry/instrumentation-lru-memoizer", SdkStatsInstrumentation.LRU_MEMOIZER],
+  ["@opentelemetry/instrumentation-mongoose", SdkStatsInstrumentation.MONGOOSE],
+  ["@opentelemetry/instrumentation-runtime-node", SdkStatsInstrumentation.RUNTIME_NODE],
+  ["@opentelemetry/instrumentation-socket.io", SdkStatsInstrumentation.SOCKET_IO],
+  ["@opentelemetry/instrumentation-tedious", SdkStatsInstrumentation.TEDIOUS],
+  ["@opentelemetry/instrumentation-undici", SdkStatsInstrumentation.UNDICI],
+  ["@opentelemetry/instrumentation-cassandra-driver", SdkStatsInstrumentation.CASSANDRA],
+  ["@opentelemetry/instrumentation-connect", SdkStatsInstrumentation.CONNECT],
+  ["@opentelemetry/instrumentation-dns", SdkStatsInstrumentation.DNS],
+  ["@opentelemetry/instrumentation-express", SdkStatsInstrumentation.EXPRESS],
+  ["@opentelemetry/instrumentation-fastify", SdkStatsInstrumentation.FASTIFY],
+  ["@opentelemetry/instrumentation-generic-pool", SdkStatsInstrumentation.GENERIC_POOL],
+  ["@opentelemetry/instrumentation-graphql", SdkStatsInstrumentation.GRAPHQL],
+  ["@opentelemetry/instrumentation-hapi", SdkStatsInstrumentation.HAPI],
+  ["@opentelemetry/instrumentation-ioredis", SdkStatsInstrumentation.IOREDIS],
+  ["@opentelemetry/instrumentation-knex", SdkStatsInstrumentation.KNEX],
+  ["@opentelemetry/instrumentation-koa", SdkStatsInstrumentation.KOA],
+  ["@opentelemetry/instrumentation-memcached", SdkStatsInstrumentation.MEMCACHED],
+  ["@opentelemetry/instrumentation-mysql2", SdkStatsInstrumentation.MYSQL2],
+  ["@opentelemetry/instrumentation-nestjs-core", SdkStatsInstrumentation.NESTJS_CORE],
+  ["@opentelemetry/instrumentation-net", SdkStatsInstrumentation.NET],
+  ["@opentelemetry/instrumentation-pino", SdkStatsInstrumentation.PINO],
+  ["@opentelemetry/instrumentation-restify", SdkStatsInstrumentation.RESTIFY],
+  ["@opentelemetry/instrumentation-router", SdkStatsInstrumentation.ROUTER],
 ]);
 
-export interface StatsbeatEnvironmentConfig {
-  instrumentation: StatsbeatInstrumentation;
-  feature: StatsbeatFeature;
+export interface SdkStatsEnvironmentConfig {
+  instrumentation: SdkStatsInstrumentation;
+  feature: SdkStatsFeature;
 }

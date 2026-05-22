@@ -31,7 +31,7 @@ export const FEATURE_TYPE_INSTRUMENTATION = 1;
 
 const FEATURE_METRIC_NAME = "Feature";
 const INSTRUMENTATION_METRIC_NAME = "Feature.instrumentations";
-const STATSBEAT_LANGUAGE = "node";
+const SDKSTATS_LANGUAGE = "node";
 
 /**
  * Per-metric configuration for the network SDKStats gauges.
@@ -141,7 +141,7 @@ export class SdkStatsMetrics {
       attach: "Manual",
       runtimeVersion: process.version,
       os: os.type(),
-      language: STATSBEAT_LANGUAGE,
+      language: SDKSTATS_LANGUAGE,
       version: distroVersion || MICROSOFT_OPENTELEMETRY_VERSION,
       cikey: cikey || "N/A",
     };
