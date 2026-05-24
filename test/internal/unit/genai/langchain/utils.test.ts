@@ -604,12 +604,13 @@ describe("setModelAttribute", () => {
                 response_metadata: {
                   model: "o4-mini-2025-04-16",
                   // LangChain duplicates `model` into `model_name` "for
-                  // backwards compat with chat completion calls". Both
-                  // currently carry the same value, but we read the canonical
-                  // field first to avoid coupling to that alias.
-                  model_name: "o4-mini-2025-04-16",
-                  model_provider: "openai",
-                },
+                    // backwards compat with chat completion calls". We pin a
+                    // distinct sentinel here so the assertion proves we read
+                    // the canonical `model` field first rather than coupling
+                    // to the `model_name` alias.
+                    model_name: "model_name-alias-should-be-ignored",
+                    model_provider: "openai",
+                  },
               },
             },
           ],
@@ -622,6 +623,14 @@ describe("setModelAttribute", () => {
       calls.some(
         (c: unknown[]) => c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "o4-mini-2025-04-16",
       ),
+      "response model should come from response_metadata.model (canonical)",
+    );
+    assert.ok(
+      !calls.some(
+        (c: unknown[]) =>
+          c[0] === ATTR_GEN_AI_RESPONSE_MODEL && c[1] === "model_name-alias-should-be-ignored",
+      ),
+      "response model must not fall back to the model_name alias when model is set",
     );
   });
 

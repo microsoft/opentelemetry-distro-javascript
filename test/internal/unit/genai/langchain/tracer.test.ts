@@ -16,6 +16,11 @@ import {
   ATTR_ERROR_MESSAGE,
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_PROVIDER_NAME,
+  ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_RESPONSE_ID,
+  ATTR_GEN_AI_RESPONSE_MODEL,
+  ATTR_GEN_AI_USAGE_INPUT_TOKENS,
+  ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
 } from "../../../../../src/genai/index.js";
 
 function makeRun(overrides: Partial<Run> = {}): Run {
@@ -353,20 +358,24 @@ describe("LangChainTracer", () => {
             [
               {
                 message: {
-                  // Shape produced by libs/providers/langchain-openai/src/converters/responses.ts
-                  response_metadata: {
-                    model_provider: "openai",
-                    model: "o4-mini-2025-04-16",
-                    model_name: "o4-mini-2025-04-16",
-                    id: "resp_rapi_abc",
-                    created_at: 1_700_000_000,
+                    // Shape produced by libs/providers/langchain-openai/src/converters/responses.ts.
+                    // We pin distinct sentinels on the fields the test is supposed
+                    // to ignore so the assertions actually prove that `model`
+                    // (canonical) and `response_metadata.id` (provider-supplied)
+                    // win over the `model_name` alias and `message.id`.
+                    response_metadata: {
+                      model_provider: "openai",
+                      model: "o4-mini-2025-04-16",
+                      model_name: "model_name-alias-should-be-ignored",
+                      id: "resp_rapi_abc",
+                      created_at: 1_700_000_000,
                   },
-                  usage_metadata: {
-                    input_tokens: 4,
-                    output_tokens: 7,
+                    usage_metadata: {
+                      input_tokens: 4,
+                      output_tokens: 7,
+                    },
+                    id: "message-id-should-be-ignored",
                   },
-                  id: "resp_rapi_abc",
-                },
               },
             ],
           ],
@@ -380,22 +389,22 @@ describe("LangChainTracer", () => {
 
       assert.strictEqual(got(ATTR_GEN_AI_OPERATION_NAME), "chat", "operation name");
       assert.strictEqual(
-        got("gen_ai.request.model"),
+        got(ATTR_GEN_AI_REQUEST_MODEL),
         "deployment-o4-mini",
         "request model should be the deployment alias",
       );
       assert.strictEqual(
-        got("gen_ai.response.model"),
+        got(ATTR_GEN_AI_RESPONSE_MODEL),
         "o4-mini-2025-04-16",
-        "response model should come from response_metadata.model",
+        "response model should come from response_metadata.model (not the model_name alias)",
       );
       assert.strictEqual(
-        got("gen_ai.response.id"),
+        got(ATTR_GEN_AI_RESPONSE_ID),
         "resp_rapi_abc",
-        "response id should come from response_metadata.id",
+        "response id should come from response_metadata.id (not message.id)",
       );
-      assert.strictEqual(got("gen_ai.usage.input_tokens"), 4, "input tokens");
-      assert.strictEqual(got("gen_ai.usage.output_tokens"), 7, "output tokens");
+      assert.strictEqual(got(ATTR_GEN_AI_USAGE_INPUT_TOKENS), 4, "input tokens");
+      assert.strictEqual(got(ATTR_GEN_AI_USAGE_OUTPUT_TOKENS), 7, "output tokens");
       assert.strictEqual(span.statusObj?.code, SpanStatusCode.OK);
     });
   });
