@@ -3,16 +3,16 @@
 
 import { describe, it, expect } from "vitest";
 import { InternalConfig } from "../../../../src/shared/config.js";
-import { getAzureMonitorStatsbeatFeatures } from "../../../../src/azureMonitor/index.js";
+import { getAzureMonitorSdkStatsFeatures } from "../../../../src/azureMonitor/index.js";
 import { SEMRESATTRS_K8S_CLUSTER_NAME } from "@opentelemetry/semantic-conventions";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 
-describe("getAzureMonitorStatsbeatFeatures", () => {
+describe("getAzureMonitorSdkStatsFeatures", () => {
   it("should return browserSdkLoader true when enabled in config", () => {
     const config = new InternalConfig();
     config.browserSdkLoaderOptions.enabled = true;
 
-    const features = getAzureMonitorStatsbeatFeatures(config);
+    const features = getAzureMonitorSdkStatsFeatures(config);
     expect(features.browserSdkLoader).toBe(true);
   });
 
@@ -20,7 +20,7 @@ describe("getAzureMonitorStatsbeatFeatures", () => {
     const config = new InternalConfig();
     config.browserSdkLoaderOptions.enabled = false;
 
-    const features = getAzureMonitorStatsbeatFeatures(config);
+    const features = getAzureMonitorSdkStatsFeatures(config);
     expect(features.browserSdkLoader).toBe(false);
   });
 
@@ -30,21 +30,21 @@ describe("getAzureMonitorStatsbeatFeatures", () => {
       getToken: () => Promise.resolve({ token: "test", expiresOnTimestamp: Date.now() + 10000 }),
     };
 
-    const features = getAzureMonitorStatsbeatFeatures(config);
+    const features = getAzureMonitorSdkStatsFeatures(config);
     expect(features.aadHandling).toBe(true);
   });
 
   it("should return aadHandling false when no credential is provided", () => {
     const config = new InternalConfig();
 
-    const features = getAzureMonitorStatsbeatFeatures(config);
+    const features = getAzureMonitorSdkStatsFeatures(config);
     expect(features.aadHandling).toBe(false);
   });
 
   it("should return diskRetry true when disableOfflineStorage is falsy", () => {
     const config = new InternalConfig();
 
-    const features = getAzureMonitorStatsbeatFeatures(config);
+    const features = getAzureMonitorSdkStatsFeatures(config);
     expect(features.diskRetry).toBe(true);
   });
 
@@ -52,7 +52,7 @@ describe("getAzureMonitorStatsbeatFeatures", () => {
     const config = new InternalConfig();
     config.azureMonitorExporterOptions.disableOfflineStorage = true;
 
-    const features = getAzureMonitorStatsbeatFeatures(config);
+    const features = getAzureMonitorSdkStatsFeatures(config);
     expect(features.diskRetry).toBe(false);
   });
 
@@ -62,14 +62,14 @@ describe("getAzureMonitorStatsbeatFeatures", () => {
       [SEMRESATTRS_K8S_CLUSTER_NAME]: "my-cluster",
     });
 
-    const features = getAzureMonitorStatsbeatFeatures(config);
+    const features = getAzureMonitorSdkStatsFeatures(config);
     expect(features.aksResourceDetectorPopulation).toBe(true);
   });
 
   it("should not detect AKS resource when no k8s attributes are present", () => {
     const config = new InternalConfig();
 
-    const features = getAzureMonitorStatsbeatFeatures(config);
+    const features = getAzureMonitorSdkStatsFeatures(config);
     expect(features.aksResourceDetectorPopulation).toBe(false);
   });
 });

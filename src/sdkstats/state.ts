@@ -6,7 +6,7 @@
  *
  * Feature and instrumentation flags are stored as bitmasks so they can be
  * combined and reported efficiently. The bitmask values are intentionally
- * compatible with the Azure Monitor Exporter statsbeat encoding so that
+ * compatible with the Azure Monitor Exporter SDKStats encoding so that
  * Azure Monitor consumers see no behavioural change when the distro
  * bridges its bits into the exporter's existing pipeline.
  *
@@ -14,14 +14,14 @@
  * Python distro (microsoft/opentelemetry-distro-python#89).
  */
 
-import { StatsbeatFeature, StatsbeatInstrumentation } from "../types.js";
+import { SdkStatsFeature, SdkStatsInstrumentation } from "../types.js";
 
 /**
  * Distro-specific feature flags, in addition to the
- * {@link StatsbeatFeature} flags shared with the Azure Monitor exporter.
+ * {@link SdkStatsFeature} flags shared with the Azure Monitor exporter.
  *
  * These bit values intentionally start above the values used by
- * {@link StatsbeatFeature} so that distro bits and exporter bits can be
+ * {@link SdkStatsFeature} so that distro bits and exporter bits can be
  * OR-combined into a single 64-bit mask without collision.
  */
 export enum SdkStatsDistroFeature {
@@ -76,7 +76,7 @@ let _featureBits = 0;
 let _instrumentationBits = 0;
 let _shutdown = false;
 
-export function setSdkStatsFeature(flag: StatsbeatFeature | SdkStatsDistroFeature): void {
+export function setSdkStatsFeature(flag: SdkStatsFeature | SdkStatsDistroFeature): void {
   _featureBits |= flag;
 }
 
@@ -84,7 +84,7 @@ export function getSdkStatsFeatureFlags(): number {
   return _featureBits;
 }
 
-export function setSdkStatsInstrumentation(flag: StatsbeatInstrumentation): void {
+export function setSdkStatsInstrumentation(flag: SdkStatsInstrumentation): void {
   _instrumentationBits |= flag;
 }
 

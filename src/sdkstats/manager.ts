@@ -3,11 +3,11 @@
 
 /**
  * SDKStats manager — sends SDK self-telemetry to the Application Insights
- * statsbeat ingestion endpoint, independent of the customer's telemetry
+ * SDKStats ingestion endpoint, independent of the customer's telemetry
  * pipeline.
  *
  * When the full Azure Monitor pipeline is enabled, the exporter package's
- * own statsbeat machinery handles SDKStats emission and the distro just
+ * own SDKStats machinery handles SDKStats emission and the distro just
  * publishes its bits via the `AZURE_MONITOR_STATSBEAT_FEATURES` env var
  * for the exporter to read. For A365-only, OTLP-only, or Console-only
  * customers this manager spins up a standalone `MeterProvider` →
@@ -45,8 +45,8 @@ const DEFAULT_LONG_EXPORT_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const SDKSTATS_LONG_EXPORT_INTERVAL_ENV = "APPLICATIONINSIGHTS_STATS_LONG_EXPORT_INTERVAL";
 
 /**
- * Default short export interval (15 minutes) for network statsbeat
- * counters. Matches the Application Insights statsbeat short-interval
+ * Default short export interval (15 minutes) for network SDKStats
+ * counters. Matches the Application Insights SDKStats short-interval
  * cadence used by the Python distro (`_get_stats_short_export_interval()`
  * in `azure.monitor.opentelemetry.exporter.statsbeat._utils`).
  *
@@ -65,7 +65,7 @@ const SDKSTATS_SHORT_EXPORT_INTERVAL_ENV = "APPLICATIONINSIGHTS_STATS_SHORT_EXPO
 /**
  * Override env var: redirect SDKStats envelopes to a custom App
  * Insights connection string. When unset, SDKStats flow to the
- * Microsoft-owned statsbeat resource (`NON_EU_CONNECTION_STRING` in
+ * Microsoft-owned SDKStats resource (`NON_EU_CONNECTION_STRING` in
  * the AzMon exporter package). Primarily useful for testing.
  * Matches the Python distro env var name.
  *
@@ -111,7 +111,7 @@ export class SdkStatsManager {
   }
 
   /**
-   * Set up SDKStats export via the Azure Monitor statsbeat endpoint.
+   * Set up SDKStats export via the Azure Monitor SDKStats endpoint.
    *
    * Returns `true` if the standalone pipeline was initialized (or was
    * already initialized), `false` if SDKStats are disabled via env var
@@ -129,9 +129,9 @@ export class SdkStatsManager {
       // The exporter package's `exports` map blocks subpath imports, so
       // we resolve the package's own package.json to find its install
       // location on disk and require the internal modules by absolute
-      // path. The statsbeat exporter is the correct vehicle for SDKStats
-      // — it tags envelopes with the statsbeat ikey/endpoint and avoids
-      // recursive statsbeat-of-statsbeat reporting via its
+      // path. The AzureMonitorStatsbeatExporter is the correct vehicle for
+      // SDKStats — it tags envelopes with the SDKStats ikey/endpoint and
+      // avoids recursive SDKStats-of-SDKStats reporting via its
       // `isStatsbeatExporter` flag.
       const baseUrl = getModuleParentURL() ?? pathToFileURL(process.cwd() + "/").href;
       const requireFromHere = createRequire(baseUrl);
@@ -140,20 +140,20 @@ export class SdkStatsManager {
       );
       const exporterPackageDir = dirname(exporterPackageJsonPath);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const statsbeatExporterModule: any = requireFromHere(
+      const sdkStatsExporterModule: any = requireFromHere(
         join(exporterPackageDir, "dist", "esm", "export", "statsbeat", "statsbeatExporter.js"),
       );
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const statsbeatTypesModule: any = requireFromHere(
+      const sdkStatsTypesModule: any = requireFromHere(
         join(exporterPackageDir, "dist", "esm", "export", "statsbeat", "types.js"),
       );
-      const AzureMonitorStatsbeatExporter = statsbeatExporterModule.AzureMonitorStatsbeatExporter;
-      const NON_EU_CONNECTION_STRING = statsbeatTypesModule.NON_EU_CONNECTION_STRING;
+      const AzureMonitorStatsbeatExporter = sdkStatsExporterModule.AzureMonitorStatsbeatExporter;
+      const NON_EU_CONNECTION_STRING = sdkStatsTypesModule.NON_EU_CONNECTION_STRING;
 
       // Allow overriding the SDKStats ingestion target via env var,
       // matching the Python distro's APPLICATIONINSIGHTS_STATS_CONNECTION_STRING
       // hook. Primarily useful for testing — production should leave
-      // this unset so SDKStats flows to the Microsoft-owned statsbeat
+      // this unset so SDKStats flows to the Microsoft-owned SDKStats
       // resource (NON_EU_CONNECTION_STRING).
       const connectionString =
         process.env[SDKSTATS_CONNECTION_STRING_ENV] ?? NON_EU_CONNECTION_STRING;
@@ -177,7 +177,7 @@ export class SdkStatsManager {
         });
       }
 
-      // Short-interval pipeline (15 min) — network statsbeat gauges.
+      // Short-interval pipeline (15 min) — network SDKStats gauges.
       const shortExporter = new AzureMonitorStatsbeatExporter({
         connectionString,
         disableOfflineStorage: true,

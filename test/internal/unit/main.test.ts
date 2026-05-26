@@ -14,18 +14,18 @@ import {
 import type { MeterProvider, ViewOptions } from "@opentelemetry/sdk-metrics";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
-import type { StatsbeatEnvironmentConfig } from "../../../src/types.js";
+import type { SdkStatsEnvironmentConfig } from "../../../src/types.js";
 import {
   AZURE_MONITOR_STATSBEAT_FEATURES,
   APPLICATIONINSIGHTS_SDKSTATS_DISABLED,
-  StatsbeatFeature,
-  StatsbeatInstrumentation,
-  StatsbeatInstrumentationMap,
+  SdkStatsFeature,
+  SdkStatsInstrumentation,
+  SdkStatsInstrumentationMap,
 } from "../../../src/types.js";
 import { getOsPrefix } from "../../../src/azureMonitor/utils/common.js";
 import type { ReadableSpan, Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordProcessor, SdkLogRecord } from "@opentelemetry/sdk-logs";
-import { getInstance } from "../../../src/utils/statsbeat.js";
+import { getInstance } from "../../../src/utils/sdkStats.js";
 import type { Instrumentation, InstrumentationConfig } from "@opentelemetry/instrumentation";
 import { describe, it, beforeEach, afterEach, expect, assert, vi, afterAll } from "vitest";
 import { OpenAIAgentsTraceInstrumentor } from "../../../src/genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js";
@@ -317,7 +317,7 @@ describe("Main functions", () => {
     expect(meterConfig?.views).toContain(customView);
   });
 
-  it("should set statsbeat features", () => {
+  it("should set SDK Stats features", () => {
     const config: MicrosoftOpenTelemetryOptions = {
       instrumentationOptions: {
         azureSdk: {
@@ -348,28 +348,28 @@ describe("Main functions", () => {
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"]));
     const features = Number(output["feature"]);
     const instrumentations = Number(output["instrumentation"]);
-    assert.notOk(features & StatsbeatFeature.AAD_HANDLING, "AAD_HANDLING is set");
-    assert.notOk(features & StatsbeatFeature.DISK_RETRY, "DISK_RETRY is set");
-    assert.notOk(features & StatsbeatFeature.BROWSER_SDK_LOADER, "BROWSER_SDK_LOADER is set");
-    assert.ok(features & StatsbeatFeature.DISTRO, "DISTRO is not set");
+    assert.notOk(features & SdkStatsFeature.AAD_HANDLING, "AAD_HANDLING is set");
+    assert.notOk(features & SdkStatsFeature.DISK_RETRY, "DISK_RETRY is set");
+    assert.notOk(features & SdkStatsFeature.BROWSER_SDK_LOADER, "BROWSER_SDK_LOADER is set");
+    assert.ok(features & SdkStatsFeature.DISTRO, "DISTRO is not set");
     assert.strictEqual(features, 8);
     assert.ok(
-      instrumentations & StatsbeatInstrumentation.AZURE_CORE_TRACING,
+      instrumentations & SdkStatsInstrumentation.AZURE_CORE_TRACING,
       "AZURE_CORE_TRACING not set",
     );
-    assert.notOk(features & StatsbeatFeature.SHIM, "SHIM is set");
+    assert.notOk(features & SdkStatsFeature.SHIM, "SHIM is set");
     assert.notOk(
-      features & StatsbeatFeature.AKS_RESOURCE_DETECTOR_POPULATION,
+      features & SdkStatsFeature.AKS_RESOURCE_DETECTOR_POPULATION,
       "AKS_RESOURCE_DETECTOR_POPULATION should not be set",
     );
-    assert.ok(instrumentations & StatsbeatInstrumentation.MONGODB, "MONGODB not set");
-    assert.ok(instrumentations & StatsbeatInstrumentation.MYSQL, "MYSQL not set");
-    assert.ok(instrumentations & StatsbeatInstrumentation.POSTGRES, "POSTGRES not set");
-    assert.ok(instrumentations & StatsbeatInstrumentation.REDIS, "REDIS not set");
+    assert.ok(instrumentations & SdkStatsInstrumentation.MONGODB, "MONGODB not set");
+    assert.ok(instrumentations & SdkStatsInstrumentation.MYSQL, "MYSQL not set");
+    assert.ok(instrumentations & SdkStatsInstrumentation.POSTGRES, "POSTGRES not set");
+    assert.ok(instrumentations & SdkStatsInstrumentation.REDIS, "REDIS not set");
     assert.strictEqual(instrumentations, 31);
   });
 
-  it("should set shim feature in statsbeat if env var is populated", () => {
+  it("should set shim feature in SDK Stats if env var is populated", () => {
     getInstance()["initializedByShim"] = true;
     const config: MicrosoftOpenTelemetryOptions = {
       azureMonitor: {
@@ -381,7 +381,7 @@ describe("Main functions", () => {
     useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"]));
     const features = Number(output["feature"]);
-    assert.ok(features & StatsbeatFeature.SHIM, `SHIM is not set ${features}`);
+    assert.ok(features & SdkStatsFeature.SHIM, `SHIM is not set ${features}`);
   });
 
   it("should set AKS_RESOURCE_DETECTOR_POPULATION feature when AKS resource attributes are populated", () => {
@@ -400,7 +400,7 @@ describe("Main functions", () => {
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"]));
     const features = Number(output["feature"]);
     assert.ok(
-      features & StatsbeatFeature.AKS_RESOURCE_DETECTOR_POPULATION,
+      features & SdkStatsFeature.AKS_RESOURCE_DETECTOR_POPULATION,
       `AKS_RESOURCE_DETECTOR_POPULATION is not set ${features}`,
     );
   });
@@ -417,17 +417,17 @@ describe("Main functions", () => {
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"]));
     const features = Number(output["feature"]);
     assert.notOk(
-      features & StatsbeatFeature.AKS_RESOURCE_DETECTOR_POPULATION,
+      features & SdkStatsFeature.AKS_RESOURCE_DETECTOR_POPULATION,
       "AKS_RESOURCE_DETECTOR_POPULATION should not be set",
     );
   });
 
-  it("should use statsbeat features if already available", () => {
+  it("should use SDK Stats features if already available", () => {
     const env = <{ [id: string]: string }>{};
     let current = 0;
-    current |= StatsbeatFeature.AAD_HANDLING;
-    current |= StatsbeatFeature.DISK_RETRY;
-    current |= StatsbeatFeature.LIVE_METRICS;
+    current |= SdkStatsFeature.AAD_HANDLING;
+    current |= SdkStatsFeature.DISK_RETRY;
+    current |= SdkStatsFeature.LIVE_METRICS;
     env.AZURE_MONITOR_STATSBEAT_FEATURES = current.toString();
     process.env = env;
     const config: MicrosoftOpenTelemetryOptions = {
@@ -440,11 +440,11 @@ describe("Main functions", () => {
     useMicrosoftOpenTelemetry(config);
     const output = JSON.parse(String(process.env["AZURE_MONITOR_STATSBEAT_FEATURES"]));
     const numberOutput = Number(output["feature"]);
-    assert.ok(numberOutput & StatsbeatFeature.AAD_HANDLING, "AAD_HANDLING not set");
-    assert.ok(numberOutput & StatsbeatFeature.DISK_RETRY, "DISK_RETRY not set");
-    assert.ok(numberOutput & StatsbeatFeature.DISTRO, "DISTRO not set");
-    assert.notOk(numberOutput & StatsbeatFeature.BROWSER_SDK_LOADER, "BROWSER_SDK_LOADER is set");
-    assert.ok(numberOutput & StatsbeatFeature.LIVE_METRICS, "LIVE_METRICS is not set");
+    assert.ok(numberOutput & SdkStatsFeature.AAD_HANDLING, "AAD_HANDLING not set");
+    assert.ok(numberOutput & SdkStatsFeature.DISK_RETRY, "DISK_RETRY not set");
+    assert.ok(numberOutput & SdkStatsFeature.DISTRO, "DISTRO not set");
+    assert.notOk(numberOutput & SdkStatsFeature.BROWSER_SDK_LOADER, "BROWSER_SDK_LOADER is set");
+    assert.ok(numberOutput & SdkStatsFeature.LIVE_METRICS, "LIVE_METRICS is not set");
   });
 
   it("should capture the app service SDK prefix correctly", () => {
@@ -588,7 +588,7 @@ describe("Main functions", () => {
     });
   });
 
-  it("should update statsbeat env var based on reading instrumentations array", () => {
+  it("should update SDK Stats env var based on reading instrumentations array", () => {
     const config: MicrosoftOpenTelemetryOptions = {
       instrumentationOptions: {
         azureSdk: { enabled: false },
@@ -608,28 +608,28 @@ describe("Main functions", () => {
       },
     };
     useMicrosoftOpenTelemetry(config);
-    const emptyStatsbeatConfig: string = JSON.stringify({ instrumentation: 0, feature: 0 });
+    const emptySdkStatsConfig: string = JSON.stringify({ instrumentation: 0, feature: 0 });
 
-    const statsbeatOptions: StatsbeatEnvironmentConfig = JSON.parse(
-      process.env[AZURE_MONITOR_STATSBEAT_FEATURES] || emptyStatsbeatConfig,
+    const sdkStatsOptions: SdkStatsEnvironmentConfig = JSON.parse(
+      process.env[AZURE_MONITOR_STATSBEAT_FEATURES] || emptySdkStatsConfig,
     );
     const instrumentations = [testInstrumentation];
-    let updatedStatsbeat = { instrumentation: 0, feature: 0 };
+    let updatedSdkStats = { instrumentation: 0, feature: 0 };
 
-    // Dynamic statsbeat update logic
+    // Dynamic SDK Stats update logic
     for (let i = 0; i < instrumentations.length; i++) {
-      updatedStatsbeat = {
-        instrumentation: (statsbeatOptions.instrumentation |=
-          StatsbeatInstrumentationMap.get(instrumentations[i].instrumentationName) || 0),
-        feature: statsbeatOptions.feature,
+      updatedSdkStats = {
+        instrumentation: (sdkStatsOptions.instrumentation |=
+          SdkStatsInstrumentationMap.get(instrumentations[i].instrumentationName) || 0),
+        feature: sdkStatsOptions.feature,
       };
     }
-    assert.strictEqual(updatedStatsbeat.instrumentation, StatsbeatInstrumentation.FS);
+    assert.strictEqual(updatedSdkStats.instrumentation, SdkStatsInstrumentation.FS);
   });
 
   it("should detect MULTI_IKEY feature when AZURE_MONITOR_STATSBEAT_FEATURES has MULTI_IKEY enabled", () => {
     const env = <{ [id: string]: string }>{};
-    env[AZURE_MONITOR_STATSBEAT_FEATURES] = String(StatsbeatFeature.MULTI_IKEY);
+    env[AZURE_MONITOR_STATSBEAT_FEATURES] = String(SdkStatsFeature.MULTI_IKEY);
     process.env = env;
     const config: MicrosoftOpenTelemetryOptions = {
       azureMonitor: {
@@ -643,13 +643,13 @@ describe("Main functions", () => {
       feature?: number;
     };
     const features = Number(output["feature"] || 0);
-    assert.ok(features & StatsbeatFeature.MULTI_IKEY, "MULTI_IKEY not detected");
+    assert.ok(features & SdkStatsFeature.MULTI_IKEY, "MULTI_IKEY not detected");
     void shutdownMicrosoftOpenTelemetry();
   });
 
   it("should not detect MULTI_IKEY feature when AZURE_MONITOR_STATSBEAT_FEATURES has MULTI_IKEY disabled", () => {
     const env = <{ [id: string]: string }>{};
-    env[AZURE_MONITOR_STATSBEAT_FEATURES] = String(StatsbeatFeature.DISTRO);
+    env[AZURE_MONITOR_STATSBEAT_FEATURES] = String(SdkStatsFeature.DISTRO);
     process.env = env;
     const config: MicrosoftOpenTelemetryOptions = {
       azureMonitor: {
@@ -664,7 +664,7 @@ describe("Main functions", () => {
     };
     const features = Number(output["feature"] || 0);
     assert.ok(
-      !(features & StatsbeatFeature.MULTI_IKEY),
+      !(features & SdkStatsFeature.MULTI_IKEY),
       "MULTI_IKEY detected when it should not be",
     );
     void shutdownMicrosoftOpenTelemetry();
@@ -687,10 +687,10 @@ describe("Main functions", () => {
     };
     const features = Number(output["feature"] || 0);
     assert.ok(
-      features & StatsbeatFeature.CUSTOMER_SDKSTATS,
+      features & SdkStatsFeature.CUSTOMER_SDKSTATS,
       "CUSTOMER_SDKSTATS feature should be detected when customer explicitly disables SDK stats",
     );
-    assert.ok(features & StatsbeatFeature.DISTRO, "DISTRO feature should also be set");
+    assert.ok(features & SdkStatsFeature.DISTRO, "DISTRO feature should also be set");
     void shutdownMicrosoftOpenTelemetry();
   });
 
@@ -711,10 +711,10 @@ describe("Main functions", () => {
     };
     const features = Number(output["feature"] || 0);
     assert.ok(
-      !(features & StatsbeatFeature.CUSTOMER_SDKSTATS),
+      !(features & SdkStatsFeature.CUSTOMER_SDKSTATS),
       "CUSTOMER_SDKSTATS feature should not be detected when env var is not 'true'",
     );
-    assert.ok(features & StatsbeatFeature.DISTRO, "DISTRO feature should still be set");
+    assert.ok(features & SdkStatsFeature.DISTRO, "DISTRO feature should still be set");
     void shutdownMicrosoftOpenTelemetry();
   });
 
@@ -735,10 +735,10 @@ describe("Main functions", () => {
     };
     const features = Number(output["feature"] || 0);
     assert.ok(
-      !(features & StatsbeatFeature.CUSTOMER_SDKSTATS),
+      !(features & SdkStatsFeature.CUSTOMER_SDKSTATS),
       "CUSTOMER_SDKSTATS feature should not be detected when env var is undefined",
     );
-    assert.ok(features & StatsbeatFeature.DISTRO, "DISTRO feature should still be set");
+    assert.ok(features & SdkStatsFeature.DISTRO, "DISTRO feature should still be set");
     void shutdownMicrosoftOpenTelemetry();
   });
 
@@ -911,20 +911,20 @@ describe("Main functions", () => {
       }
     }
 
-    // Azure Monitor statsbeat env var should reflect OTLP-only scenario
-    const statsbeatRaw = process.env["AZURE_MONITOR_STATSBEAT_FEATURES"];
-    if (statsbeatRaw) {
-      const statsbeat = JSON.parse(statsbeatRaw);
+    // Azure Monitor SDK Stats env var should reflect OTLP-only scenario
+    const sdkStatsRaw = process.env["AZURE_MONITOR_STATSBEAT_FEATURES"];
+    if (sdkStatsRaw) {
+      const sdkStats = JSON.parse(sdkStatsRaw);
       // DISTRO feature SHOULD be set — the distro is being used regardless of backend
-      expect(statsbeat.feature & StatsbeatFeature.DISTRO).toBeTruthy();
+      expect(sdkStats.feature & SdkStatsFeature.DISTRO).toBeTruthy();
       // OTLP feature should be set
-      expect(statsbeat.feature & StatsbeatFeature.OTLP).toBeTruthy();
+      expect(sdkStats.feature & SdkStatsFeature.OTLP).toBeTruthy();
     }
 
     void shutdownMicrosoftOpenTelemetry();
   });
 
-  it("should set A365 feature bit in statsbeat when A365 is enabled", () => {
+  it("should set A365 feature bit in SDK Stats when A365 is enabled", () => {
     const env = <{ [id: string]: string }>{};
     process.env = env;
 
@@ -939,7 +939,7 @@ describe("Main functions", () => {
 
     const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
     const features = Number(output.feature);
-    assert.ok(features & StatsbeatFeature.A365, "A365 feature bit should be set");
+    assert.ok(features & SdkStatsFeature.A365, "A365 feature bit should be set");
 
     void shutdownMicrosoftOpenTelemetry();
   });
@@ -957,13 +957,13 @@ describe("Main functions", () => {
     if (raw) {
       const output = JSON.parse(raw);
       const features = Number(output.feature);
-      assert.notOk(features & StatsbeatFeature.A365, "A365 feature bit should not be set");
+      assert.notOk(features & SdkStatsFeature.A365, "A365 feature bit should not be set");
     }
 
     void shutdownMicrosoftOpenTelemetry();
   });
 
-  it("should set OTLP feature bit in statsbeat when OTLP endpoint is configured", () => {
+  it("should set OTLP feature bit in SDK Stats when OTLP endpoint is configured", () => {
     const env = <{ [id: string]: string }>{};
     env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318";
     process.env = env;
@@ -975,7 +975,7 @@ describe("Main functions", () => {
 
     const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
     const features = Number(output.feature);
-    assert.ok(features & StatsbeatFeature.OTLP, "OTLP feature bit should be set");
+    assert.ok(features & SdkStatsFeature.OTLP, "OTLP feature bit should be set");
 
     void shutdownMicrosoftOpenTelemetry();
   });
@@ -994,7 +994,7 @@ describe("Main functions", () => {
 
     const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
     const features = Number(output.feature);
-    assert.notOk(features & StatsbeatFeature.OTLP, "OTLP feature bit should not be set");
+    assert.notOk(features & SdkStatsFeature.OTLP, "OTLP feature bit should not be set");
 
     void shutdownMicrosoftOpenTelemetry();
   });
@@ -1015,8 +1015,8 @@ describe("Main functions", () => {
 
     const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
     const features = Number(output.feature);
-    assert.ok(features & StatsbeatFeature.A365, "A365 feature bit should be set");
-    assert.ok(features & StatsbeatFeature.OTLP, "OTLP feature bit should be set");
+    assert.ok(features & SdkStatsFeature.A365, "A365 feature bit should be set");
+    assert.ok(features & SdkStatsFeature.OTLP, "OTLP feature bit should be set");
 
     void shutdownMicrosoftOpenTelemetry();
   });

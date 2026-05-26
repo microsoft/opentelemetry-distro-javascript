@@ -2,16 +2,16 @@
 // Licensed under the MIT License.
 
 import type { Instrumentation } from "@opentelemetry/instrumentation";
-import type { StatsbeatEnvironmentConfig } from "../types.js";
-import { AZURE_MONITOR_STATSBEAT_FEATURES, StatsbeatInstrumentationMap } from "../types.js";
+import type { SdkStatsEnvironmentConfig } from "../types.js";
+import { AZURE_MONITOR_STATSBEAT_FEATURES, SdkStatsInstrumentationMap } from "../types.js";
 import { Logger } from "../shared/logging/index.js";
 
 /**
- * Patch OpenTelemetry Instrumentation enablement to update the statsbeat environment variable with the enabled instrumentations
+ * Patch OpenTelemetry Instrumentation enablement to update the SDK Stats environment variable with the enabled instrumentations
  * @internal
  */
 export function patchOpenTelemetryInstrumentationEnable(): void {
-  const emptyStatsbeatConfig: string = JSON.stringify({ instrumentation: 0, feature: 0 });
+  const emptySdkStatsConfig: string = JSON.stringify({ instrumentation: 0, feature: 0 });
   try {
     require.resolve("@opentelemetry/instrumentation");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -19,25 +19,25 @@ export function patchOpenTelemetryInstrumentationEnable(): void {
 
     const originalModuleDefinition = autoLoaderUtils.enableInstrumentations;
 
-    // Parses the enabled instrumentations and then ammends the statsbeat instrumentation environment variable
+    // Parses the enabled instrumentations and then ammends the SDK Stats instrumentation environment variable
     autoLoaderUtils.enableInstrumentations = function (instrumentations: Instrumentation[]) {
       try {
         if (instrumentations.length > 0) {
-          const statsbeatOptions: StatsbeatEnvironmentConfig = JSON.parse(
-            process.env[AZURE_MONITOR_STATSBEAT_FEATURES] || emptyStatsbeatConfig,
+          const sdkStatsOptions: SdkStatsEnvironmentConfig = JSON.parse(
+            process.env[AZURE_MONITOR_STATSBEAT_FEATURES] || emptySdkStatsConfig,
           );
-          let updatedStatsbeat = {};
+          let updatedSdkStats = {};
           for (let i = 0; i < instrumentations.length; i++) {
-            updatedStatsbeat = {
-              instrumentation: (statsbeatOptions.instrumentation |=
-                StatsbeatInstrumentationMap.get(instrumentations[i].instrumentationName) || 0),
-              feature: statsbeatOptions.feature,
+            updatedSdkStats = {
+              instrumentation: (sdkStatsOptions.instrumentation |=
+                SdkStatsInstrumentationMap.get(instrumentations[i].instrumentationName) || 0),
+              feature: sdkStatsOptions.feature,
             };
           }
-          process.env[AZURE_MONITOR_STATSBEAT_FEATURES] = JSON.stringify(updatedStatsbeat);
+          process.env[AZURE_MONITOR_STATSBEAT_FEATURES] = JSON.stringify(updatedSdkStats);
         }
       } catch (_e) {
-        Logger.getInstance().warn("Failed to parse the statsbeat environment variable");
+        Logger.getInstance().warn("Failed to parse the SDK Stats environment variable");
       }
       // eslint-disable-next-line prefer-rest-params
       return originalModuleDefinition.apply(this, arguments);

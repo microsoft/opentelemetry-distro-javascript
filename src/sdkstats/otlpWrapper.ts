@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 /**
- * Network statsbeat wrappers for OTLP exporters.
+ * Network SDKStats wrappers for OTLP exporters.
  *
  * The upstream OTLP HTTP exporters do not surface HTTP status codes — only
  * the {@link ExportResult} enum and any raised exception. The decorators
- * here capture that signal so the network statsbeat pipeline can record
+ * here capture that signal so the network SDKStats pipeline can record
  * success counts per endpoint.
  *
  * Mirrors `src/microsoft/opentelemetry/_sdkstats/_otlp_wrapper.py` from the
@@ -75,7 +75,7 @@ function wrapExport<T>(
 }
 
 /**
- * Span exporter decorator that records network statsbeat counts.
+ * Span exporter decorator that records network SDKStats counts.
  */
 export class NetworkStatsSpanExporter implements SpanExporter {
   private readonly host: string;
@@ -98,7 +98,7 @@ export class NetworkStatsSpanExporter implements SpanExporter {
 }
 
 /**
- * Metric exporter decorator that records network statsbeat counts.
+ * Metric exporter decorator that records network SDKStats counts.
  *
  * `selectAggregationTemporality` / `selectAggregation` are forwarded only
  * when the inner exporter defines them — preserving its preferences while
@@ -134,7 +134,7 @@ export class NetworkStatsMetricExporter implements PushMetricExporter {
 }
 
 /**
- * Log exporter decorator that records network statsbeat counts.
+ * Log exporter decorator that records network SDKStats counts.
  */
 export class NetworkStatsLogExporter implements LogRecordExporter {
   private readonly host: string;
