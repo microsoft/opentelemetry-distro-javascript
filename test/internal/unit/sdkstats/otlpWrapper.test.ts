@@ -14,6 +14,8 @@ import {
   NetworkStatsSpanExporter,
 } from "../../../../src/sdkstats/otlpWrapper.js";
 import {
+  EXCEPTION_COUNT_NAME,
+  REQUEST_DURATION_NAME,
   REQUEST_SUCCESS_NAME,
   _resetAllForTest,
   drain,
@@ -80,12 +82,33 @@ describe("sdkstats/otlpWrapper", () => {
       expect([...success.entries()]).toEqual([[[ENDPOINT, HOST], 1]]);
     });
 
-    it("does not record success on FAILED result", async () => {
+    it("does not record success on FAILED result, but records an exception count and duration", async () => {
       const inner = makeFakeSpanExporter({ code: ExportResultCode.FAILED });
       const wrapper = new NetworkStatsSpanExporter(inner);
       await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
 
       expect(drain(REQUEST_SUCCESS_NAME).size).toBe(0);
+
+      const exceptions = drain(EXCEPTION_COUNT_NAME);
+      expect(exceptions.size).toBe(1);
+      const [key, count] = [...exceptions.entries()][0];
+      expect(key).toEqual([ENDPOINT, HOST, "ExporterFailed"]);
+      expect(count).toBe(1);
+
+      // Duration is recorded regardless of outcome.
+      expect(drain(REQUEST_DURATION_NAME).size).toBe(1);
+    });
+
+    it("records a request duration on SUCCESS", async () => {
+      const inner = makeFakeSpanExporter({ code: ExportResultCode.SUCCESS });
+      const wrapper = new NetworkStatsSpanExporter(inner);
+      await new Promise<void>((resolve) => wrapper.export([], () => resolve()));
+
+      const durations = drain(REQUEST_DURATION_NAME);
+      expect(durations.size).toBe(1);
+      const [key, avg] = [...durations.entries()][0];
+      expect(key).toEqual([ENDPOINT, HOST]);
+      expect(avg).toBeGreaterThanOrEqual(0);
     });
 
     it("forwards forceFlush and shutdown", async () => {

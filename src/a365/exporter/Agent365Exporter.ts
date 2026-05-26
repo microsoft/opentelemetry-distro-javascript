@@ -21,7 +21,17 @@ import {
   chunkBySize,
 } from "./utils.js";
 import { getA365Logger } from "../logging.js";
-import { isSdkStatsEnabled, recordSuccess, shortHost } from "../../sdkstats/index.js";
+import {
+  isSdkStatsEnabled,
+  recordSuccess,
+  recordFailure,
+  recordRetry,
+  recordThrottle,
+  recordException,
+  recordDuration,
+  classifyStatusCode,
+  shortHost,
+} from "../../sdkstats/index.js";
 
 const DEFAULT_MAX_RETRIES = 3;
 
@@ -264,6 +274,7 @@ export class Agent365Exporter implements SpanExporter {
     }
 
     for (let attempt = 0; attempt <= DEFAULT_MAX_RETRIES; attempt++) {
+      const requestStart = Date.now();
       try {
         const response = await fetch(url, {
           method: "POST",
@@ -278,10 +289,28 @@ export class Agent365Exporter implements SpanExporter {
           "unknown";
         lastCorrelationId = correlationId;
 
-        if (response.status >= 200 && response.status < 300) {
-          if (recordA365Stats) {
-            recordSuccess(endpointCategory, host);
+        if (recordA365Stats) {
+          recordDuration(endpointCategory, host, Date.now() - requestStart);
+          const kind = classifyStatusCode(response.status);
+          switch (kind) {
+            case "success":
+              recordSuccess(endpointCategory, host);
+              break;
+            case "retry":
+              recordRetry(endpointCategory, host, response.status);
+              break;
+            case "throttle":
+              recordThrottle(endpointCategory, host, response.status);
+              break;
+            case "failure":
+              recordFailure(endpointCategory, host, response.status);
+              break;
+            case "ignored":
+              break;
           }
+        }
+
+        if (response.status >= 200 && response.status < 300) {
           return { ok: true, correlationId };
         }
 
@@ -308,6 +337,10 @@ export class Agent365Exporter implements SpanExporter {
         );
         return { ok: false, correlationId };
       } catch (error) {
+        if (recordA365Stats) {
+          recordDuration(endpointCategory, host, Date.now() - requestStart);
+          recordException(endpointCategory, host, classifyExceptionType(error));
+        }
         this.logger.error("[Agent365Exporter] Request error:", error);
         if (attempt < DEFAULT_MAX_RETRIES) {
           await sleep(200 * (attempt + 1));
@@ -465,6 +498,22 @@ export class Agent365Exporter implements SpanExporter {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Classify a thrown fetch error into a stable SDKStats `exceptionType`
+ * label so the dimension cardinality stays bounded. Mirrors the buckets
+ * the AzMon exporter's statsbeat uses (`ExceptionType` enum in
+ * `@azure/monitor-opentelemetry-exporter`).
+ */
+function classifyExceptionType(error: unknown): string {
+  if (error instanceof Error) {
+    const name = error.name;
+    if (name === "AbortError" || name === "TimeoutError") return "Timeout exception";
+    if (name === "TypeError") return "Network exception";
+    return name || "Client exception";
+  }
+  return "Client exception";
 }
 
 /**

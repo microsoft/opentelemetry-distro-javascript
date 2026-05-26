@@ -25,10 +25,19 @@ import type {
 import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordExporter, ReadableLogRecord } from "@opentelemetry/sdk-logs";
 
-import { recordSuccess, shortHost } from "./networkStats.js";
+import { recordSuccess, recordException, recordDuration, shortHost } from "./networkStats.js";
 
 /** Per spec, `endpoint` is a category label, not the destination URL. */
 const OTLP_ENDPOINT_CATEGORY = "otlp";
+
+/**
+ * The OTLP exporters do not surface HTTP status codes — only the
+ * {@link ExportResult} enum and an optional {@link ExportResult.error}.
+ * We classify non-success outcomes as `Exception_Count` under a
+ * deterministic exception-type label so the dimension is stable across
+ * exports.
+ */
+const OTLP_FAILED_EXCEPTION_TYPE = "ExporterFailed";
 
 /**
  * Resolve the short-host string for a given OTLP signal.
@@ -55,8 +64,9 @@ function resolveShortHost(signal: "traces" | "metrics" | "logs"): string {
 /**
  * Common bookkeeping for an export attempt.
  *
- * On `ExportResultCode.SUCCESS` we record a success count. Other outcomes
- * (failure, exception, duration) will be added in a future PR.
+ * Records success/exception counters and request duration regardless of
+ * outcome, per the SDKStats spec ("Request_Duration ... avg request
+ * duration for all requests during the scheduled interval").
  */
 function wrapExport<T>(
   host: string,
@@ -64,9 +74,13 @@ function wrapExport<T>(
   resultCallback: (result: ExportResult) => void,
   _items: T,
 ): void {
+  const start = Date.now();
   const settle = (result: ExportResult): void => {
+    recordDuration(OTLP_ENDPOINT_CATEGORY, host, Date.now() - start);
     if (result.code === ExportResultCode.SUCCESS) {
       recordSuccess(OTLP_ENDPOINT_CATEGORY, host);
+    } else {
+      recordException(OTLP_ENDPOINT_CATEGORY, host, OTLP_FAILED_EXCEPTION_TYPE);
     }
     resultCallback(result);
   };

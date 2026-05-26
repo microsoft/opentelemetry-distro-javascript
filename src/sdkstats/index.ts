@@ -36,13 +36,24 @@ export { SdkStatsManager } from "./manager.js";
 
 export {
   REQUEST_SUCCESS_NAME,
+  REQUEST_FAILURE_NAME,
+  REQUEST_DURATION_NAME,
+  RETRY_COUNT_NAME,
+  THROTTLE_COUNT_NAME,
+  EXCEPTION_COUNT_NAME,
   NETWORK_METRIC_NAMES,
   recordSuccess,
+  recordFailure,
+  recordRetry,
+  recordThrottle,
+  recordException,
+  recordDuration,
+  classifyStatusCode,
   drain,
   shortHost,
   _resetAllForTest as _resetNetworkStatsForTest,
 } from "./networkStats.js";
-export type { NetworkMetricName, NetworkKey } from "./networkStats.js";
+export type { NetworkMetricName, NetworkKey, StatusCodeKind } from "./networkStats.js";
 
 export {
   NetworkStatsSpanExporter,

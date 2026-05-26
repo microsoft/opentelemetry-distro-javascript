@@ -18,7 +18,16 @@ import type { ObservableResult } from "@opentelemetry/api";
 
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
 import { getSdkStatsFeatureFlags, getSdkStatsInstrumentationFlags } from "./state.js";
-import { REQUEST_SUCCESS_NAME, drain, type NetworkMetricName } from "./networkStats.js";
+import {
+  REQUEST_SUCCESS_NAME,
+  REQUEST_FAILURE_NAME,
+  REQUEST_DURATION_NAME,
+  RETRY_COUNT_NAME,
+  THROTTLE_COUNT_NAME,
+  EXCEPTION_COUNT_NAME,
+  drain,
+  type NetworkMetricName,
+} from "./networkStats.js";
 
 /**
  * Feature SDKStats `type` dimension values, per the Application Insights
@@ -40,6 +49,15 @@ interface NetworkGaugeSpec {
   metric: NetworkMetricName;
   unit: string;
   description: string;
+  /**
+   * Names of the per-key dimensions for this metric, in the order they
+   * are encoded in the {@link NetworkKey} returned by `drain()`. The
+   * first two entries are always `endpoint` and `host`; the third (if
+   * present) is `statusCode` (failure/retry/throttle) or
+   * `exceptionType` (exception). `Request_Success_Count` and
+   * `Request_Duration` have no third dimension.
+   */
+  keyAttributes: readonly string[];
 }
 
 const NETWORK_GAUGE_SPECS: readonly NetworkGaugeSpec[] = [
@@ -47,6 +65,37 @@ const NETWORK_GAUGE_SPECS: readonly NetworkGaugeSpec[] = [
     metric: REQUEST_SUCCESS_NAME,
     unit: "count",
     description: "Number of successful HTTP exports per endpoint",
+    keyAttributes: ["endpoint", "host"],
+  },
+  {
+    metric: REQUEST_FAILURE_NAME,
+    unit: "count",
+    description: "Number of failed HTTP exports per endpoint, broken down by status code",
+    keyAttributes: ["endpoint", "host", "statusCode"],
+  },
+  {
+    metric: REQUEST_DURATION_NAME,
+    unit: "ms",
+    description: "Average HTTP export request duration per endpoint",
+    keyAttributes: ["endpoint", "host"],
+  },
+  {
+    metric: RETRY_COUNT_NAME,
+    unit: "count",
+    description: "Number of HTTP exports that returned a retryable status code",
+    keyAttributes: ["endpoint", "host", "statusCode"],
+  },
+  {
+    metric: THROTTLE_COUNT_NAME,
+    unit: "count",
+    description: "Number of HTTP exports that returned a throttling status code (402/439)",
+    keyAttributes: ["endpoint", "host", "statusCode"],
+  },
+  {
+    metric: EXCEPTION_COUNT_NAME,
+    unit: "count",
+    description: "Number of HTTP exports that raised an exception (no HTTP response)",
+    keyAttributes: ["endpoint", "host", "exceptionType"],
   },
 ];
 
@@ -210,11 +259,14 @@ export class SdkStatsMetrics {
   private makeNetworkCallback(spec: NetworkGaugeSpec): (result: ObservableResult) => void {
     return (result: ObservableResult): void => {
       for (const [key, value] of drain(spec.metric)) {
-        const attrs: Record<string, string | number> = {
-          ...this.commonAttributes,
-          endpoint: key[0],
-          host: key[1],
-        };
+        const attrs: Record<string, string | number> = { ...this.commonAttributes };
+        for (let i = 0; i < spec.keyAttributes.length; i++) {
+          const name = spec.keyAttributes[i];
+          const part = key[i];
+          if (part !== undefined) {
+            attrs[name] = part;
+          }
+        }
         result.observe(value, attrs);
       }
     };

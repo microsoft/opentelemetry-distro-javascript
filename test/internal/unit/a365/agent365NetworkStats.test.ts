@@ -7,7 +7,12 @@ import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
 
 import { Agent365Exporter } from "../../../../src/a365/exporter/Agent365Exporter.js";
 import {
+  EXCEPTION_COUNT_NAME,
+  REQUEST_DURATION_NAME,
+  REQUEST_FAILURE_NAME,
   REQUEST_SUCCESS_NAME,
+  RETRY_COUNT_NAME,
+  THROTTLE_COUNT_NAME,
   _resetAllForTest,
   drain,
 } from "../../../../src/sdkstats/networkStats.js";
@@ -118,5 +123,91 @@ describe("Agent365Exporter network statsbeat", () => {
     await exportSpan(exporter);
 
     expect(drain(REQUEST_SUCCESS_NAME).size).toBe(0);
+  });
+
+  it("records request_failure_count with statusCode on a non-retryable, non-throttle 4xx", async () => {
+    fetchSpy.mockResolvedValue({ status: 404, headers: new Map() });
+
+    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    await exportSpan(exporter);
+
+    const failures = drain(REQUEST_FAILURE_NAME);
+    expect(failures.size).toBe(1);
+    const [key, count] = [...failures.entries()][0];
+    expect(key[0]).toBe("a365");
+    expect(key[2]).toBe("404");
+    expect(count).toBe(1);
+  });
+
+  it("records retry_count once per retryable response (with statusCode)", async () => {
+    fetchSpy.mockResolvedValue({ status: 503, headers: new Map() });
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((cb: () => void) => {
+      cb();
+      return 0 as unknown as NodeJS.Timeout;
+    }) as typeof setTimeout);
+
+    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    await exportSpan(exporter);
+
+    const retries = drain(RETRY_COUNT_NAME);
+    expect(retries.size).toBe(1);
+    const [key, count] = [...retries.entries()][0];
+    expect(key[2]).toBe("503");
+    // DEFAULT_MAX_RETRIES = 3 → 4 total attempts, all 503.
+    expect(count).toBe(4);
+  });
+
+  it("records throttle_count with statusCode on 429", async () => {
+    fetchSpy.mockResolvedValue({ status: 429, headers: new Map() });
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((cb: () => void) => {
+      cb();
+      return 0 as unknown as NodeJS.Timeout;
+    }) as typeof setTimeout);
+
+    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    await exportSpan(exporter);
+
+    // 429 is in both retry and throttle lists per the spec; we classify it
+    // as a retry (RETRY_STATUSES is checked first in classifyStatusCode).
+    // 439 is the pure throttle status. Validate that explicitly.
+    fetchSpy.mockResolvedValue({ status: 439, headers: new Map() });
+    _resetAllForTest();
+    await exportSpan(new Agent365Exporter({ tokenResolver: () => "tok" }));
+
+    const throttles = drain(THROTTLE_COUNT_NAME);
+    expect(throttles.size).toBe(1);
+    const [key] = [...throttles.entries()][0];
+    expect(key[2]).toBe("439");
+  });
+
+  it("records exception_count when fetch rejects", async () => {
+    fetchSpy.mockRejectedValue(new Error("boom"));
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((cb: () => void) => {
+      cb();
+      return 0 as unknown as NodeJS.Timeout;
+    }) as typeof setTimeout);
+
+    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    await exportSpan(exporter);
+
+    const exceptions = drain(EXCEPTION_COUNT_NAME);
+    expect(exceptions.size).toBe(1);
+    const [key, count] = [...exceptions.entries()][0];
+    expect(key[0]).toBe("a365");
+    // 4 attempts (initial + 3 retries) each throw.
+    expect(count).toBe(4);
+  });
+
+  it("records request_duration on each attempt regardless of outcome", async () => {
+    fetchSpy.mockResolvedValue({ status: 200, headers: new Map() });
+
+    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    await exportSpan(exporter);
+
+    const durations = drain(REQUEST_DURATION_NAME);
+    expect(durations.size).toBe(1);
+    const [key, avg] = [...durations.entries()][0];
+    expect(key[0]).toBe("a365");
+    expect(avg).toBeGreaterThanOrEqual(0);
   });
 });

@@ -5,9 +5,19 @@ import { describe, it, beforeEach, expect } from "vitest";
 import { MeterProvider } from "@opentelemetry/sdk-metrics";
 
 import {
+  EXCEPTION_COUNT_NAME,
+  REQUEST_DURATION_NAME,
+  REQUEST_FAILURE_NAME,
   REQUEST_SUCCESS_NAME,
+  RETRY_COUNT_NAME,
+  THROTTLE_COUNT_NAME,
   _resetAllForTest as _resetNetworkStatsForTest,
+  recordDuration,
+  recordException,
+  recordFailure,
+  recordRetry,
   recordSuccess,
+  recordThrottle,
 } from "../../../../src/sdkstats/networkStats.js";
 import {
   FEATURE_TYPE_FEATURE,
@@ -230,6 +240,59 @@ describe("sdkstats/metrics", () => {
         expect(dp.attributes.cikey).toBe("N/A");
         expect(dp.attributes.language).toBe("node");
       }
+
+      await meterProvider.shutdown();
+      _resetNetworkStatsForTest();
+    });
+
+    it("emits failure/retry/throttle/exception observations with the appropriate dimension and an avg duration", async () => {
+      _resetNetworkStatsForTest();
+      recordFailure("a365", "westus", 404);
+      recordRetry("a365", "westus", 503);
+      recordThrottle("a365", "westus", 439);
+      recordException("a365", "westus", "Timeout exception");
+      recordDuration("a365", "westus", 100);
+      recordDuration("a365", "westus", 200);
+
+      const { PeriodicExportingMetricReader } = await import("@opentelemetry/sdk-metrics");
+      const exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
+      const reader = new PeriodicExportingMetricReader({
+        exporter,
+        exportIntervalMillis: 60_000,
+      });
+      const meterProvider = new MeterProvider({ readers: [reader] });
+      new SdkStatsMetrics(meterProvider);
+
+      await meterProvider.forceFlush();
+
+      const byName = (name: string) =>
+        exporter
+          .getMetrics()
+          .flatMap((rm) => rm.scopeMetrics.flatMap((sm) => sm.metrics))
+          .filter((m) => m.descriptor.name === name)
+          .flatMap((m) => m.dataPoints);
+
+      const failures = byName(REQUEST_FAILURE_NAME);
+      expect(failures).toHaveLength(1);
+      expect(failures[0].attributes.statusCode).toBe("404");
+
+      const retries = byName(RETRY_COUNT_NAME);
+      expect(retries[0].attributes.statusCode).toBe("503");
+
+      const throttles = byName(THROTTLE_COUNT_NAME);
+      expect(throttles[0].attributes.statusCode).toBe("439");
+
+      const exceptions = byName(EXCEPTION_COUNT_NAME);
+      expect(exceptions[0].attributes.exceptionType).toBe("Timeout exception");
+
+      const durations = byName(REQUEST_DURATION_NAME);
+      expect(durations).toHaveLength(1);
+      expect(durations[0].value).toBe(150);
+      expect(durations[0].attributes.endpoint).toBe("a365");
+      expect(durations[0].attributes.host).toBe("westus");
+      // Duration has no statusCode / exceptionType dimension.
+      expect(durations[0].attributes.statusCode).toBeUndefined();
+      expect(durations[0].attributes.exceptionType).toBeUndefined();
 
       await meterProvider.shutdown();
       _resetNetworkStatsForTest();
