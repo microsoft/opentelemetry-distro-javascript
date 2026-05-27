@@ -114,11 +114,9 @@ export class ApplyGuardrailScope extends OpenTelemetryScope {
       details.externalEventId,
     );
 
-    // Request context
+    // Request context (conversation/channel only — raw input content is NOT
+    // recorded implicitly; use recordContentInput() for explicit opt-in)
     if (request) {
-      if (typeof request.content === "string") {
-        this.setTagMaybe(OpenTelemetryConstants.SECURITY_CONTENT_INPUT_VALUE_KEY, request.content);
-      }
       this.setTagMaybe(OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY, request.conversationId);
       if (request.channel) {
         this.setTagMaybe(OpenTelemetryConstants.CHANNEL_NAME_KEY, request.channel.name);
@@ -136,6 +134,17 @@ export class ApplyGuardrailScope extends OpenTelemetryScope {
   public recordDecision(decisionType: GuardrailDecisionType, reason?: string): void {
     this.setTagMaybe(OpenTelemetryConstants.SECURITY_DECISION_TYPE_KEY, decisionType);
     this.setTagMaybe(OpenTelemetryConstants.SECURITY_DECISION_REASON_KEY, reason);
+  }
+
+  /**
+   * Records the raw input content value for the guardrail evaluation (opt-in).
+   * Callers should only use this when raw content recording is explicitly desired,
+   * as guardrail inputs may contain sensitive or policy-violating user content.
+   * Prefer contentInputHash on GuardrailDetails for forensic correlation.
+   * @param inputValue The raw input content before guardrail processing.
+   */
+  public recordContentInput(inputValue: string): void {
+    this.setTagMaybe(OpenTelemetryConstants.SECURITY_CONTENT_INPUT_VALUE_KEY, inputValue);
   }
 
   /**
