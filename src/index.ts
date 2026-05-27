@@ -30,6 +30,7 @@ export {
   ExecuteToolScope,
   InferenceScope,
   OutputScope,
+  ApplyGuardrailScope,
   OpenTelemetryConstants,
   MessageRole,
   FinishReason,
@@ -37,6 +38,9 @@ export {
   InvocationRole,
   InferenceOperationType,
   DEFAULT_FINISH_REASON,
+  GuardrailDecisionType,
+  GuardrailRiskSeverity,
+  GuardrailTargetType,
   isParentSpanRef,
   createContextWithParentSpanRef,
   runWithParentSpanRef,
@@ -80,6 +84,8 @@ export type {
   ToolCallResponsePart,
   ReasoningPart,
   HeadersCarrier,
+  GuardrailDetails,
+  GuardrailFinding,
 } from "./a365/index.js";
 
 // ── Re-exports from A365 hosting utilities ──────────────────────────────────

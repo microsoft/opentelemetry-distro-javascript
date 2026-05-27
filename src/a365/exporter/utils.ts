@@ -12,6 +12,7 @@ import {
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_MICROSOFT_TENANT_ID,
+  GEN_AI_OPERATION_APPLY_GUARDRAIL,
   GEN_AI_OPERATION_CHAT,
   GEN_AI_OPERATION_EXECUTE_TOOL,
   GEN_AI_OPERATION_INVOKE_AGENT,
@@ -33,6 +34,7 @@ export const GEN_AI_OPERATION_NAMES: ReadonlySet<string> = new Set([
   GEN_AI_OPERATION_INVOKE_AGENT, // 'invoke_agent'
   GEN_AI_OPERATION_EXECUTE_TOOL, // 'execute_tool'
   GEN_AI_OPERATION_OUTPUT_MESSAGES, // 'output_messages'
+  GEN_AI_OPERATION_APPLY_GUARDRAIL, // 'apply_guardrail'
   GEN_AI_OPERATION_CHAT, // 'chat'
   "Chat", // InferenceOperationType.CHAT
   "TextCompletion", // InferenceOperationType.TEXT_COMPLETION

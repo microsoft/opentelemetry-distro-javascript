@@ -7,7 +7,7 @@
  * Adapted from microsoft/Agent365-nodejs agents-a365-observability/src/tracing/scopes/OpenTelemetryScope.ts
  */
 
-import type { Span, SpanContext, AttributeValue, TimeInput } from "@opentelemetry/api";
+import type { Span, SpanContext, AttributeValue, TimeInput, Attributes } from "@opentelemetry/api";
 import { trace, SpanKind, SpanStatusCode, context } from "@opentelemetry/api";
 import { OpenTelemetryConstants } from "../constants.js";
 import type {
@@ -211,6 +211,15 @@ export abstract class OpenTelemetryScope {
         [name]: value as string | number | boolean | string[] | number[],
       });
     }
+  }
+
+  /**
+   * Adds an event to the current span.
+   * @param name The event name
+   * @param attributes Optional event attributes
+   */
+  protected addEvent(name: string, attributes?: Attributes): void {
+    this.span.addEvent(name, attributes);
   }
 
   /**

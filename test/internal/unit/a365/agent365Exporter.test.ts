@@ -919,6 +919,105 @@ describe("Agent365Exporter", () => {
       );
     });
   });
+
+  it("exports ApplyGuardrailScope span with all guardrail attributes and finding event", async () => {
+    const exporter = new Agent365Exporter({
+      tokenResolver: () => "tok-guardrail",
+    });
+
+    const spans = [
+      makeSpan({
+        name: "apply_guardrail Azure Content Safety llm_input",
+        attributes: {
+          "gen_ai.operation.name": "apply_guardrail",
+          "microsoft.tenant.id": TENANT_ID,
+          "gen_ai.agent.id": AGENT_ID,
+          "gen_ai.agent.name": "Guardrail Agent",
+          // Guardian attributes
+          "microsoft.guardian.id": "azure-content-safety-001",
+          "microsoft.guardian.name": "Azure Content Safety",
+          "microsoft.guardian.provider.name": "Azure",
+          "microsoft.guardian.version": "2.0.0",
+          // Decision attributes
+          "microsoft.security.decision.type": "deny",
+          "microsoft.security.target.type": "llm_input",
+          "microsoft.security.target.id": "msg-12345",
+          "microsoft.security.decision.reason": "Content violates hate speech policy",
+          "microsoft.security.decision.code": "HATE_SPEECH_001",
+          // Policy attributes
+          "microsoft.security.policy.id": "policy-abc",
+          "microsoft.security.policy.name": "Content Safety Policy",
+          "microsoft.security.policy.version": "1.2.0",
+          // Content attributes
+          "microsoft.security.content.input.hash": "sha256:abc123def456",
+          "microsoft.security.content.modified": false,
+          "microsoft.security.content.output.value": "sanitized-hash-output",
+          "microsoft.security.external_event_id": "ext-event-789",
+        },
+        events: [
+          {
+            name: "microsoft.security.finding",
+            time: [Math.floor(Date.now() / 1000), 0],
+            attributes: {
+              "microsoft.security.risk.category": "hate_speech",
+              "microsoft.security.risk.severity": "high",
+              "microsoft.security.policy.decision.type": "deny",
+              "microsoft.security.policy.id": "policy-abc",
+              "microsoft.security.risk.score": 0.95,
+            },
+          },
+        ],
+      }),
+    ];
+
+    const result = await new Promise<number>((resolve) => {
+      exporter.export(spans, (r) => resolve(r.code));
+    });
+    assert.strictEqual(result, ExportResultCode.SUCCESS);
+    assert.strictEqual(fetchSpy.mock.calls.length, 1);
+
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    const exportedSpan = body.resourceSpans[0].scopeSpans[0].spans[0];
+
+    // Verify span name
+    assert.strictEqual(exportedSpan.name, "apply_guardrail Azure Content Safety llm_input");
+
+    // Verify guardrail attributes survived export
+    assert.strictEqual(
+      exportedSpan.attributes["microsoft.guardian.id"],
+      "azure-content-safety-001",
+    );
+    assert.strictEqual(exportedSpan.attributes["microsoft.guardian.name"], "Azure Content Safety");
+    assert.strictEqual(exportedSpan.attributes["microsoft.security.decision.type"], "deny");
+    assert.strictEqual(exportedSpan.attributes["microsoft.security.target.type"], "llm_input");
+    assert.strictEqual(exportedSpan.attributes["microsoft.security.policy.id"], "policy-abc");
+    assert.strictEqual(
+      exportedSpan.attributes["microsoft.security.content.input.hash"],
+      "sha256:abc123def456",
+    );
+    assert.strictEqual(exportedSpan.attributes["microsoft.security.content.modified"], false);
+    assert.strictEqual(
+      exportedSpan.attributes["microsoft.security.content.output.value"],
+      "sanitized-hash-output",
+    );
+    assert.strictEqual(
+      exportedSpan.attributes["microsoft.security.external_event_id"],
+      "ext-event-789",
+    );
+
+    // Verify finding event survived export
+    assert.strictEqual(exportedSpan.events.length, 1);
+    assert.strictEqual(exportedSpan.events[0].name, "microsoft.security.finding");
+    assert.strictEqual(
+      exportedSpan.events[0].attributes["microsoft.security.risk.category"],
+      "hate_speech",
+    );
+    assert.strictEqual(
+      exportedSpan.events[0].attributes["microsoft.security.risk.severity"],
+      "high",
+    );
+    assert.strictEqual(exportedSpan.events[0].attributes["microsoft.security.risk.score"], 0.95);
+  });
 });
 
 describe("Exporter utils", () => {

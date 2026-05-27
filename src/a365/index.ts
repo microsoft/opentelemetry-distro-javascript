@@ -17,6 +17,7 @@ export {
   ExecuteToolScope,
   InferenceScope,
   OutputScope,
+  ApplyGuardrailScope,
 } from "./scopes/index.js";
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -30,6 +31,9 @@ export {
   InvocationRole,
   InferenceOperationType,
   DEFAULT_FINISH_REASON,
+  GuardrailDecisionType,
+  GuardrailRiskSeverity,
+  GuardrailTargetType,
 } from "./contracts.js";
 export type {
   ChatMessage,
@@ -58,6 +62,8 @@ export type {
   SpanDetails,
   ParentSpanRef,
   ParentContext,
+  GuardrailDetails,
+  GuardrailFinding,
 } from "./contracts.js";
 
 // ── Context propagation ─────────────────────────────────────────────────────
