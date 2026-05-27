@@ -16,7 +16,7 @@ import {
   GEN_AI_OPERATION_INVOKE_AGENT,
 } from "../../index.js";
 import { serializeMessages, safeSerializeToJson } from "../../../a365/message-utils.js";
-import { MessageRole, A365_MESSAGE_SCHEMA_VERSION } from "../../../a365/contracts.js";
+import { MessageRole, DEFAULT_FINISH_REASON } from "../../../a365/contracts.js";
 import type {
   ChatMessage,
   OutputMessage,
@@ -363,8 +363,13 @@ function getToolCallId(block: Record<string, unknown>): string | undefined {
 function wrapRawContentAsMessages(raw: unknown, role: MessageRole): InputMessages | OutputMessages {
   const content = typeof raw === "string" ? raw : safeJsonDumps(raw);
   return {
-    version: A365_MESSAGE_SCHEMA_VERSION,
-    messages: [{ role, parts: [{ type: "text", content }] }],
+    messages: [
+      {
+        role,
+        parts: [{ type: "text", content }],
+        finish_reason: role === MessageRole.ASSISTANT ? DEFAULT_FINISH_REASON : undefined,
+      },
+    ],
   };
 }
 
@@ -456,7 +461,7 @@ export function buildStructuredInputMessages(arr: OpenAIInputMessage[]): InputMe
     messages.push({ role, parts });
   }
 
-  return { version: A365_MESSAGE_SCHEMA_VERSION, messages };
+  return { messages };
 }
 
 /**
@@ -491,7 +496,7 @@ export function buildStructuredOutputMessages(arr: OpenAIOutputItem[]): OutputMe
     });
   }
 
-  return { version: A365_MESSAGE_SCHEMA_VERSION, messages };
+  return { messages };
 }
 
 /**

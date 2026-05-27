@@ -1229,18 +1229,15 @@ describe("Exporter utils", () => {
 
     it("should truncate blob parts in message attributes", () => {
       const blobContent = "b".repeat(MAX_SPAN_SIZE_BYTES);
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [
-          {
-            role: "user",
-            parts: [
-              { type: "blob", modality: "image", mime_type: "image/png", content: blobContent },
-              { type: "text", content: "Keep this text" },
-            ],
-          },
-        ],
-      });
+      const messageWrapper = JSON.stringify([
+        {
+          role: "user",
+          parts: [
+            { type: "blob", modality: "image", mime_type: "image/png", content: blobContent },
+            { type: "text", content: "Keep this text" },
+          ],
+        },
+      ]);
       const span = {
         attributes: {
           "gen_ai.input.messages": messageWrapper,
@@ -1251,80 +1248,71 @@ describe("Exporter utils", () => {
       const size = Buffer.byteLength(JSON.stringify(result), "utf8");
       assert.ok(size <= MAX_SPAN_SIZE_BYTES);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      assert.strictEqual(parsed.messages[0].parts[0].content, "[blob truncated]");
-      assert.strictEqual(parsed.messages[0].parts[1].content, "Keep this text");
+      assert.strictEqual(parsed[0].parts[0].content, "[blob truncated]");
+      assert.strictEqual(parsed[0].parts[1].content, "Keep this text");
       assert.strictEqual(result.attributes!["small_attr"], "keep me");
     });
 
     it("should shrink tool_call arguments with sentinel", () => {
       const largeArgs = { data: "x".repeat(MAX_SPAN_SIZE_BYTES) };
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [
-          {
-            role: "assistant",
-            parts: [
-              { type: "tool_call", name: "search", id: "call_1", arguments: largeArgs },
-              { type: "text", content: "short text" },
-            ],
-          },
-        ],
-      });
+      const messageWrapper = JSON.stringify([
+        {
+          role: "assistant",
+          parts: [
+            { type: "tool_call", name: "search", id: "call_1", arguments: largeArgs },
+            { type: "text", content: "short text" },
+          ],
+        },
+      ]);
       const span = { attributes: { "gen_ai.input.messages": messageWrapper } };
       const result = truncateSpan(span);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      assert.strictEqual(parsed.messages[0].parts[0].arguments, "[truncated]");
-      assert.strictEqual(parsed.messages[0].parts[0].name, "search");
-      assert.strictEqual(parsed.messages[0].parts[1].content, "short text");
+      assert.strictEqual(parsed[0].parts[0].arguments, "[truncated]");
+      assert.strictEqual(parsed[0].parts[0].name, "search");
+      assert.strictEqual(parsed[0].parts[1].content, "short text");
     });
 
     it("should shrink tool_call_response response with sentinel", () => {
       const largeResponse = { data: "x".repeat(MAX_SPAN_SIZE_BYTES) };
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [
-          {
-            role: "tool",
-            parts: [
-              { type: "tool_call_response", id: "call_1", response: largeResponse },
-              { type: "text", content: "short text" },
-            ],
-          },
-        ],
-      });
+      const messageWrapper = JSON.stringify([
+        {
+          role: "tool",
+          parts: [
+            { type: "tool_call_response", id: "call_1", response: largeResponse },
+            { type: "text", content: "short text" },
+          ],
+        },
+      ]);
       const span = { attributes: { "gen_ai.input.messages": messageWrapper } };
       const result = truncateSpan(span);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      assert.strictEqual(parsed.messages[0].parts[0].response, "[truncated]");
-      assert.strictEqual(parsed.messages[0].parts[0].id, "call_1");
-      assert.strictEqual(parsed.messages[0].parts[1].content, "short text");
+      assert.strictEqual(parsed[0].parts[0].response, "[truncated]");
+      assert.strictEqual(parsed[0].parts[0].id, "call_1");
+      assert.strictEqual(parsed[0].parts[1].content, "short text");
     });
 
     it("should shrink server_tool_call payload with sentinel", () => {
       const largePayload = { type: "web_search", query: "x".repeat(MAX_SPAN_SIZE_BYTES) };
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [
-          {
-            role: "assistant",
-            parts: [
-              {
-                type: "server_tool_call",
-                name: "web_search",
-                id: "stc_1",
-                server_tool_call: largePayload,
-              },
-              { type: "text", content: "keep me" },
-            ],
-          },
-        ],
-      });
+      const messageWrapper = JSON.stringify([
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "server_tool_call",
+              name: "web_search",
+              id: "stc_1",
+              server_tool_call: largePayload,
+            },
+            { type: "text", content: "keep me" },
+          ],
+        },
+      ]);
       const span = { attributes: { "gen_ai.input.messages": messageWrapper } };
       const result = truncateSpan(span);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      assert.strictEqual(parsed.messages[0].parts[0].server_tool_call, "[truncated]");
-      assert.strictEqual(parsed.messages[0].parts[0].name, "web_search");
-      assert.strictEqual(parsed.messages[0].parts[1].content, "keep me");
+      assert.strictEqual(parsed[0].parts[0].server_tool_call, "[truncated]");
+      assert.strictEqual(parsed[0].parts[0].name, "web_search");
+      assert.strictEqual(parsed[0].parts[1].content, "keep me");
     });
 
     it("should shrink server_tool_call_response payload with sentinel", () => {
@@ -1332,51 +1320,46 @@ describe("Exporter utils", () => {
         type: "web_search_result",
         results: "x".repeat(MAX_SPAN_SIZE_BYTES),
       };
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [
-          {
-            role: "tool",
-            parts: [
-              {
-                type: "server_tool_call_response",
-                id: "stc_1",
-                server_tool_call_response: largePayload,
-              },
-              { type: "text", content: "keep me" },
-            ],
-          },
-        ],
-      });
+      const messageWrapper = JSON.stringify([
+        {
+          role: "tool",
+          parts: [
+            {
+              type: "server_tool_call_response",
+              id: "stc_1",
+              server_tool_call_response: largePayload,
+            },
+            { type: "text", content: "keep me" },
+          ],
+        },
+      ]);
       const span = { attributes: { "gen_ai.input.messages": messageWrapper } };
       const result = truncateSpan(span);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      assert.strictEqual(parsed.messages[0].parts[0].server_tool_call_response, "[truncated]");
-      assert.strictEqual(parsed.messages[0].parts[0].id, "stc_1");
-      assert.strictEqual(parsed.messages[0].parts[1].content, "keep me");
+      assert.strictEqual(parsed[0].parts[0].server_tool_call_response, "[truncated]");
+      assert.strictEqual(parsed[0].parts[0].id, "stc_1");
+      assert.strictEqual(parsed[0].parts[1].content, "keep me");
     });
 
     it("should trim text content in message attributes when oversized", () => {
       const largeText = "y".repeat(MAX_SPAN_SIZE_BYTES);
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [{ role: "user", parts: [{ type: "text", content: largeText }] }],
-      });
+      const messageWrapper = JSON.stringify([
+        { role: "user", parts: [{ type: "text", content: largeText }] },
+      ]);
       const span = { attributes: { "gen_ai.input.messages": messageWrapper } };
       const result = truncateSpan(span);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      assert.ok(parsed.messages[0].parts[0].content.includes("… [truncated]"));
-      assert.ok(parsed.messages[0].parts[0].content.length < largeText.length);
+      assert.ok(parsed[0].parts[0].content.includes("… [truncated]"));
+      assert.ok(parsed[0].parts[0].content.length < largeText.length);
       const spanSize = Buffer.byteLength(JSON.stringify(result), "utf8");
       assert.ok(spanSize <= MAX_SPAN_SIZE_BYTES);
     });
 
     it("should trim utf8 text content without splitting code points", () => {
       const largeEmojiText = "🙂".repeat(90 * 1024);
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [{ role: "user", parts: [{ type: "text", content: largeEmojiText }] }],
-      });
+      const messageWrapper = JSON.stringify([
+        { role: "user", parts: [{ type: "text", content: largeEmojiText }] },
+      ]);
       const span = {
         traceId: "00000000000000000000000000000001",
         spanId: "0000000000000002",
@@ -1392,7 +1375,7 @@ describe("Exporter utils", () => {
       };
       const result = truncateSpan(span);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      const trimmedContent = parsed.messages[0].parts[0].content as string;
+      const trimmedContent = parsed[0].parts[0].content as string;
       assert.ok(trimmedContent.includes("… [truncated]"));
       const prefix = trimmedContent.slice(0, -"… [truncated]".length);
       assert.ok(Array.from(prefix).every((cp: string) => cp === "🙂"));
@@ -1434,10 +1417,7 @@ describe("Exporter utils", () => {
         content: "x".repeat(blobSize),
       }));
       const textPart = { type: "text" as const, content: "y".repeat(1024) };
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [{ role: "user", parts: [...blobParts, textPart] }],
-      });
+      const messageWrapper = JSON.stringify([{ role: "user", parts: [...blobParts, textPart] }]);
       const span = {
         traceId: "00000000000000000000000000000001",
         spanId: "0000000000000002",
@@ -1452,7 +1432,7 @@ describe("Exporter utils", () => {
       const resultSize = Buffer.byteLength(JSON.stringify(result), "utf8");
       assert.ok(resultSize <= MAX_SPAN_SIZE_BYTES);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      const sentinelCount = parsed.messages[0].parts.filter(
+      const sentinelCount = parsed[0].parts.filter(
         (p: Record<string, unknown>) => p.type === "blob" && p.content === "[blob truncated]",
       ).length;
       assert.ok(sentinelCount > 0);
@@ -1466,10 +1446,7 @@ describe("Exporter utils", () => {
         { type: "text", content: "c".repeat(100 * 1024) },
         { type: "reasoning", content: "d".repeat(100 * 1024) },
       ];
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [{ role: "user", parts: regularParts }],
-      });
+      const messageWrapper = JSON.stringify([{ role: "user", parts: regularParts }]);
       const span = {
         traceId: "00000000000000000000000000000001",
         spanId: "0000000000000002",
@@ -1484,7 +1461,7 @@ describe("Exporter utils", () => {
       const resultSize = Buffer.byteLength(JSON.stringify(result), "utf8");
       assert.ok(resultSize <= MAX_SPAN_SIZE_BYTES);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      const truncatedCount = parsed.messages[0].parts.filter(
+      const truncatedCount = parsed[0].parts.filter(
         (part: Record<string, unknown>) =>
           typeof part.content === "string" && (part.content as string).includes("… [truncated]"),
       ).length;
@@ -1517,10 +1494,9 @@ describe("Exporter utils", () => {
 
     it("should only trim the excess bytes, preserving as much content as possible", () => {
       const textSize = MAX_SPAN_SIZE_BYTES + 5000;
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [{ role: "user", parts: [{ type: "text", content: "x".repeat(textSize) }] }],
-      });
+      const messageWrapper = JSON.stringify([
+        { role: "user", parts: [{ type: "text", content: "x".repeat(textSize) }] },
+      ]);
       const span = {
         traceId: "00000000000000000000000000000001",
         spanId: "0000000000000002",
@@ -1533,7 +1509,7 @@ describe("Exporter utils", () => {
       };
       const result = truncateSpan(span);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      const trimmedContent = parsed.messages[0].parts[0].content as string;
+      const trimmedContent = parsed[0].parts[0].content as string;
       assert.ok(trimmedContent.includes("… [truncated]"));
       const trimmedLength = Buffer.byteLength(trimmedContent, "utf8");
       assert.ok(trimmedLength > textSize * 0.9);
@@ -1543,18 +1519,15 @@ describe("Exporter utils", () => {
     it("should leave other fields untouched when trimming the largest is sufficient", () => {
       const largeContent = "L".repeat(300 * 1024);
       const mediumContent = "M".repeat(50 * 1024);
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [
-          {
-            role: "user",
-            parts: [
-              { type: "text", content: largeContent },
-              { type: "text", content: mediumContent },
-            ],
-          },
-        ],
-      });
+      const messageWrapper = JSON.stringify([
+        {
+          role: "user",
+          parts: [
+            { type: "text", content: largeContent },
+            { type: "text", content: mediumContent },
+          ],
+        },
+      ]);
       const span = {
         traceId: "00000000000000000000000000000001",
         spanId: "0000000000000002",
@@ -1567,8 +1540,8 @@ describe("Exporter utils", () => {
       };
       const result = truncateSpan(span);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      assert.ok((parsed.messages[0].parts[0].content as string).includes("… [truncated]"));
-      assert.strictEqual(parsed.messages[0].parts[1].content, mediumContent);
+      assert.ok((parsed[0].parts[0].content as string).includes("… [truncated]"));
+      assert.strictEqual(parsed[0].parts[1].content, mediumContent);
       assert.ok(Buffer.byteLength(JSON.stringify(result), "utf8") <= MAX_SPAN_SIZE_BYTES);
     });
 
@@ -1603,10 +1576,7 @@ describe("Exporter utils", () => {
         mime_type: "image/png",
         content: "x".repeat(blobSize),
       }));
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [{ role: "user", parts: blobParts }],
-      });
+      const messageWrapper = JSON.stringify([{ role: "user", parts: blobParts }]);
       const span = {
         traceId: "00000000000000000000000000000001",
         spanId: "0000000000000002",
@@ -1621,10 +1591,10 @@ describe("Exporter utils", () => {
       const resultSize = Buffer.byteLength(JSON.stringify(result), "utf8");
       assert.ok(resultSize <= MAX_SPAN_SIZE_BYTES);
       const parsed = JSON.parse(result.attributes!["gen_ai.input.messages"] as string);
-      const sentinelCount = parsed.messages[0].parts.filter(
+      const sentinelCount = parsed[0].parts.filter(
         (p: Record<string, unknown>) => p.content === "[blob truncated]",
       ).length;
-      const preservedCount = parsed.messages[0].parts.filter(
+      const preservedCount = parsed[0].parts.filter(
         (p: Record<string, unknown>) => p.content !== "[blob truncated]",
       ).length;
       assert.ok(sentinelCount > 0);
@@ -1633,14 +1603,11 @@ describe("Exporter utils", () => {
 
     it("should use structured overflow sentinel for message attributes in phase 2 fallback", () => {
       const hugeArray = new Array(100000).fill(42);
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [
-          { role: "user", parts: [{ type: "text", content: "hello user" }] },
-          { role: "assistant", parts: [{ type: "text", content: "hello back" }] },
-          { role: "user", parts: [{ type: "text", content: "another msg" }] },
-        ],
-      });
+      const messageWrapper = JSON.stringify([
+        { role: "user", parts: [{ type: "text", content: "hello user" }] },
+        { role: "assistant", parts: [{ type: "text", content: "hello back" }] },
+        { role: "user", parts: [{ type: "text", content: "another msg" }] },
+      ]);
       const span = {
         traceId: "00000000000000000000000000000001",
         spanId: "0000000000000002",
@@ -1657,11 +1624,11 @@ describe("Exporter utils", () => {
       const result = truncateSpan(span);
       const sentinelValue = result.attributes!["gen_ai.input.messages"] as string;
       const parsed = JSON.parse(sentinelValue);
-      assert.strictEqual(parsed.version, "0.1.0");
-      assert.strictEqual(parsed.messages.length, 1);
-      assert.strictEqual(parsed.messages[0].role, "system");
-      assert.strictEqual(parsed.messages[0].parts[0].type, "text");
-      assert.ok(parsed.messages[0].parts[0].content.includes("3 messages exceeded limit"));
+      assert.ok(Array.isArray(parsed));
+      assert.strictEqual(parsed.length, 1);
+      assert.strictEqual(parsed[0].role, "system");
+      assert.strictEqual(parsed[0].parts[0].type, "text");
+      assert.ok(parsed[0].parts[0].content.includes("3 messages exceeded limit"));
     });
 
     it("should truncate oversized raw dict in gen_ai.output.messages", () => {
@@ -1693,16 +1660,13 @@ describe("Exporter utils", () => {
       assert.strictEqual(result.attributes!["gen_ai.output.messages"], smallDict);
     });
 
-    it("should use message-aware shrinking for versioned wrapper in gen_ai.output.messages", () => {
-      const messageWrapper = JSON.stringify({
-        version: "1.0",
-        messages: [
-          {
-            role: "assistant",
-            parts: [{ type: "text", content: "z".repeat(200 * 1024) }],
-          },
-        ],
-      });
+    it("should use message-aware shrinking for array wrapper in gen_ai.output.messages", () => {
+      const messageWrapper = JSON.stringify([
+        {
+          role: "assistant",
+          parts: [{ type: "text", content: "z".repeat(200 * 1024) }],
+        },
+      ]);
       const span = {
         attributes: {
           "gen_ai.output.messages": messageWrapper,
@@ -1713,9 +1677,9 @@ describe("Exporter utils", () => {
       const output = result.attributes!["gen_ai.output.messages"] as string;
       assert.notStrictEqual(output, "[overlimit]");
       const parsed = JSON.parse(output);
-      assert.strictEqual(parsed.version, "1.0");
-      assert.strictEqual(parsed.messages[0].parts[0].type, "text");
-      assert.ok(parsed.messages[0].parts[0].content.length < 200 * 1024);
+      assert.ok(Array.isArray(parsed));
+      assert.strictEqual(parsed[0].parts[0].type, "text");
+      assert.ok(parsed[0].parts[0].content.length < 200 * 1024);
       assert.ok(Buffer.byteLength(JSON.stringify(result), "utf8") <= MAX_SPAN_SIZE_BYTES);
     });
 
@@ -1724,7 +1688,7 @@ describe("Exporter utils", () => {
         role: "user",
         parts: [{ type: "text", content: "y".repeat(10000) }],
       }));
-      const messageWrapper = JSON.stringify({ version: "1.0", messages });
+      const messageWrapper = JSON.stringify(messages);
       const span = { attributes: { "gen_ai.input.messages": messageWrapper } };
       const result = truncateSpan(span);
       const size = Buffer.byteLength(JSON.stringify(result), "utf8");

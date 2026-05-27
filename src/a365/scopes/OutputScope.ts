@@ -9,11 +9,11 @@ import type {
   AgentDetails,
   UserDetails,
   OutputResponse,
+  OutputMessages,
   Request,
   SpanDetails,
   ResponseMessagesParam,
 } from "../contracts.js";
-import { A365_MESSAGE_SCHEMA_VERSION } from "../contracts.js";
 
 /**
  * Provides OpenTelemetry tracing scope for output message tracing.
@@ -96,8 +96,10 @@ export class OutputScope extends OpenTelemetryScope {
       return;
     }
     const normalized = normalizeOutputMessages(messages);
-    const wrapper = { version: A365_MESSAGE_SCHEMA_VERSION, messages: normalized.messages };
-    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY, serializeMessages(wrapper));
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY,
+      serializeMessages(normalized),
+    );
   }
 
   private _isRawDict(messages: ResponseMessagesParam): messages is Record<string, unknown> {
@@ -105,7 +107,7 @@ export class OutputScope extends OpenTelemetryScope {
       typeof messages === "object" &&
       messages !== null &&
       !Array.isArray(messages) &&
-      !("version" in messages && "messages" in messages)
+      !("messages" in messages && Array.isArray((messages as OutputMessages).messages))
     );
   }
 }

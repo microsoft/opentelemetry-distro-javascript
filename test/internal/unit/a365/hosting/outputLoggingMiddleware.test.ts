@@ -152,7 +152,7 @@ describe("OutputLoggingMiddleware", () => {
     const messages = outputSpan!.attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY];
     expect(messages).toBeDefined();
     expect(typeof messages).toBe("string");
-    expect(JSON.parse(messages as string).messages[0].parts[0].content).toBe("Hi there!");
+    expect(JSON.parse(messages as string)[0].parts[0].content).toBe("Hi there!");
   });
 
   it("should skip non-message activities", async () => {

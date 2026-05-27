@@ -17,8 +17,6 @@ import {
   GEN_AI_OPERATION_INVOKE_AGENT,
   GEN_AI_OPERATION_OUTPUT_MESSAGES,
 } from "../../genai/semconv.js";
-import { A365_MESSAGE_SCHEMA_VERSION } from "../contracts.js";
-
 // Message attribute keys that receive special truncation handling
 const MESSAGE_ATTR_KEYS: Set<string> = new Set([
   ATTR_GEN_AI_INPUT_MESSAGES,
@@ -198,23 +196,21 @@ function getSerializedSize(value: unknown): number {
 }
 
 /**
- * Build a versioned message wrapper indicating original messages were dropped.
+ * Build a sentinel message array indicating the original messages were dropped
+ * because the span exceeded the size limit.
  */
 function serializeOverflowSentinel(totalMessages: number): string {
-  return JSON.stringify({
-    version: A365_MESSAGE_SCHEMA_VERSION,
-    messages: [
-      {
-        role: MESSAGE_ROLE_SYSTEM,
-        parts: [
-          {
-            type: "text",
-            content: `[truncated: ${totalMessages} ${totalMessages === 1 ? "message" : "messages"} exceeded limit]`,
-          },
-        ],
-      },
-    ],
-  });
+  return JSON.stringify([
+    {
+      role: MESSAGE_ROLE_SYSTEM,
+      parts: [
+        {
+          type: "text",
+          content: `[truncated: ${totalMessages} ${totalMessages === 1 ? "message" : "messages"} exceeded limit]`,
+        },
+      ],
+    },
+  ]);
 }
 
 /**
@@ -265,10 +261,7 @@ function createBlobShrinkAction(
  */
 function collectShrinkActions(
   attributes: Record<string, unknown>,
-  parsedMessages: Map<
-    string,
-    { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }
-  >,
+  parsedMessages: Map<string, { messages: Array<{ parts: Array<Record<string, unknown>> }> }>,
 ): ShrinkAction[] {
   const actions: ShrinkAction[] = [];
 
@@ -279,8 +272,8 @@ function collectShrinkActions(
       if (!parsedMessages.has(key) && typeof attributes[key] === "string") {
         try {
           const parsed = JSON.parse(attributes[key] as string);
-          if (parsed && typeof parsed === "object" && Array.isArray(parsed.messages)) {
-            parsedMessages.set(key, parsed);
+          if (Array.isArray(parsed)) {
+            parsedMessages.set(key, { messages: parsed });
           }
         } catch {
           // Not valid JSON — will fall through to string trim
@@ -385,14 +378,11 @@ function collectShrinkActions(
 
 function flushParsedMessages(
   attributes: Record<string, unknown>,
-  parsedMessages: Map<
-    string,
-    { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }
-  >,
+  parsedMessages: Map<string, { messages: Array<{ parts: Array<Record<string, unknown>> }> }>,
 ): void {
   for (const [key, wrapper] of parsedMessages) {
     try {
-      attributes[key] = JSON.stringify(wrapper);
+      attributes[key] = JSON.stringify(wrapper.messages);
     } catch {
       // Leave the previous value intact
     }
@@ -401,16 +391,13 @@ function flushParsedMessages(
 
 function flushParsedMessage(
   attributes: Record<string, unknown>,
-  parsedMessages: Map<
-    string,
-    { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }
-  >,
+  parsedMessages: Map<string, { messages: Array<{ parts: Array<Record<string, unknown>> }> }>,
   key: string,
 ): void {
   const wrapper = parsedMessages.get(key);
   if (wrapper) {
     try {
-      attributes[key] = JSON.stringify(wrapper);
+      attributes[key] = JSON.stringify(wrapper.messages);
     } catch {
       // Leave the previous value intact
     }
@@ -420,10 +407,7 @@ function flushParsedMessage(
 function runShrinkPhase(
   span: OTLPSpanLike,
   attributes: Record<string, unknown>,
-  parsedMessages: Map<
-    string,
-    { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }
-  >,
+  parsedMessages: Map<string, { messages: Array<{ parts: Array<Record<string, unknown>> }> }>,
   currentSize: number,
 ): number {
   let nextSize = currentSize;
@@ -588,7 +572,7 @@ export function truncateSpan<T extends OTLPSpanLike>(spanDict: T): T {
 
     const parsedMessages = new Map<
       string,
-      { version: string; messages: Array<{ parts: Array<Record<string, unknown>> }> }
+      { messages: Array<{ parts: Array<Record<string, unknown>> }> }
     >();
 
     // Phase 1: iteratively shrink fields by size priority
@@ -614,8 +598,8 @@ export function truncateSpan<T extends OTLPSpanLike>(spanDict: T): T {
           } else if (typeof attributes[key] === "string") {
             try {
               const parsed = JSON.parse(attributes[key] as string);
-              if (parsed && Array.isArray(parsed.messages)) {
-                messageCount = parsed.messages.length;
+              if (Array.isArray(parsed)) {
+                messageCount = parsed.length;
               }
             } catch {
               /* not valid JSON */

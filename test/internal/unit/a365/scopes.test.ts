@@ -28,11 +28,7 @@ import type {
   InputMessages,
   OutputResponse,
 } from "../../../../src/a365/index.js";
-import {
-  InferenceOperationType,
-  MessageRole,
-  A365_MESSAGE_SCHEMA_VERSION,
-} from "../../../../src/a365/index.js";
+import { InferenceOperationType, MessageRole } from "../../../../src/a365/index.js";
 import { safeSerializeToJson } from "../../../../src/a365/message-utils.js";
 
 let sharedExporter: InMemorySpanExporter;
@@ -1079,10 +1075,10 @@ describe("Request content and message serialization (span attributes)", () => {
       const parsed = JSON.parse(
         attributes[OpenTelemetryConstants.GEN_AI_INPUT_MESSAGES_KEY] as string,
       );
-      expect(parsed.version).toBe("0.1.0");
-      expect(parsed.messages).toHaveLength(1);
-      expect(parsed.messages[0].role).toBe("user");
-      expect(parsed.messages[0].parts[0]).toEqual({ type: "text", content: "Hello agent" });
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].role).toBe("user");
+      expect(parsed[0].parts[0]).toEqual({ type: "text", content: "Hello agent" });
     });
 
     it("should record a string array as input message attributes", () => {
@@ -1097,14 +1093,14 @@ describe("Request content and message serialization (span attributes)", () => {
       const parsed = JSON.parse(
         attributes[OpenTelemetryConstants.GEN_AI_INPUT_MESSAGES_KEY] as string,
       );
-      expect(parsed.messages).toHaveLength(2);
-      expect(parsed.messages[0].parts[0].content).toBe("msg1");
-      expect(parsed.messages[1].parts[0].content).toBe("msg2");
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed).toHaveLength(2);
+      expect(parsed[0].parts[0].content).toBe("msg1");
+      expect(parsed[1].parts[0].content).toBe("msg2");
     });
 
     it("should record a structured InputMessages wrapper as-is", () => {
-      const wrapper: InputMessages = {
-        version: A365_MESSAGE_SCHEMA_VERSION,
+      const wrapper = {
         messages: [
           { role: MessageRole.SYSTEM, parts: [{ type: "text", content: "system prompt" }] },
         ],
@@ -1120,9 +1116,9 @@ describe("Request content and message serialization (span attributes)", () => {
       const parsed = JSON.parse(
         attributes[OpenTelemetryConstants.GEN_AI_INPUT_MESSAGES_KEY] as string,
       );
-      expect(parsed.version).toBe("0.1.0");
-      expect(parsed.messages).toHaveLength(1);
-      expect(parsed.messages[0].role).toBe("system");
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].role).toBe("system");
     });
 
     it("should not set input messages when content is undefined", () => {
@@ -1144,9 +1140,11 @@ describe("Request content and message serialization (span attributes)", () => {
       const parsed = JSON.parse(
         attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY] as string,
       );
-      expect(parsed.messages).toHaveLength(1);
-      expect(parsed.messages[0].role).toBe("assistant");
-      expect(parsed.messages[0].parts[0].content).toBe("single output");
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].role).toBe("assistant");
+      expect(parsed[0].parts[0].content).toBe("single output");
+      expect(parsed[0].finish_reason).toBe("stop");
     });
   });
 
@@ -1192,10 +1190,11 @@ describe("Request content and message serialization (span attributes)", () => {
       const parsed = JSON.parse(
         attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY] as string,
       );
-      expect(parsed.version).toBe(A365_MESSAGE_SCHEMA_VERSION);
-      expect(parsed.messages).toHaveLength(1);
-      expect(parsed.messages[0].role).toBe("assistant");
-      expect(parsed.messages[0].parts[0].content).toBe("Hello user");
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].role).toBe("assistant");
+      expect(parsed[0].parts[0].content).toBe("Hello user");
+      expect(parsed[0].finish_reason).toBe("stop");
     });
 
     it("should allow overwriting output messages via recordOutputMessages", () => {
@@ -1208,7 +1207,7 @@ describe("Request content and message serialization (span attributes)", () => {
       const parsed = JSON.parse(
         attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY] as string,
       );
-      expect(parsed.messages[0].parts[0].content).toBe("updated output");
+      expect(parsed[0].parts[0].content).toBe("updated output");
     });
 
     it("should handle raw dict as output messages", () => {

@@ -136,7 +136,6 @@ async function callLLM(
 
     // LLM decided to call a tool
     scope.recordOutputMessages({
-      version: "0.1.0",
       messages: [
         {
           role: MessageRole.ASSISTANT,

@@ -28,7 +28,7 @@ import {
   GEN_AI_OPERATION_INVOKE_AGENT,
 } from "../../index.js";
 import { serializeMessages, safeSerializeToJson } from "../../../a365/message-utils.js";
-import { MessageRole, A365_MESSAGE_SCHEMA_VERSION } from "../../../a365/contracts.js";
+import { MessageRole } from "../../../a365/contracts.js";
 import type {
   ChatMessage,
   OutputMessage,
@@ -144,10 +144,7 @@ export function setInputMessagesAttribute(run: Run, span: Span) {
   }
 
   if (chatMessages.length > 0) {
-    const wrapper: InputMessages = {
-      version: A365_MESSAGE_SCHEMA_VERSION,
-      messages: chatMessages,
-    };
+    const wrapper: InputMessages = { messages: chatMessages };
     span.setAttribute(ATTR_GEN_AI_INPUT_MESSAGES, serializeMessages(wrapper));
   }
 }
@@ -432,10 +429,7 @@ export function setOutputMessagesAttribute(run: Run, span: Span) {
   }
 
   if (outputMessages.length > 0) {
-    const wrapper: OutputMessages = {
-      version: A365_MESSAGE_SCHEMA_VERSION,
-      messages: outputMessages,
-    };
+    const wrapper: OutputMessages = { messages: outputMessages };
     span.setAttribute(ATTR_GEN_AI_OUTPUT_MESSAGES, serializeMessages(wrapper));
   }
 }

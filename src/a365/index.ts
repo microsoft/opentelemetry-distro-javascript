@@ -29,7 +29,7 @@ export {
   Modality,
   InvocationRole,
   InferenceOperationType,
-  A365_MESSAGE_SCHEMA_VERSION,
+  DEFAULT_FINISH_REASON,
 } from "./contracts.js";
 export type {
   ChatMessage,
