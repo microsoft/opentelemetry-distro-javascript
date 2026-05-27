@@ -25,7 +25,6 @@ import type {
   ToolCallDetails,
   InferenceDetails,
   UserDetails,
-  InputMessages,
   OutputResponse,
 } from "../../../../src/a365/index.js";
 import { InferenceOperationType, MessageRole } from "../../../../src/a365/index.js";
