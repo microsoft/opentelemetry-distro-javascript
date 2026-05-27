@@ -11,4 +11,3 @@ export {
   GenAIMainAgentLogRecordProcessor,
   GenAIMainAgentSpanProcessor,
 } from "./mainAgent/index.js";
-

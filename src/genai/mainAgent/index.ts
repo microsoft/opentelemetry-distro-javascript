@@ -8,7 +8,4 @@ export {
   GEN_AI_MAIN_AGENT_NAME_KEY,
   GEN_AI_MAIN_AGENT_VERSION_KEY,
 } from "./constants.js";
-export {
-  GenAIMainAgentLogRecordProcessor,
-  GenAIMainAgentSpanProcessor,
-} from "./processor.js";
+export { GenAIMainAgentLogRecordProcessor, GenAIMainAgentSpanProcessor } from "./processor.js";
