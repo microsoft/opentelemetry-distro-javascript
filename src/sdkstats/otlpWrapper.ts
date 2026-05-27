@@ -75,7 +75,10 @@ function wrapExport<T>(
   _items: T,
 ): void {
   const start = Date.now();
+  let settled = false;
   const settle = (result: ExportResult): void => {
+    if (settled) return;
+    settled = true;
     recordDuration(OTLP_ENDPOINT_CATEGORY, host, Date.now() - start);
     if (result.code === ExportResultCode.SUCCESS) {
       recordSuccess(OTLP_ENDPOINT_CATEGORY, host);
@@ -85,7 +88,14 @@ function wrapExport<T>(
     resultCallback(result);
   };
 
-  inner(settle);
+  try {
+    inner(settle);
+  } catch (err) {
+    settle({
+      code: ExportResultCode.FAILED,
+      error: err instanceof Error ? err : new Error(String(err)),
+    });
+  }
 }
 
 /**

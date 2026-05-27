@@ -157,8 +157,11 @@ describe("Agent365Exporter network statsbeat", () => {
     expect(count).toBe(4);
   });
 
-  it("records throttle_count with statusCode on 429", async () => {
-    fetchSpy.mockResolvedValue({ status: 429, headers: new Map() });
+  it("records throttle_count with statusCode on 439 (pure throttle status)", async () => {
+    // Per the SDKStats spec, THROTTLE_STATUSES = {402, 439}. 429 is classified
+    // as retry (not throttle) — classifyStatusCode checks THROTTLE_STATUSES
+    // first, then RETRY_STATUSES, and 429 only appears in the retry set.
+    fetchSpy.mockResolvedValue({ status: 439, headers: new Map() });
     vi.spyOn(globalThis, "setTimeout").mockImplementation(((cb: () => void) => {
       cb();
       return 0 as unknown as NodeJS.Timeout;
@@ -166,13 +169,6 @@ describe("Agent365Exporter network statsbeat", () => {
 
     const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
     await exportSpan(exporter);
-
-    // 429 is in both retry and throttle lists per the spec; we classify it
-    // as a retry (RETRY_STATUSES is checked first in classifyStatusCode).
-    // 439 is the pure throttle status. Validate that explicitly.
-    fetchSpy.mockResolvedValue({ status: 439, headers: new Map() });
-    _resetAllForTest();
-    await exportSpan(new Agent365Exporter({ tokenResolver: () => "tok" }));
 
     const throttles = drain(THROTTLE_COUNT_NAME);
     expect(throttles.size).toBe(1);

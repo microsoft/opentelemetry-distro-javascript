@@ -121,6 +121,29 @@ describe("sdkstats/otlpWrapper", () => {
       expect(flushSpy).toHaveBeenCalledOnce();
       expect(shutdownSpy).toHaveBeenCalledOnce();
     });
+
+    it("records exception + duration and surfaces FAILED when inner throws synchronously", async () => {
+      const boom = new Error("inner blew up");
+      const throwingInner: SpanExporter = {
+        export(): void {
+          throw boom;
+        },
+        shutdown: () => Promise.resolve(),
+        forceFlush: () => Promise.resolve(),
+      };
+      const wrapper = new NetworkStatsSpanExporter(throwingInner);
+
+      const result = await new Promise<ExportResult>((resolve) =>
+        wrapper.export([], (r) => resolve(r)),
+      );
+      expect(result.code).toBe(ExportResultCode.FAILED);
+      expect(result.error).toBe(boom);
+
+      const exceptions = drain(EXCEPTION_COUNT_NAME);
+      expect(exceptions.size).toBe(1);
+      expect([...exceptions.keys()][0]).toEqual([ENDPOINT, HOST, "ExporterFailed"]);
+      expect(drain(REQUEST_DURATION_NAME).size).toBe(1);
+    });
   });
 
   describe("NetworkStatsMetricExporter", () => {
