@@ -34,6 +34,10 @@ import {
 import { isOtlpEnabled, createOtlpComponents } from "../otlp/index.js";
 import { A365Configuration, Agent365Exporter, A365SpanProcessor } from "../a365/index.js";
 import { configureA365Logger } from "../a365/logging.js";
+import {
+  GenAIMainAgentLogRecordProcessor,
+  GenAIMainAgentSpanProcessor,
+} from "../genai/mainAgent/index.js";
 import { SdkStatsDistroFeature, SdkStatsManager, setSdkStatsFeature } from "../sdkstats/index.js";
 import type {
   MicrosoftOpenTelemetryOptions,
@@ -263,6 +267,18 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
   const spanProcessors: SpanProcessor[] = [...(options?.spanProcessors || [])];
   const logRecordProcessors: LogRecordProcessor[] = [...(options?.logRecordProcessors || [])];
   const customViews: ViewOptions[] = [...(options?.views || [])];
+
+  // ── GenAI main-agent propagation ─────────────────────────────────
+  // Prepend the main-agent processors so their on_start / on_emit run
+  // BEFORE any Batch* export processor appended later in the pipeline.
+  // This enriches each span/log once and the enriched attributes are
+  // then visible to Azure Monitor (and any other downstream exporter).
+  // Mirrors microsoft/opentelemetry-distro-python which gates these
+  // processors on `enable_azure_monitor`.
+  if (azureMonitorEnabled) {
+    spanProcessors.unshift(new GenAIMainAgentSpanProcessor());
+    logRecordProcessors.unshift(new GenAIMainAgentLogRecordProcessor());
+  }
 
   const metricReaders: MetricReader[] = [
     ...(metricHandler ? [metricHandler.getMetricReader()] : []),
