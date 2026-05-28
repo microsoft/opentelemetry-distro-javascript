@@ -19,7 +19,7 @@ export type TokenResolver = (
  * Provides additional fields (e.g. {@link TokenResolverContext.identity})
  * beyond what {@link TokenResolver} offers.
  * Must be fast and non-blocking (use internal caching elsewhere).
- * Return null/undefined to omit the Authorization header.
+ * Return null/undefined to skip the export for that agent/tenant group.
  */
 export type ContextualTokenResolver = (
   context: TokenResolverContext,

@@ -191,7 +191,7 @@ describe("ContextualTokenResolver", () => {
       exporter.export([span], (r) => resolve(r.code));
     });
 
-    // No fetch calls should be made when token is null
+    assert.strictEqual(result, ExportResultCode.SUCCESS);
     assert.strictEqual(fetchSpy.mock.calls.length, 0);
   });
 
@@ -205,6 +205,7 @@ describe("ContextualTokenResolver", () => {
       exporter.export([span], (r) => resolve(r.code));
     });
 
+    assert.strictEqual(result, ExportResultCode.SUCCESS);
     assert.strictEqual(fetchSpy.mock.calls.length, 0);
   });
 
