@@ -224,4 +224,29 @@ describe("ContextualTokenResolver", () => {
     assert.strictEqual(result, ExportResultCode.FAILED);
     assert.strictEqual(fetchSpy.mock.calls.length, 0);
   });
+
+  it("should not call contextualTokenResolver for spans without identity", async () => {
+    let called = false;
+    const exporter = new Agent365Exporter({
+      contextualTokenResolver: () => {
+        called = true;
+        return "token";
+      },
+    });
+
+    // Span with no tenant/agent ID — will be filtered out by partitionByIdentity
+    const span = makeSpan({
+      attributes: {
+        "gen_ai.operation.name": "invoke_agent",
+      },
+    });
+
+    const result = await new Promise<number>((resolve) => {
+      exporter.export([span], (r) => resolve(r.code));
+    });
+
+    assert.strictEqual(result, ExportResultCode.SUCCESS);
+    assert.strictEqual(called, false);
+    assert.strictEqual(fetchSpy.mock.calls.length, 0);
+  });
 });

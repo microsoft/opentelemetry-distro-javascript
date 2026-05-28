@@ -100,6 +100,13 @@ export class Agent365Exporter implements SpanExporter {
 
   constructor(options?: Agent365ExporterOptions) {
     this.options = new ResolvedExporterOptions(options);
+
+    if (!this.options.tokenResolver && !this.options.contextualTokenResolver) {
+      this.logger.warn(
+        "[Agent365Exporter] Neither tokenResolver nor contextualTokenResolver is set. " +
+          "All exports will be skipped until a resolver is configured.",
+      );
+    }
   }
 
   async export(
