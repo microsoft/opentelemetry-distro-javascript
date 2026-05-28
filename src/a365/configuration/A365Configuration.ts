@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { A365Options, ClusterCategory } from "./A365ConfigurationOptions.js";
+import type { ContextualTokenResolver } from "../exporter/Agent365ExporterOptions.js";
 import { getA365Logger } from "../logging.js";
 
 /**
@@ -71,6 +72,9 @@ export class A365Configuration {
     tenantId: string,
     authScopes?: string[],
   ) => string | Promise<string>;
+
+  /** Contextual token resolver with rich context including the agentic user ID. */
+  public readonly contextualTokenResolver?: ContextualTokenResolver;
 
   /** Cluster category. */
   public readonly clusterCategory: ClusterCategory;
@@ -195,6 +199,7 @@ export class A365Configuration {
     this.enabled = enabled;
     this.enableObservabilityExporter = enableObservabilityExporter;
     this.tokenResolver = options?.tokenResolver;
+    this.contextualTokenResolver = options?.contextualTokenResolver;
     this.clusterCategory = clusterCategory;
     this.domainOverride = domainOverride;
     this.authScopes = authScopes;
@@ -217,7 +222,9 @@ export class A365Configuration {
     if (!options) return;
 
     const hasNonTrivialOptions =
-      options.tokenResolver !== undefined || options.domainOverride !== undefined;
+      options.tokenResolver !== undefined ||
+      options.contextualTokenResolver !== undefined ||
+      options.domainOverride !== undefined;
 
     if (hasNonTrivialOptions) {
       getA365Logger().warn(

@@ -7,7 +7,13 @@ export type { A365Options, ClusterCategory, ILogger } from "./configuration/inde
 export { configureA365Logger, getA365Logger } from "./logging.js";
 
 export { Agent365Exporter } from "./exporter/index.js";
-export type { Agent365ExporterOptions, TokenResolver } from "./exporter/index.js";
+export type {
+  Agent365ExporterOptions,
+  TokenResolver,
+  ContextualTokenResolver,
+  AgentIdentity,
+  TokenResolverContext,
+} from "./exporter/index.js";
 export { ResolvedExporterOptions } from "./exporter/index.js";
 
 // ── Scopes (manual telemetry API) ───────────────────────────────────────────

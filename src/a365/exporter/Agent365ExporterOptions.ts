@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ClusterCategory } from "../configuration/A365ConfigurationOptions.js";
+import type { TokenResolverContext } from "./TokenResolverContext.js";
 
 /**
  * A function that resolves an authentication token for the given agent and tenant.
@@ -14,14 +15,35 @@ export type TokenResolver = (
 ) => string | null | Promise<string | null>;
 
 /**
+ * Async delegate used by the exporter to obtain an auth token using rich context.
+ * Provides additional fields (e.g. {@link TokenResolverContext.identity})
+ * beyond what {@link TokenResolver} offers.
+ * Must be fast and non-blocking (use internal caching elsewhere).
+ * Return null/undefined to omit the Authorization header.
+ */
+export type ContextualTokenResolver = (
+  context: TokenResolverContext,
+) => Promise<string | null | undefined> | string | null | undefined;
+
+/**
  * Options controlling the behavior of the Agent365 span exporter.
  */
 export interface Agent365ExporterOptions {
   /** Cluster category for endpoint resolution. @default "prod" */
   clusterCategory?: ClusterCategory;
 
-  /** Token resolver for authentication. Required for batch export. */
+  /**
+   * Token resolver for authentication.
+   * When both this and {@link contextualTokenResolver} are set,
+   * {@link contextualTokenResolver} takes precedence.
+   */
   tokenResolver?: TokenResolver;
+
+  /**
+   * Async delegate used to resolve the auth token with rich context including the agentic user ID.
+   * Takes precedence over {@link tokenResolver} when set.
+   */
+  contextualTokenResolver?: ContextualTokenResolver;
 
   /** When true, use the S2S endpoint path (/observabilityService/...). @default false */
   useS2SEndpoint?: boolean;
@@ -55,6 +77,7 @@ export interface Agent365ExporterOptions {
 export class ResolvedExporterOptions {
   public readonly clusterCategory: ClusterCategory;
   public readonly tokenResolver?: TokenResolver;
+  public readonly contextualTokenResolver?: ContextualTokenResolver;
   public readonly useS2SEndpoint: boolean;
   public readonly domainOverride?: string;
   public readonly authScopes: string[];
@@ -68,6 +91,7 @@ export class ResolvedExporterOptions {
   constructor(options?: Agent365ExporterOptions) {
     this.clusterCategory = options?.clusterCategory ?? "prod";
     this.tokenResolver = options?.tokenResolver;
+    this.contextualTokenResolver = options?.contextualTokenResolver;
     this.useS2SEndpoint = options?.useS2SEndpoint ?? false;
     this.domainOverride = options?.domainOverride;
     this.authScopes = options?.authScopes ?? [
