@@ -4,8 +4,9 @@
 /**
  * Represents the identity of an agent and its acting user.
  *
- * In the AI teammate scenario, {@link agenticUserId} is 1:1 with {@link agentId}.
- * In the S2S scenario, {@link agenticUserId} will be undefined.
+ * In agentic user scenarios, {@link agenticUserId} identifies the specific user
+ * in the current interaction so the token resolver can generate a user-scoped token.
+ * In S2S scenarios, {@link agenticUserId} will be undefined.
  */
 export interface AgentIdentity {
   /** The agent identifier. */
@@ -13,7 +14,7 @@ export interface AgentIdentity {
 
   /**
    * The agentic user identifier (AAD Object ID), or undefined in S2S scenarios.
-   * In the AI teammate scenario, this value is 1:1 with {@link agentId}.
+   * Present when token generation depends on the specific user in the current interaction.
    */
   readonly agenticUserId?: string;
 }

@@ -86,7 +86,7 @@ Set `enableOutputLogging: false` if response content should not be captured.
 
 ## Contextual Token Resolver
 
-Use `contextualTokenResolver` instead of `tokenResolver` when you need the agentic user ID (AAD Object ID) during token resolution. This is useful in AI teammate scenarios where each agent has a 1:1 relationship with a user. In S2S scenarios, `agenticUserId` will be `undefined`.
+Use `contextualTokenResolver` instead of `tokenResolver` in agentic user scenarios where token generation depends on the specific user in the current interaction (per turn), not just the agent/app identity. Passing `agenticUserId` ensures the resolver can generate the correct token when user context matters. In S2S scenarios, `agenticUserId` will be `undefined`.
 
 ```typescript
 import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
