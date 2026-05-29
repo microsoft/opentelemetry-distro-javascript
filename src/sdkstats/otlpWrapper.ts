@@ -147,6 +147,10 @@ export class NetworkStatsLogExporter implements LogRecordExporter {
     wrapExport(this.host, (cb) => this.inner.export(logs, cb), resultCallback, logs);
   }
 
+  forceFlush(): Promise<void> {
+    return this.inner.forceFlush ? this.inner.forceFlush() : Promise.resolve();
+  }
+
   shutdown(): Promise<void> {
     return this.inner.shutdown();
   }

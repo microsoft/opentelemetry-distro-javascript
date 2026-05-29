@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-29
+
+### Features Added
+- Add network SDKStats (request success) for A365 + OTLP exporters [#145](https://github.com/microsoft/opentelemetry-distro-javascript/pull/145)
+- Update message format to align with OTel spec [#155](https://github.com/microsoft/opentelemetry-distro-javascript/pull/155)
+- Add `ApplyGuardrailScope` for security guardrail tracing [#157](https://github.com/microsoft/opentelemetry-distro-javascript/pull/157)
+- Add main agent attribution propagation for GenAI spans [#158](https://github.com/microsoft/opentelemetry-distro-javascript/pull/158)
+- Add `ContextualTokenResolver` with agentic user ID support [#159](https://github.com/microsoft/opentelemetry-distro-javascript/pull/159)
+
+### Bugs Fixed
+- LangChain: split request/response model and emit `gen_ai.response.id` [#127](https://github.com/microsoft/opentelemetry-distro-javascript/pull/127)
+- Add product context fallback for subchannels [#133](https://github.com/microsoft/opentelemetry-distro-javascript/pull/133)
+- Revert `getCallerBaggagePairs` userId fallback [#140](https://github.com/microsoft/opentelemetry-distro-javascript/pull/140)
+- Scope `A365SpanProcessor.onStart` to GenAI spans only [#146](https://github.com/microsoft/opentelemetry-distro-javascript/pull/146)
+- Respect `Retry-After` header on 429/503 responses in `Agent365Exporter` [#147](https://github.com/microsoft/opentelemetry-distro-javascript/pull/147)
+- LangChain: populate `gen_ai.response.model` for Responses API (`useResponsesApi`) [#151](https://github.com/microsoft/opentelemetry-distro-javascript/pull/151)
+
+### Other Changes
+- Update telemetry SDK name to `microsoft-opentelemetry` [#134](https://github.com/microsoft/opentelemetry-distro-javascript/pull/134)
+- Correct repository URLs from Azure to microsoft org and add API docs badge [#136](https://github.com/microsoft/opentelemetry-distro-javascript/pull/136)
+- Only redeploy docs when package version changes [#141](https://github.com/microsoft/opentelemetry-distro-javascript/pull/141)
+- Rename internal Statsbeat symbols to SdkStats (cleanup) [#152](https://github.com/microsoft/opentelemetry-distro-javascript/pull/152)
+- Add `needs-author-feedback` GitHub Actions workflows [#160](https://github.com/microsoft/opentelemetry-distro-javascript/pull/160)
+- Bump `@opentelemetry/*` core/SDK packages to 0.218.0 / 2.7.1 and instrumentation packages to latest releases
+- Bump `@azure/monitor-opentelemetry-exporter` floor to `1.0.0-beta.42`
+- Numerous Dependabot dependency bumps ([#137](https://github.com/microsoft/opentelemetry-distro-javascript/pull/137), [#138](https://github.com/microsoft/opentelemetry-distro-javascript/pull/138), [#139](https://github.com/microsoft/opentelemetry-distro-javascript/pull/139), [#143](https://github.com/microsoft/opentelemetry-distro-javascript/pull/143), [#144](https://github.com/microsoft/opentelemetry-distro-javascript/pull/144), [#148](https://github.com/microsoft/opentelemetry-distro-javascript/pull/148), [#149](https://github.com/microsoft/opentelemetry-distro-javascript/pull/149), [#153](https://github.com/microsoft/opentelemetry-distro-javascript/pull/153))
+
 ## [1.0.2] - 2026-05-11
 
 ### Bugs Fixed

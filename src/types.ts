@@ -11,7 +11,7 @@ import type { A365Options } from "./a365/index.js";
 /**
  * Microsoft OpenTelemetry distribution version.
  */
-export const MICROSOFT_OPENTELEMETRY_VERSION = "1.0.2";
+export const MICROSOFT_OPENTELEMETRY_VERSION = "1.1.0";
 
 /**
  * Microsoft OpenTelemetry Options
