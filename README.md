@@ -113,26 +113,25 @@ import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
 useMicrosoftOpenTelemetry();
 ```
 
-
 That's it — traces, metrics, and logs are collected automatically with built-in instrumentations for HTTP, databases, and more.
 
 ## Configuration
 
 ### `MicrosoftOpenTelemetryOptions`
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `resource` | `Resource` | auto-detected | OpenTelemetry Resource (service name, version, etc.) |
-| `samplingRatio` | `number` | `1.0` | Ratio of telemetry items to transmit (0.0–1.0) |
-| `tracesPerSecond` | `number` | `5` | Max traces per second. Set to `0` to use `samplingRatio` instead |
-| `instrumentationOptions` | `InstrumentationOptions` | all enabled | Toggle built-in instrumentations (see below) |
-| `spanProcessors` | `SpanProcessor[]` | — | Additional span processors |
-| `logRecordProcessors` | `LogRecordProcessor[]` | — | Additional log record processors |
-| `metricReaders` | `MetricReader[]` | — | Additional metric readers |
-| `views` | `ViewOptions[]` | — | Metric views |
-| `azureMonitor` | `AzureMonitorOpenTelemetryOptions` | — | Azure Monitor backend config. When provided, Azure Monitor export is enabled |
-| `a365` | `A365Options` | — | A365 observability config |
-| `enableConsoleExporters` | `boolean` | auto | Enable console exporters for traces, metrics, and logs |
+| Option                   | Type                               | Default       | Description                                                                  |
+| ------------------------ | ---------------------------------- | ------------- | ---------------------------------------------------------------------------- |
+| `resource`               | `Resource`                         | auto-detected | OpenTelemetry Resource (service name, version, etc.)                         |
+| `samplingRatio`          | `number`                           | `1.0`         | Ratio of telemetry items to transmit (0.0–1.0)                               |
+| `tracesPerSecond`        | `number`                           | `5`           | Max traces per second. Set to `0` to use `samplingRatio` instead             |
+| `instrumentationOptions` | `InstrumentationOptions`           | all enabled   | Toggle built-in instrumentations (see below)                                 |
+| `spanProcessors`         | `SpanProcessor[]`                  | —             | Additional span processors                                                   |
+| `logRecordProcessors`    | `LogRecordProcessor[]`             | —             | Additional log record processors                                             |
+| `metricReaders`          | `MetricReader[]`                   | —             | Additional metric readers                                                    |
+| `views`                  | `ViewOptions[]`                    | —             | Metric views                                                                 |
+| `azureMonitor`           | `AzureMonitorOpenTelemetryOptions` | —             | Azure Monitor backend config. When provided, Azure Monitor export is enabled |
+| `a365`                   | `A365Options`                      | —             | A365 observability config                                                    |
+| `enableConsoleExporters` | `boolean`                          | auto          | Enable console exporters for traces, metrics, and logs                       |
 
 ### `InstrumentationOptions`
 
@@ -145,19 +144,19 @@ Most instrumentations use `InstrumentationConfig` shape (`{ enabled?: boolean, .
 
 Set `enabled: true` or `enabled: false` explicitly for predictable behavior.
 
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `http` | `InstrumentationConfig` | enabled | HTTP client/server instrumentation |
-| `azureSdk` | `InstrumentationConfig` | enabled | Azure SDK instrumentation |
-| `mongoDb` | `InstrumentationConfig` | enabled | MongoDB instrumentation |
-| `mySql` | `InstrumentationConfig` | enabled | MySQL instrumentation |
-| `postgreSql` | `InstrumentationConfig` | enabled | PostgreSQL instrumentation |
-| `redis` | `InstrumentationConfig` | enabled | Redis instrumentation |
-| `redis4` | `InstrumentationConfig` | enabled | Redis 4 instrumentation |
-| `bunyan` | `InstrumentationConfig` | disabled | Bunyan log instrumentation |
-| `winston` | `InstrumentationConfig` | disabled | Winston log instrumentation |
-| `openaiAgents` | `OpenAIAgentsInstrumentationConfig` | enabled | OpenAI Agents SDK instrumentation (requires `@openai/agents`) |
-| `langchain` | `LangChainInstrumentationConfig` | enabled | LangChain instrumentation (requires `@langchain/core`) |
+| Key            | Type                                | Default  | Description                                                   |
+| -------------- | ----------------------------------- | -------- | ------------------------------------------------------------- |
+| `http`         | `InstrumentationConfig`             | enabled  | HTTP client/server instrumentation                            |
+| `azureSdk`     | `InstrumentationConfig`             | enabled  | Azure SDK instrumentation                                     |
+| `mongoDb`      | `InstrumentationConfig`             | enabled  | MongoDB instrumentation                                       |
+| `mySql`        | `InstrumentationConfig`             | enabled  | MySQL instrumentation                                         |
+| `postgreSql`   | `InstrumentationConfig`             | enabled  | PostgreSQL instrumentation                                    |
+| `redis`        | `InstrumentationConfig`             | enabled  | Redis instrumentation                                         |
+| `redis4`       | `InstrumentationConfig`             | enabled  | Redis 4 instrumentation                                       |
+| `bunyan`       | `InstrumentationConfig`             | disabled | Bunyan log instrumentation                                    |
+| `winston`      | `InstrumentationConfig`             | disabled | Winston log instrumentation                                   |
+| `openaiAgents` | `OpenAIAgentsInstrumentationConfig` | enabled  | OpenAI Agents SDK instrumentation (requires `@openai/agents`) |
+| `langchain`    | `LangChainInstrumentationConfig`    | enabled  | LangChain instrumentation (requires `@langchain/core`)        |
 
 #### Turn instrumentations on/off
 
@@ -220,14 +219,14 @@ Behavior:
 
 ### `azureMonitor` options
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `azureMonitorExporterOptions` | `AzureMonitorExporterOptions` | — | Exporter config including `connectionString`, `storageDirectory`, `disableOfflineStorage` |
-| `enableLiveMetrics` | `boolean` | `true` | Enable Live Metrics streaming |
-| `enableStandardMetrics` | `boolean` | `true` | Enable standard metrics collection |
-| `enableTraceBasedSamplingForLogs` | `boolean` | `false` | Enable log sampling based on trace |
-| `enablePerformanceCounters` | `boolean` | `true` | Enable performance counter collection |
-| `browserSdkLoaderOptions` | `BrowserSdkLoaderOptions` | disabled | Application Insights browser SDK loader config (`enabled`, `connectionString`) |
+| Option                            | Type                          | Default  | Description                                                                               |
+| --------------------------------- | ----------------------------- | -------- | ----------------------------------------------------------------------------------------- |
+| `azureMonitorExporterOptions`     | `AzureMonitorExporterOptions` | —        | Exporter config including `connectionString`, `storageDirectory`, `disableOfflineStorage` |
+| `enableLiveMetrics`               | `boolean`                     | `true`   | Enable Live Metrics streaming                                                             |
+| `enableStandardMetrics`           | `boolean`                     | `true`   | Enable standard metrics collection                                                        |
+| `enableTraceBasedSamplingForLogs` | `boolean`                     | `false`  | Enable log sampling based on trace                                                        |
+| `enablePerformanceCounters`       | `boolean`                     | `true`   | Enable performance counter collection                                                     |
+| `browserSdkLoaderOptions`         | `BrowserSdkLoaderOptions`     | disabled | Application Insights browser SDK loader config (`enabled`, `connectionString`)            |
 
 ### OTLP via environment variables
 
@@ -237,17 +236,18 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 
 ### `a365` options
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `enabled` | `boolean` | `false` | Enable A365 observability. Registers the `A365SpanProcessor` for baggage/attribute enrichment of downstream exporters (Azure Monitor, OTLP, console). Does **not** send data to the A365 service on its own — set `enableObservabilityExporter` for that |
-| `enableObservabilityExporter` | `boolean` | `false` | Enable the A365 HTTP exporter (`Agent365Exporter`) to send spans to the A365 observability service. Requires `enabled: true`. Equivalent to `ENABLE_A365_OBSERVABILITY_EXPORTER` env var |
-| `tokenResolver` | `(agentId, tenantId, authScopes?) => string \| Promise<string>` | — | Token resolver for A365 service authentication |
-| `clusterCategory` | `ClusterCategory` | `"prod"` | Cluster category for endpoint resolution (`local`, `dev`, `test`, `preprod`, `firstrelease`, `prod`, `gov`, `high`, `dod`, `mooncake`, `ex`, `rx`) |
-| `domainOverride` | `string` | — | Override the A365 observability service domain |
-| `authScopes` | `string[]` | `["api://9b975845-388f-4429-889e-eab1ef63949c/.default"]` | OAuth scopes for A365 service authentication |
-| `observabilityScopeOverride` | `string` | — | Single-string scope override (highest precedence). Equivalent to `A365_OBSERVABILITY_SCOPES_OVERRIDE` env var |
-| `logLevel` | `string` | `"none"` | A365 internal log level: `none`, `info`, `warn`, `error`, or pipe-separated combination. Overrides `A365_OBSERVABILITY_LOG_LEVEL` env var |
-| `useS2SEndpoint` | `boolean` | `false` | Use the S2S (service-to-service) endpoint path for export |
+| Option                        | Type                                                                           | Default                                                   | Description                                                                                                                                                                                                                                              |
+| ----------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`                     | `boolean`                                                                      | `false`                                                   | Enable A365 observability. Registers the `A365SpanProcessor` for baggage/attribute enrichment of downstream exporters (Azure Monitor, OTLP, console). Does **not** send data to the A365 service on its own — set `enableObservabilityExporter` for that |
+| `enableObservabilityExporter` | `boolean`                                                                      | `false`                                                   | Enable the A365 HTTP exporter (`Agent365Exporter`) to send spans to the A365 observability service. Requires `enabled: true`. Equivalent to `ENABLE_A365_OBSERVABILITY_EXPORTER` env var                                                                 |
+| `tokenResolver`               | `(agentId, tenantId, authScopes?) => string \| Promise<string>`                | —                                                         | Token resolver for A365 service authentication. When both this and `contextualTokenResolver` are set, `contextualTokenResolver` takes precedence                                                                                                         |
+| `contextualTokenResolver`     | `(context: TokenResolverContext) => string \| null \| Promise<string \| null>` | —                                                         | Contextual token resolver with rich context including the agentic user ID. Takes precedence over `tokenResolver` when set                                                                                                                                |
+| `clusterCategory`             | `ClusterCategory`                                                              | `"prod"`                                                  | Cluster category for endpoint resolution (`local`, `dev`, `test`, `preprod`, `firstrelease`, `prod`, `gov`, `high`, `dod`, `mooncake`, `ex`, `rx`)                                                                                                       |
+| `domainOverride`              | `string`                                                                       | —                                                         | Override the A365 observability service domain                                                                                                                                                                                                           |
+| `authScopes`                  | `string[]`                                                                     | `["api://9b975845-388f-4429-889e-eab1ef63949c/.default"]` | OAuth scopes for A365 service authentication                                                                                                                                                                                                             |
+| `observabilityScopeOverride`  | `string`                                                                       | —                                                         | Single-string scope override (highest precedence). Equivalent to `A365_OBSERVABILITY_SCOPES_OVERRIDE` env var                                                                                                                                            |
+| `logLevel`                    | `string`                                                                       | `"none"`                                                  | A365 internal log level: `none`, `info`, `warn`, `error`, or pipe-separated combination. Overrides `A365_OBSERVABILITY_LOG_LEVEL` env var                                                                                                                |
+| `useS2SEndpoint`              | `boolean`                                                                      | `false`                                                   | Use the S2S (service-to-service) endpoint path for export                                                                                                                                                                                                |
 
 When A365 export is enabled, the distro defaults to GenAI-focused telemetry. To opt back into non-GenAI auto-instrumentation, set explicit overrides:
 
@@ -317,14 +317,14 @@ new ObservabilityHostingManager().configure(adapter as unknown as { use(...m: un
 
 #### A365 exporter tuning
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `maxQueueSize` | `number` | `2048` | Maximum span queue size before drops occur |
-| `scheduledDelayMilliseconds` | `number` | `5000` | Delay (ms) between automatic batch flush attempts |
-| `exporterTimeoutMilliseconds` | `number` | `90000` | Maximum time (ms) for the entire export call |
+| Option                           | Type     | Default | Description                                                  |
+| -------------------------------- | -------- | ------- | ------------------------------------------------------------ |
+| `maxQueueSize`                   | `number` | `2048`  | Maximum span queue size before drops occur                   |
+| `scheduledDelayMilliseconds`     | `number` | `5000`  | Delay (ms) between automatic batch flush attempts            |
+| `exporterTimeoutMilliseconds`    | `number` | `90000` | Maximum time (ms) for the entire export call                 |
 | `httpRequestTimeoutMilliseconds` | `number` | `30000` | HTTP request timeout (ms) when sending spans to A365 service |
-| `maxExportBatchSize` | `number` | `512` | Maximum number of spans per export batch |
-| `maxPayloadBytes` | `number` | — | Maximum estimated payload size (bytes) per HTTP chunk |
+| `maxExportBatchSize`             | `number` | `512`   | Maximum number of spans per export batch                     |
+| `maxPayloadBytes`                | `number` | —       | Maximum estimated payload size (bytes) per HTTP chunk        |
 
 Example:
 
@@ -345,24 +345,26 @@ useMicrosoftOpenTelemetry({
 
 A365 options can also be set via environment variables (highest precedence):
 
-| Environment Variable | Description |
-|---|---|
-| `ENABLE_A365_OBSERVABILITY_EXPORTER` | `"true"` / `"false"` — override `enabled` |
-| `A365_OBSERVABILITY_SCOPES_OVERRIDE` | Space-separated list of OAuth scopes |
-| `A365_OBSERVABILITY_DOMAIN_OVERRIDE` | Override service domain |
-| `CLUSTER_CATEGORY` | Override cluster category |
-| `A365_OBSERVABILITY_LOG_LEVEL` | A365 internal logger filter level (`none`, `info`, `warn`, `error`, or pipe-delimited combination) — overrides `observabilityLogLevel` |
-| `A365_PER_REQUEST_MAX_TRACES` | Max buffered traces (default: `1000`) |
-| `A365_PER_REQUEST_MAX_SPANS_PER_TRACE` | Max spans per trace (default: `5000`) |
-| `A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS` | Max concurrent exports (default: `20`) |
-| `A365_PER_REQUEST_FLUSH_GRACE_MS` | Grace period after root span ends (default: `250`) |
-| `A365_PER_REQUEST_MAX_TRACE_AGE_MS` | Max trace age before forced flush (default: `1800000`) |
-
+| Environment Variable                      | Description                                                                                                                            |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `ENABLE_A365_OBSERVABILITY_EXPORTER`      | `"true"` / `"false"` — override `enabled`                                                                                              |
+| `A365_OBSERVABILITY_SCOPES_OVERRIDE`      | Space-separated list of OAuth scopes                                                                                                   |
+| `A365_OBSERVABILITY_DOMAIN_OVERRIDE`      | Override service domain                                                                                                                |
+| `CLUSTER_CATEGORY`                        | Override cluster category                                                                                                              |
+| `A365_OBSERVABILITY_LOG_LEVEL`            | A365 internal logger filter level (`none`, `info`, `warn`, `error`, or pipe-delimited combination) — overrides `observabilityLogLevel` |
+| `A365_PER_REQUEST_MAX_TRACES`             | Max buffered traces (default: `1000`)                                                                                                  |
+| `A365_PER_REQUEST_MAX_SPANS_PER_TRACE`    | Max spans per trace (default: `5000`)                                                                                                  |
+| `A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS` | Max concurrent exports (default: `20`)                                                                                                 |
+| `A365_PER_REQUEST_FLUSH_GRACE_MS`         | Grace period after root span ends (default: `250`)                                                                                     |
+| `A365_PER_REQUEST_MAX_TRACE_AGE_MS`       | Max trace age before forced flush (default: `1800000`)                                                                                 |
 
 ### Example
 
 ```typescript
-import { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+import {
+  useMicrosoftOpenTelemetry,
+  shutdownMicrosoftOpenTelemetry,
+} from "@microsoft/opentelemetry";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 
 useMicrosoftOpenTelemetry({
@@ -386,7 +388,6 @@ await shutdownMicrosoftOpenTelemetry();
 ## Samples
 
 See the [samples/](./samples/) directory for working TypeScript examples covering connection setup, custom metrics, custom traces, sampling, OTLP dual-export, and more.
-
 
 ## Contributing
 

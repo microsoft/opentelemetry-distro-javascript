@@ -84,6 +84,31 @@ configureA365Hosting(adapter, {
 
 Set `enableOutputLogging: false` if response content should not be captured.
 
+## Contextual Token Resolver
+
+Use `contextualTokenResolver` instead of `tokenResolver` when you need the agentic user ID (AAD Object ID) during token resolution. This is useful in AI teammate scenarios where each agent has a 1:1 relationship with a user. In S2S scenarios, `agenticUserId` will be `undefined`.
+
+```typescript
+import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+import type { TokenResolverContext } from "@microsoft/opentelemetry";
+
+useMicrosoftOpenTelemetry({
+  a365: {
+    enabled: true,
+    enableObservabilityExporter: true,
+    contextualTokenResolver: async (context: TokenResolverContext) => {
+      const { agentId, agenticUserId } = context.identity;
+      const { tenantId } = context;
+      // Resolve a token using agent, tenant, and user identity.
+      // Return null to skip the export for this agent/tenant group.
+      return await getTokenForAgent(agentId, tenantId, agenticUserId);
+    },
+  },
+});
+```
+
+When both `tokenResolver` and `contextualTokenResolver` are set, `contextualTokenResolver` takes precedence.
+
 ## Shutdown
 
 Call `shutdownMicrosoftOpenTelemetry()` during graceful shutdown to flush pending telemetry and release resources:
