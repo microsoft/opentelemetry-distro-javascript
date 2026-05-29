@@ -21,7 +21,13 @@ export type {
 export { A365Configuration } from "./a365/index.js";
 export type { ClusterCategory } from "./a365/index.js";
 export { Agent365Exporter } from "./a365/index.js";
-export type { Agent365ExporterOptions, TokenResolver } from "./a365/index.js";
+export type {
+  Agent365ExporterOptions,
+  TokenResolver,
+  ContextualTokenResolver,
+  AgentIdentity,
+  TokenResolverContext,
+} from "./a365/index.js";
 
 // ── Re-exports from A365 scopes (manual telemetry API) ──────────────────────
 export {

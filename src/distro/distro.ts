@@ -314,6 +314,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
         domainOverride: a365Config.domainOverride,
         authScopes: a365Config.authScopes,
         tokenResolver: a365Config.tokenResolver,
+        contextualTokenResolver: a365Config.contextualTokenResolver,
         useS2SEndpoint: a365Config.useS2SEndpoint,
         ...(a365Config.maxQueueSize !== undefined && {
           maxQueueSize: a365Config.maxQueueSize,

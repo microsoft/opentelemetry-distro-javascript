@@ -7,6 +7,8 @@ import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace-base";
 
 import type { Agent365ExporterOptions } from "./Agent365ExporterOptions.js";
 import { ResolvedExporterOptions } from "./Agent365ExporterOptions.js";
+import type { TokenResolverContext } from "./TokenResolverContext.js";
+import type { AgentIdentity } from "./AgentIdentity.js";
 import { ExporterEventNames } from "./ExporterEventNames.js";
 import {
   partitionByIdentity,
@@ -19,8 +21,10 @@ import {
   truncateSpan,
   estimateSpanBytes,
   chunkBySize,
+  asStr,
 } from "./utils.js";
 import { getA365Logger } from "../logging.js";
+import { OpenTelemetryConstants } from "../constants.js";
 import { isSdkStatsEnabled, recordSuccess, shortHost } from "../../sdkstats/index.js";
 
 const DEFAULT_MAX_RETRIES = 3;
@@ -188,7 +192,7 @@ export class Agent365Exporter implements SpanExporter {
     };
 
     // Resolve token
-    const token = await this.resolveToken(agentId, tenantId);
+    const token = await this.resolveToken(agentId, tenantId, spans);
     if (!token) {
       this.logger.warn(
         `[Agent365Exporter] Skipping export for ${tenantId}/${agentId}: no token available`,
@@ -239,7 +243,24 @@ export class Agent365Exporter implements SpanExporter {
     );
   }
 
-  private async resolveToken(agentId: string, tenantId: string): Promise<string | null> {
+  private async resolveToken(
+    agentId: string,
+    tenantId: string,
+    spans: ReadableSpan[],
+  ): Promise<string | null> {
+    // Prefer ContextualTokenResolver when set; extract agentic user ID from the
+    // first span in the group (1:1 relationship between agent and agentic user).
+    if (this.options.contextualTokenResolver) {
+      const agenticUserId =
+        spans.length > 0
+          ? asStr(spans[0].attributes?.[OpenTelemetryConstants.GEN_AI_AGENT_AUID_KEY])
+          : undefined;
+      const identity: AgentIdentity = { agentId, agenticUserId };
+      const context: TokenResolverContext = { identity, tenantId };
+      const result = this.options.contextualTokenResolver(context);
+      return (result instanceof Promise ? await result : result) ?? null;
+    }
+
     if (!this.options.tokenResolver) return null;
     const result = this.options.tokenResolver(agentId, tenantId, this.options.authScopes);
     return result instanceof Promise ? result : result;
