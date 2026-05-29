@@ -62,6 +62,7 @@ describe("Main functions", () => {
 
   beforeEach(() => {
     originalEnv = process.env;
+    delete process.env[AZURE_MONITOR_STATSBEAT_FEATURES];
     // Preserve whatever the global OTel API object looks like before each test
     savedOTelGlobal = (globalThis as Record<symbol, unknown>)[GLOBAL_OPENTELEMETRY_API_KEY];
   });

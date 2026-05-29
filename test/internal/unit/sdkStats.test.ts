@@ -79,4 +79,37 @@ describe("SdkStatsConfiguration — a365 and otlp feature flags", () => {
     expect(features & SdkStatsFeature.A365).toBeTruthy();
     expect(features & SdkStatsFeature.OTLP).toBeTruthy();
   });
+
+  it("should preserve feature bits from JSON-formatted env var", () => {
+    // Seed the env var with JSON format (as written by a previous setSdkStatsFeatures call)
+    process.env[AZURE_MONITOR_STATSBEAT_FEATURES] = JSON.stringify({
+      instrumentation: 0,
+      feature: SdkStatsFeature.AAD_HANDLING | SdkStatsFeature.DISK_RETRY,
+    });
+
+    const sb = getInstance();
+    sb.setSdkStatsFeatures({}, { a365: true });
+
+    const output = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
+    const features = Number(output.feature);
+    expect(features & SdkStatsFeature.AAD_HANDLING).toBeTruthy();
+    expect(features & SdkStatsFeature.DISK_RETRY).toBeTruthy();
+    expect(features & SdkStatsFeature.A365).toBeTruthy();
+  });
+
+  it("should not lose feature flags across consecutive setSdkStatsFeatures calls", () => {
+    const sb = getInstance();
+
+    // First call sets OTLP
+    sb.setSdkStatsFeatures({}, { otlp: true });
+    const firstOutput = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
+    expect(Number(firstOutput.feature) & SdkStatsFeature.OTLP).toBeTruthy();
+
+    // Second call sets A365 — OTLP should be preserved via env var merge
+    sb.setSdkStatsFeatures({}, { a365: true });
+    const secondOutput = JSON.parse(String(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]));
+    const features = Number(secondOutput.feature);
+    expect(features & SdkStatsFeature.OTLP).toBeTruthy();
+    expect(features & SdkStatsFeature.A365).toBeTruthy();
+  });
 });
