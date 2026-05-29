@@ -702,6 +702,21 @@ describe("#LiveMetrics", () => {
     setTimeoutSpy.mockRestore();
   });
 
+  it("goQuickpulse should not reschedule if shutdown called during ping", async () => {
+    // Simulate shutdown happening while the ping request is in-flight
+    vi.spyOn(autoCollect["pingSender"], "isSubscribed").mockImplementation(async () => {
+      // Shutdown is called while we are awaiting the ping
+      autoCollect.shutdown();
+      return undefined as any;
+    });
+    autoCollect["_isShutdown"] = false; // reset so goQuickpulse enters the body
+    autoCollect["isCollectingData"] = false;
+    const setTimeoutSpy = vi.spyOn(global, "setTimeout");
+    await autoCollect["goQuickpulse"]();
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    setTimeoutSpy.mockRestore();
+  });
+
   it("quickPulseDone should not reschedule after shutdown", async () => {
     autoCollect.shutdown();
     const setTimeoutSpy = vi.spyOn(global, "setTimeout");

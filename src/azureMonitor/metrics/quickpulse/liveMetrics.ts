@@ -229,10 +229,12 @@ export class LiveMetrics {
         this.quickPulseDone(undefined);
       }
 
-      this.handle = <any>setTimeout(this.goQuickpulse.bind(this), this.pingInterval);
-      this.handle.unref();
+      if (!this._isShutdown) {
+        this.handle = <any>setTimeout(this.goQuickpulse.bind(this), this.pingInterval);
+        this.handle.unref();
+      }
     }
-    if (this.isCollectingData) {
+    if (this.isCollectingData && !this._isShutdown) {
       this.activateMetrics({ collectionInterval: this.postInterval });
     }
   }
@@ -268,8 +270,10 @@ export class LiveMetrics {
         this.etag = "";
         this.deactivateMetrics();
 
-        this.handle = <any>setTimeout(this.goQuickpulse.bind(this), this.pingInterval);
-        this.handle.unref();
+        if (!this._isShutdown) {
+          this.handle = <any>setTimeout(this.goQuickpulse.bind(this), this.pingInterval);
+          this.handle.unref();
+        }
       }
 
       const endpointRedirect = response.xMsQpsServiceEndpointRedirectV2;
