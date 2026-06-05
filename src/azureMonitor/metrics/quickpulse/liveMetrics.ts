@@ -137,6 +137,7 @@ export class LiveMetrics {
   private derivedMetricProjection: Projection = new Projection();
   private validator: Validator = new Validator();
   private filter: Filter = new Filter();
+  private _isShutdown: boolean = false;
   // type: Map<telemetryType, Map<id, FilterConjunctionGroupInfo[]>>
   private validDocumentFilterConjuctionGroupInfos: Map<
     string,
@@ -203,10 +204,15 @@ export class LiveMetrics {
   }
 
   public shutdown(): void {
-    this.meterProvider?.shutdown();
+    this._isShutdown = true;
+    clearTimeout(this.handle as any);
+    this.deactivateMetrics();
   }
 
   private async goQuickpulse(): Promise<void> {
+    if (this._isShutdown) {
+      return;
+    }
     if (!this.isCollectingData) {
       // If not collecting, Ping
       try {
@@ -223,15 +229,20 @@ export class LiveMetrics {
         this.quickPulseDone(undefined);
       }
 
-      this.handle = <any>setTimeout(this.goQuickpulse.bind(this), this.pingInterval);
-      this.handle.unref();
+      if (!this._isShutdown) {
+        this.handle = <any>setTimeout(this.goQuickpulse.bind(this), this.pingInterval);
+        this.handle.unref();
+      }
     }
-    if (this.isCollectingData) {
+    if (this.isCollectingData && !this._isShutdown) {
       this.activateMetrics({ collectionInterval: this.postInterval });
     }
   }
 
   private async quickPulseDone(response: QuickpulseResponse | undefined): Promise<void> {
+    if (this._isShutdown) {
+      return;
+    }
     if (!response) {
       if (!this.isCollectingData) {
         if (Date.now() - this.lastSuccessTime >= MAX_PING_WAIT_TIME) {
@@ -259,8 +270,10 @@ export class LiveMetrics {
         this.etag = "";
         this.deactivateMetrics();
 
-        this.handle = <any>setTimeout(this.goQuickpulse.bind(this), this.pingInterval);
-        this.handle.unref();
+        if (!this._isShutdown) {
+          this.handle = <any>setTimeout(this.goQuickpulse.bind(this), this.pingInterval);
+          this.handle.unref();
+        }
       }
 
       const endpointRedirect = response.xMsQpsServiceEndpointRedirectV2;

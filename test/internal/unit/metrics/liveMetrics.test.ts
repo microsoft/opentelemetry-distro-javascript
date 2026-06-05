@@ -671,4 +671,69 @@ describe("#LiveMetrics", () => {
       ["testScope1"],
     );
   });
+
+  it("shutdown should clear the polling timer", () => {
+    const clearTimeoutSpy = vi.spyOn(global, "clearTimeout");
+    const handle = autoCollect["handle"];
+    autoCollect.shutdown();
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(handle);
+    clearTimeoutSpy.mockRestore();
+  });
+
+  it("shutdown should set _isShutdown flag", () => {
+    expect(autoCollect["_isShutdown"]).toBe(false);
+    autoCollect.shutdown();
+    expect(autoCollect["_isShutdown"]).toBe(true);
+  });
+
+  it("shutdown should deactivate metrics", () => {
+    autoCollect.activateMetrics({ collectionInterval: 100 });
+    expect(autoCollect["meterProvider"]).toBeDefined();
+    autoCollect.shutdown();
+    expect(autoCollect["meterProvider"]).toBeUndefined();
+  });
+
+  it("goQuickpulse should not reschedule after shutdown", async () => {
+    autoCollect.shutdown();
+    const setTimeoutSpy = vi.spyOn(global, "setTimeout");
+    await autoCollect["goQuickpulse"]();
+    // goQuickpulse should early-return without scheduling a new timer
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    setTimeoutSpy.mockRestore();
+  });
+
+  it("goQuickpulse should not reschedule if shutdown called during ping", async () => {
+    // Simulate shutdown happening while the ping request is in-flight
+    vi.spyOn(autoCollect["pingSender"], "isSubscribed").mockImplementation(async () => {
+      // Shutdown is called while we are awaiting the ping
+      autoCollect.shutdown();
+      return undefined as any;
+    });
+    autoCollect["_isShutdown"] = false; // reset so goQuickpulse enters the body
+    autoCollect["isCollectingData"] = false;
+    const setTimeoutSpy = vi.spyOn(global, "setTimeout");
+    await autoCollect["goQuickpulse"]();
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    setTimeoutSpy.mockRestore();
+  });
+
+  it("quickPulseDone should not reschedule after shutdown", async () => {
+    autoCollect.shutdown();
+    const setTimeoutSpy = vi.spyOn(global, "setTimeout");
+    await autoCollect["quickPulseDone"]({
+      xMsQpsSubscribed: "false",
+      xMsQpsConfigurationEtag: undefined,
+    } as any);
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    setTimeoutSpy.mockRestore();
+  });
+
+  it("shutdown should be idempotent", () => {
+    autoCollect.activateMetrics({ collectionInterval: 100 });
+    autoCollect.shutdown();
+    // Second shutdown should not throw
+    expect(() => autoCollect.shutdown()).not.toThrow();
+    expect(autoCollect["_isShutdown"]).toBe(true);
+    expect(autoCollect["meterProvider"]).toBeUndefined();
+  });
 });
