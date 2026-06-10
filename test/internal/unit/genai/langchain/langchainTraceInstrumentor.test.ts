@@ -45,6 +45,41 @@ describe("LangChainTraceInstrumentor", () => {
       // Should not throw
       LangChainTraceInstrumentor.instrument(mockModule);
     });
+
+    // Regression test for the startup race fixed by binding `_tracerCtor`
+    // statically at field-declaration time. Previously the tracer ctor was
+    // resolved via a dynamic `import("./tracer.js")` whose `.then(...)`
+    // callback ran on a later microtask. Any `_configureSync` call landing
+    // in that window (typically the very first compiled-graph `invoke` after
+    // distro startup) silently fell through with no tracer attached,
+    // dropping the outer wrapper span and fragmenting the trace.
+    // This test asserts the wrapped `_configureSync` attaches a
+    // `LangChainTracer` on its very first synchronous invocation — i.e.,
+    // without awaiting any microtask after `instrument(...)`.
+    it("attaches a LangChainTracer synchronously on the first _configureSync call", () => {
+      const configureSyncOriginal = vi.fn();
+      const mockModule = {
+        CallbackManager: {
+          _configureSync: configureSyncOriginal,
+        },
+      };
+
+      LangChainTraceInstrumentor.instrument(mockModule as any);
+
+      // Invoke the wrapped _configureSync immediately — no awaits, no
+      // microtask flush. This is the scenario that previously dropped the
+      // outer wrapper span.
+      mockModule.CallbackManager._configureSync(undefined as any);
+
+      assert.strictEqual(configureSyncOriginal.mock.calls.length, 1);
+      const handlersArg = configureSyncOriginal.mock.calls[0][0];
+      assert.ok(Array.isArray(handlersArg), "handlers should be coerced into an array");
+      assert.strictEqual(handlersArg.length, 1);
+      assert.ok(
+        handlersArg[0] instanceof LangChainTracer,
+        "LangChainTracer should be attached on the first call, not deferred to a later microtask",
+      );
+    });
   });
 
   describe("enable / disable", () => {
