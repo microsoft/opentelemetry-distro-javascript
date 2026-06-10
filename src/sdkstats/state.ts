@@ -17,11 +17,11 @@
 import { SdkStatsFeature, SdkStatsInstrumentation } from "../types.js";
 
 /**
- * Microsoft-OpenTelemetry-specific feature flags, in addition to the
+ * Microsoft OpenTelemetry specific feature flags, in addition to the
  * {@link SdkStatsFeature} flags shared with the Azure Monitor exporter.
  *
  * These bit values intentionally start above the values used by
- * {@link SdkStatsFeature} so that our bits and exporter bits can be
+ * {@link SdkStatsFeature} so that the bits and exporter bits can be
  * OR-combined into a single 64-bit mask without collision.
  */
 export enum SdkStatsDistroFeature {

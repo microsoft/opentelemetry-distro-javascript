@@ -24,9 +24,9 @@ export class LogHandler {
   private _instrumentations: Instrumentation[];
 
   /**
-   * Initializes a new instance of the TraceHandler class.
-   * @param _config - Microsoft OpenTelemetry configuration.
-   * @param _metricHandler - MetricHandler.
+   * Initializes a new instance of the LogHandler class.
+   * @param config - Microsoft OpenTelemetry configuration.
+   * @param metricHandler - MetricHandler.
    */
   constructor(config: InternalConfig, metricHandler: MetricHandler) {
     this._config = config;

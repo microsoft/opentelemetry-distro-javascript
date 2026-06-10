@@ -541,7 +541,7 @@ For the full troubleshooting guide, see the [official troubleshooting documentat
 - [ ] Set `service.name` and `service.version` via `resource` option or `OTEL_RESOURCE_ATTRIBUTES`
 
 **Auto-instrumentation:**
-- [ ] Remove explicit `instrumentor.enable()` calls (auto-instrumented automatically)
+- [ ] Remove explicit `instrumentor.enable()` calls (instrumentations are registered automatically)
 - [ ] Review which instrumentations are enabled by default in A365 mode (GenAI only)
 - [ ] Re-enable non-GenAI instrumentations if needed via `instrumentationOptions`
 

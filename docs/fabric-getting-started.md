@@ -7,11 +7,11 @@ This guide walks you through sending traces, metrics, and logs from a Node.js ap
 Your Node.js app doesn't connect to Fabric directly. Instead, it sends telemetry to an **OpenTelemetry Collector** running alongside it — either locally or in a cluster. The collector then forwards the data into your Fabric/ADX database.
 
 ```
-┌──────────────┐     OTLP/HTTP     ┌──────────────────┐     Kusto Ingest    ┌─────────────────────────┐
-│  Node.js App │ ───────────────►  │  OTel Collector  │ ──────────────────► │  Fabric / Azure Data    │
-│  (microsoft- │                   │                  │                     │                         │
-│opentelemetry)│    :4318          │  (ADX exporter)  │                     │  Explorer               │
-└──────────────┘                   └──────────────────┘                     └─────────────────────────┘
+┌──────────────────┐     OTLP/HTTP     ┌──────────────────┐     Kusto Ingest    ┌─────────────────────────┐
+│   Node.js App    │ ───────────────►  │  OTel Collector  │ ──────────────────► │  Fabric / Azure Data    │
+│   (@microsoft/   │                   │                  │                     │                         │
+│  opentelemetry)  │    :4318          │  (ADX exporter)  │                     │  Explorer               │
+└──────────────────┘                   └──────────────────┘                     └─────────────────────────┘
 ```
 
 **What each component does:**

@@ -70,8 +70,8 @@ export class PerformanceCounterMetrics {
 
   /**
    * Creates performance counter instruments.
-   * @param options - Microsoft OpenTelemetry configuration.
-   * @param config - Application Insights configuration.
+   * @param config - Internal Microsoft OpenTelemetry configuration.
+   * @param options - Optional performance counter settings (e.g. collection interval).
    */
   constructor(config: InternalConfig, options?: { collectionInterval: number }) {
     this.internalConfig = config;

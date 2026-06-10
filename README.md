@@ -249,7 +249,7 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 | `logLevel`                    | `string`                                                                       | `"none"`                                                  | A365 internal log level: `none`, `info`, `warn`, `error`, or pipe-separated combination. Overrides `A365_OBSERVABILITY_LOG_LEVEL` env var                                                                                                                |
 | `useS2SEndpoint`              | `boolean`                                                                      | `false`                                                   | Use the S2S (service-to-service) endpoint path for export                                                                                                                                                                                                |
 
-When A365 export is enabled, the SDK defaults to GenAI-focused telemetry. To opt back into non-GenAI auto-instrumentation, set explicit overrides:
+When A365 export is enabled, Microsoft OpenTelemetry defaults to GenAI-focused telemetry. To opt back into non-GenAI auto-instrumentation, set explicit overrides:
 
 ```typescript
 useMicrosoftOpenTelemetry({
