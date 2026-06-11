@@ -68,31 +68,5 @@ describe("OTLP Handler", () => {
       expect(components.metricReader).toBeInstanceOf(PeriodicExportingMetricReader);
       expect(components.logRecordProcessor).toBeInstanceOf(BatchLogRecordProcessor);
     });
-
-    describe("network SDKStats wiring", () => {
-      it("wraps each exporter with the NetworkStats* decorator when SDKStats is enabled", () => {
-        delete process.env["MICROSOFT_OTEL_SDKSTATS_DISABLED"];
-        delete process.env["APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL"];
-        const components = createOtlpComponents();
-
-        const spanInner = (components.spanProcessor as unknown as { _exporter: unknown })._exporter;
-        const metricInner = (components.metricReader as unknown as { _exporter: unknown })
-          ._exporter;
-        const logInner = (components.logRecordProcessor as unknown as { _exporter: unknown })
-          ._exporter;
-
-        expect(spanInner?.constructor.name).toBe("NetworkStatsSpanExporter");
-        expect(metricInner?.constructor.name).toBe("NetworkStatsMetricExporter");
-        expect(logInner?.constructor.name).toBe("NetworkStatsLogExporter");
-      });
-
-      it("does NOT wrap exporters when MICROSOFT_OTEL_SDKSTATS_DISABLED=true", () => {
-        process.env["MICROSOFT_OTEL_SDKSTATS_DISABLED"] = "true";
-        const components = createOtlpComponents();
-
-        const spanInner = (components.spanProcessor as unknown as { _exporter: unknown })._exporter;
-        expect(spanInner?.constructor.name).not.toBe("NetworkStatsSpanExporter");
-      });
-    });
   });
 });

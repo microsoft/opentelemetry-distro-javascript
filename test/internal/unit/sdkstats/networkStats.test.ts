@@ -26,7 +26,6 @@ import {
   A365_ENDPOINT_CATEGORY,
   EXC_NETWORK,
   EXC_TIMEOUT,
-  OTLP_ENDPOINT_CATEGORY,
 } from "../../../../src/sdkstats/constants.js";
 
 describe("sdkstats/networkStats", () => {
@@ -71,16 +70,16 @@ describe("sdkstats/networkStats", () => {
   });
 
   it("records exception counts keyed by (endpoint, host, exceptionType)", () => {
-    recordException(OTLP_ENDPOINT_CATEGORY, "collector", EXC_TIMEOUT);
-    recordException(OTLP_ENDPOINT_CATEGORY, "collector", EXC_TIMEOUT);
-    recordException(OTLP_ENDPOINT_CATEGORY, "collector", EXC_NETWORK);
+    recordException(A365_ENDPOINT_CATEGORY, "collector", EXC_TIMEOUT);
+    recordException(A365_ENDPOINT_CATEGORY, "collector", EXC_TIMEOUT);
+    recordException(A365_ENDPOINT_CATEGORY, "collector", EXC_NETWORK);
 
     const exceptions = drain(EXCEPTION_COUNT_NAME);
     expect(exceptions.size).toBe(2);
     const entries = [...exceptions.entries()].sort(([a], [b]) => a[2].localeCompare(b[2]));
     expect(entries).toEqual([
-      [[OTLP_ENDPOINT_CATEGORY, "collector", EXC_NETWORK], 1],
-      [[OTLP_ENDPOINT_CATEGORY, "collector", EXC_TIMEOUT], 2],
+      [[A365_ENDPOINT_CATEGORY, "collector", EXC_NETWORK], 1],
+      [[A365_ENDPOINT_CATEGORY, "collector", EXC_TIMEOUT], 2],
     ]);
   });
 
@@ -137,27 +136,27 @@ describe("sdkstats/networkStats", () => {
   });
 
   it("accumulates success counts per (endpoint, host) and reports keys as two-element tuples", () => {
-    recordSuccess(OTLP_ENDPOINT_CATEGORY, "a.example.com");
-    recordSuccess(OTLP_ENDPOINT_CATEGORY, "a.example.com");
-    recordSuccess(OTLP_ENDPOINT_CATEGORY, "b.example.com");
+    recordSuccess(A365_ENDPOINT_CATEGORY, "a.example.com");
+    recordSuccess(A365_ENDPOINT_CATEGORY, "a.example.com");
+    recordSuccess(A365_ENDPOINT_CATEGORY, "b.example.com");
     const snap = drain(REQUEST_SUCCESS_NAME);
     expect(snap.size).toBe(2);
 
     const entries = Array.from(snap.entries()).sort(([a], [b]) => a[1].localeCompare(b[1]));
-    expect(entries[0][0]).toEqual([OTLP_ENDPOINT_CATEGORY, "a.example.com"]);
+    expect(entries[0][0]).toEqual([A365_ENDPOINT_CATEGORY, "a.example.com"]);
     expect(entries[0][1]).toBe(2);
-    expect(entries[1][0]).toEqual([OTLP_ENDPOINT_CATEGORY, "b.example.com"]);
+    expect(entries[1][0]).toEqual([A365_ENDPOINT_CATEGORY, "b.example.com"]);
     expect(entries[1][1]).toBe(1);
   });
 
   it("drain() empties the bucket atomically — second drain returns an empty map", () => {
-    recordSuccess(OTLP_ENDPOINT_CATEGORY, "a.example.com");
+    recordSuccess(A365_ENDPOINT_CATEGORY, "a.example.com");
     expect(drain(REQUEST_SUCCESS_NAME).size).toBe(1);
     expect(drain(REQUEST_SUCCESS_NAME).size).toBe(0);
   });
 
   it("_resetAllForTest() clears every bucket", () => {
-    recordSuccess(OTLP_ENDPOINT_CATEGORY, "a.example.com");
+    recordSuccess(A365_ENDPOINT_CATEGORY, "a.example.com");
     _resetAllForTest();
     for (const name of NETWORK_METRIC_NAMES) {
       expect(drain(name).size).toBe(0);

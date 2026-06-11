@@ -16,7 +16,7 @@
  */
 
 // Wire-format metric names and the set of HTTP status-code buckets used
-// below live in `./constants.js` so the OTLP/A365 exporter wrappers can
+// below live in `./constants.js` so the A365 exporter wrapper can
 // share a single source of truth. Re-exported here for backwards
 // compatibility with existing imports of these symbols from
 // `./networkStats.js`.
@@ -49,7 +49,7 @@ export type { NetworkMetricName };
  * Composite key for an aggregated network SDKStats counter.
  *
  * Per the Application Insights SDKStats spec the per-key dimensions are
- * `endpoint` (category, e.g. "otlp", "a365") and `host` (stamp-specific
+ * `endpoint` (category, e.g. "a365") and `host` (stamp-specific
  * region or hostname), optionally followed by a third dimension —
  * `statusCode` (failure/retry/throttle) or `exceptionType` (exception).
  *

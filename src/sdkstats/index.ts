@@ -54,9 +54,3 @@ export {
   _resetAllForTest as _resetNetworkStatsForTest,
 } from "./networkStats.js";
 export type { NetworkMetricName, NetworkKey, StatusCodeKind } from "./networkStats.js";
-
-export {
-  NetworkStatsSpanExporter,
-  NetworkStatsMetricExporter,
-  NetworkStatsLogExporter,
-} from "./otlpWrapper.js";

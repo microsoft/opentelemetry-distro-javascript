@@ -6,9 +6,8 @@
  *
  * Centralizes the wire-format metric names, HTTP status-code buckets,
  * endpoint category labels, and bounded `exceptionType` strings used by
- * the network statsbeat accumulator ({@link ./networkStats}), the OTLP
- * exporter wrapper ({@link ./otlpWrapper}), and the A365 exporter
- * ({@link ../a365/exporter/Agent365Exporter}).
+ * the network statsbeat accumulator ({@link ./networkStats}) and the
+ * A365 exporter ({@link ../a365/exporter/Agent365Exporter}).
  *
  * Ideally the wire-format metric names would be imported directly from
  * the `StatsbeatCounter` enum in `@azure/monitor-opentelemetry-exporter`
@@ -69,29 +68,12 @@ export const THROTTLE_STATUSES: ReadonlySet<number> = new Set([402, 439]);
 // followed by the HTTP client transparently and are not reported.
 export const IGNORED_STATUSES: ReadonlySet<number> = new Set([206, 307, 308]);
 
-/**
- * Per the OTLP/HTTP response specification, retryable HTTP status codes
- * are 429, 502, 503, and 504. The upstream OTLP delegate normally routes
- * these through its `retryable` branch (no status code surfaced), but
- * wrappers classify defensively for the rare case the failure branch
- * still carries a retryable code (e.g. retries exhausted).
- */
-export const OTLP_HTTP_RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
-
 // ---------------------------------------------------------------------------
 // Endpoint category labels. Per spec, `endpoint` is a category label, not
 // the destination URL.
 // ---------------------------------------------------------------------------
 
-export const OTLP_ENDPOINT_CATEGORY = "otlp";
 export const A365_ENDPOINT_CATEGORY = "a365";
-
-/**
- * Sentinel `statusCode` dimension used when the upstream OTLP delegate
- * has discarded the original HTTP status code (currently the retryable
- * 429/502/503/504 path). Keeps the dimension present per spec.
- */
-export const OTLP_UNKNOWN_STATUS = "unknown";
 
 // ---------------------------------------------------------------------------
 // Bounded set of `exceptionType` labels for `Exception_Count`.
@@ -101,18 +83,3 @@ export const OTLP_UNKNOWN_STATUS = "unknown";
 export const EXC_TIMEOUT = "Timeout exception";
 export const EXC_NETWORK = "Network exception";
 export const EXC_CLIENT = "Client exception";
-
-/**
- * Node socket error codes that we treat as transient network failures
- * when classifying an exception into the `Network exception` bucket.
- */
-export const RETRYABLE_NETWORK_ERROR_CODES: ReadonlySet<string> = new Set([
-  "ECONNRESET",
-  "ECONNREFUSED",
-  "EPIPE",
-  "ETIMEDOUT",
-  "EAI_AGAIN",
-  "ENOTFOUND",
-  "ENETUNREACH",
-  "EHOSTUNREACH",
-]);
