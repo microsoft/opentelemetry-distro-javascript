@@ -132,9 +132,19 @@ class SdkStatsConfiguration {
 
     // Merge old SDK Stats options with new SDK Stats options overriding any common properties
     try {
-      const currentFeaturesBitMap = Number(process.env[AZURE_MONITOR_STATSBEAT_FEATURES]);
-      if (!isNaN(currentFeaturesBitMap)) {
-        featureBitMap |= currentFeaturesBitMap;
+      const envValue = process.env[AZURE_MONITOR_STATSBEAT_FEATURES];
+      if (envValue) {
+        const asNumber = Number(envValue);
+        if (!isNaN(asNumber)) {
+          // Plain number format (e.g. set by the shim)
+          featureBitMap |= asNumber;
+        } else {
+          // JSON format (e.g. set by a previous call to this function)
+          const parsed = JSON.parse(envValue);
+          if (parsed && typeof parsed.feature === "number") {
+            featureBitMap |= parsed.feature;
+          }
+        }
       }
       process.env[AZURE_MONITOR_STATSBEAT_FEATURES] = JSON.stringify({
         instrumentation: instrumentationBitMap,
