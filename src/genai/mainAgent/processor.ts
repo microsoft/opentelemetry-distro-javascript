@@ -74,6 +74,13 @@ interface ReadableSpanLike {
  *   so the top-level agent identifies itself as the main agent.
  */
 export class GenAIMainAgentSpanProcessor implements BaseSpanProcessor {
+  /**
+   * Copies main-agent attributes from the parent span (or its `gen_ai.agent.*`
+   * fallbacks) onto a span when it starts.
+   *
+   * @param span The span that is starting.
+   * @param parentContext The context containing the parent span, if any.
+   */
   onStart(span: Span, parentContext: Context): void {
     const parent = trace.getSpan(parentContext);
     if (!parent || !isSpanContextValid(parent.spanContext())) {
@@ -89,6 +96,13 @@ export class GenAIMainAgentSpanProcessor implements BaseSpanProcessor {
     }
   }
 
+  /**
+   * When a span is itself a top-level `invoke_agent` operation that has not
+   * already been enriched, copies its `gen_ai.agent.*` / `gen_ai.conversation.id`
+   * attributes onto the `microsoft.gen_ai.main_agent.*` keys.
+   *
+   * @param span The span that has ended.
+   */
   onEnd(span: ReadableSpan): void {
     const attributes = span.attributes;
     if (!attributes || attributes[ATTR_GEN_AI_OPERATION_NAME] !== GEN_AI_OPERATION_INVOKE_AGENT) {
@@ -113,10 +127,12 @@ export class GenAIMainAgentSpanProcessor implements BaseSpanProcessor {
     }
   }
 
+  /** Shuts down the processor. No-op for this processor. */
   async shutdown(): Promise<void> {
     // no-op
   }
 
+  /** Flushes pending work. No-op for this processor. */
   async forceFlush(): Promise<void> {
     // no-op
   }
@@ -132,6 +148,13 @@ interface LogRecordAttributesLike {
  * span onto every emitted log record.
  */
 export class GenAIMainAgentLogRecordProcessor implements LogRecordProcessor {
+  /**
+   * Copies any `microsoft.gen_ai.main_agent.*` attributes from the active span
+   * onto the emitted log record.
+   *
+   * @param logRecord The log record being emitted.
+   * @param contextArg Optional context used to resolve the current span.
+   */
   onEmit(logRecord: SdkLogRecord, contextArg?: Context): void {
     const span = contextArg ? trace.getSpan(contextArg) : trace.getActiveSpan();
     if (!span || !isSpanContextValid(span.spanContext())) {
@@ -166,10 +189,12 @@ export class GenAIMainAgentLogRecordProcessor implements LogRecordProcessor {
     }
   }
 
+  /** Flushes pending work. No-op for this processor. */
   async forceFlush(): Promise<void> {
     // no-op
   }
 
+  /** Shuts down the processor. No-op for this processor. */
   async shutdown(): Promise<void> {
     // no-op
   }

@@ -129,8 +129,8 @@ export class Agent365Exporter implements SpanExporter {
    *
    * Partitions the spans by (tenantId, agentId), builds OTLP-like JSON payloads,
    * and POSTs them with bearer authentication. Invokes `resultCallback` with
-   * {@link ExportResultCode.SUCCESS} when all groups export successfully, or
-   * {@link ExportResultCode.FAILED} when the exporter is shut down or any group fails.
+   * `ExportResultCode.SUCCESS` when all groups export successfully, or
+   * `ExportResultCode.FAILED` when the exporter is shut down or any group fails.
    *
    * @param spans The spans to export.
    * @param resultCallback Callback invoked with the export result.

@@ -15,6 +15,14 @@ import type { TurnContextLike } from "./types.js";
  * so the cache can be used without a direct dependency on that package.
  */
 export interface AuthorizationLike {
+  /**
+   * Exchanges the current turn's credentials for an access token.
+   *
+   * @param turnContext The current turn context.
+   * @param authHandlerName Name of the configured auth handler to use.
+   * @param options Token-exchange options, including the requested scopes.
+   * @returns The exchanged token, or `undefined` when no token is available.
+   */
   exchangeToken(
     turnContext: TurnContextLike,
     authHandlerName: string,
