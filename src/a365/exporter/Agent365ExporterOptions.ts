@@ -7,6 +7,11 @@ import type { TokenResolverContext } from "./TokenResolverContext.js";
 /**
  * A function that resolves an authentication token for the given agent and tenant.
  * Return null if a token cannot be provided.
+ *
+ * @param agentId The identifier of the agent whose telemetry is being exported.
+ * @param tenantId The identifier of the tenant that owns the agent.
+ * @param authScopes Optional OAuth scopes to request for the token.
+ * @returns The bearer token, or `null` (synchronously or as a promise) when no token is available.
  */
 export type TokenResolver = (
   agentId: string,
@@ -20,6 +25,9 @@ export type TokenResolver = (
  * beyond what {@link TokenResolver} offers.
  * Must be fast and non-blocking (use internal caching elsewhere).
  * Return null/undefined to skip the export for that agent/tenant group.
+ *
+ * @param context The token-resolution context, including agent identity and tenant.
+ * @returns The bearer token, or `null`/`undefined` (synchronously or as a promise) to skip the export.
  */
 export type ContextualTokenResolver = (
   context: TokenResolverContext,

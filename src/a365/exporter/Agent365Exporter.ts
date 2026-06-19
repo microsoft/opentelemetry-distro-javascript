@@ -114,10 +114,27 @@ export class Agent365Exporter implements SpanExporter {
     return getA365Logger();
   }
 
+  /**
+   * Creates a new Agent365 span exporter.
+   *
+   * @param options Optional exporter configuration (token resolution, endpoint
+   * overrides, batching, and payload limits). When omitted, defaults are applied.
+   */
   constructor(options?: Agent365ExporterOptions) {
     this.options = new ResolvedExporterOptions(options);
   }
 
+  /**
+   * Exports a batch of spans to the Agent365 observability service.
+   *
+   * Partitions the spans by (tenantId, agentId), builds OTLP-like JSON payloads,
+   * and POSTs them with bearer authentication. Invokes `resultCallback` with
+   * {@link ExportResultCode.SUCCESS} when all groups export successfully, or
+   * {@link ExportResultCode.FAILED} when the exporter is shut down or any group fails.
+   *
+   * @param spans The spans to export.
+   * @param resultCallback Callback invoked with the export result.
+   */
   async export(
     spans: ReadableSpan[],
     resultCallback: (result: ExportResult) => void,
@@ -493,10 +510,18 @@ export class Agent365Exporter implements SpanExporter {
     };
   }
 
+  /**
+   * Shuts down the exporter. After this resolves, subsequent {@link export}
+   * calls fail immediately. Any in-flight exports are not awaited.
+   */
   async shutdown(): Promise<void> {
     this.closed = true;
   }
 
+  /**
+   * Flushes any pending spans. This is a no-op because spans are exported
+   * immediately on each {@link export} call rather than being buffered.
+   */
   async forceFlush(): Promise<void> {
     // No-op — spans are exported immediately on export() call
   }
