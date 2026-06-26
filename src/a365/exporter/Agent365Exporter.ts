@@ -109,6 +109,7 @@ interface MappedSpan {
 export class Agent365Exporter implements SpanExporter {
   private closed = false;
   private readonly options: ResolvedExporterOptions;
+  private readonly userBufferConfig: BufferConfig;
 
   private get logger() {
     return getA365Logger();
@@ -122,20 +123,28 @@ export class Agent365Exporter implements SpanExporter {
    */
   constructor(options?: Agent365ExporterOptions) {
     this.options = new ResolvedExporterOptions(options);
+    this.userBufferConfig = {};
+    if (options?.maxQueueSize !== undefined) {
+      this.userBufferConfig.maxQueueSize = options.maxQueueSize;
+    }
+    if (options?.scheduledDelayMilliseconds !== undefined) {
+      this.userBufferConfig.scheduledDelayMillis = options.scheduledDelayMilliseconds;
+    }
+    if (options?.maxExportBatchSize !== undefined) {
+      this.userBufferConfig.maxExportBatchSize = options.maxExportBatchSize;
+    }
+    if (options?.exporterTimeoutMilliseconds !== undefined) {
+      this.userBufferConfig.exportTimeoutMillis = options.exporterTimeoutMilliseconds;
+    }
   }
 
   /**
-   * Returns the {@link BufferConfig} the host should pass to its
-   * `BatchSpanProcessor` so the resolved batching options (queue size,
-   * scheduled delay, export batch size, export timeout) actually take effect.
+   * Returns a sparse {@link BufferConfig} containing only the batching
+   * options the caller explicitly supplied, so the host's `BatchSpanProcessor`
+   * retains its own defaults for anything the caller omitted.
    */
   getBufferConfig(): BufferConfig {
-    return {
-      maxQueueSize: this.options.maxQueueSize,
-      scheduledDelayMillis: this.options.scheduledDelayMilliseconds,
-      maxExportBatchSize: this.options.maxExportBatchSize,
-      exportTimeoutMillis: this.options.exporterTimeoutMilliseconds,
-    };
+    return { ...this.userBufferConfig };
   }
 
   /**

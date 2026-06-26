@@ -1018,6 +1018,47 @@ describe("Agent365Exporter", () => {
     );
     assert.strictEqual(exportedSpan.events[0].attributes["microsoft.security.risk.score"], 0.95);
   });
+
+  describe("getBufferConfig", () => {
+    it("returns an empty config when no batching options are supplied", () => {
+      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      assert.deepStrictEqual(exporter.getBufferConfig(), {});
+    });
+
+    it("forwards only the batching keys the caller explicitly set", () => {
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "tok",
+        maxQueueSize: 4096,
+      });
+      assert.deepStrictEqual(exporter.getBufferConfig(), { maxQueueSize: 4096 });
+    });
+
+    it("maps every supported A365 option to the corresponding BufferConfig key", () => {
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "tok",
+        maxQueueSize: 4096,
+        scheduledDelayMilliseconds: 1234,
+        maxExportBatchSize: 256,
+        exporterTimeoutMilliseconds: 45000,
+      });
+      assert.deepStrictEqual(exporter.getBufferConfig(), {
+        maxQueueSize: 4096,
+        scheduledDelayMillis: 1234,
+        maxExportBatchSize: 256,
+        exportTimeoutMillis: 45000,
+      });
+    });
+
+    it("returns an independent copy on each call so callers cannot mutate internal state", () => {
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "tok",
+        maxQueueSize: 4096,
+      });
+      const first = exporter.getBufferConfig();
+      first.maxQueueSize = 1;
+      assert.deepStrictEqual(exporter.getBufferConfig(), { maxQueueSize: 4096 });
+    });
+  });
 });
 
 describe("Exporter utils", () => {
