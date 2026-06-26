@@ -335,7 +335,7 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
           maxPayloadBytes: a365Config.maxPayloadBytes,
         }),
       });
-      spanProcessors.push(new BatchSpanProcessor(a365Exporter));
+      spanProcessors.push(new BatchSpanProcessor(a365Exporter, a365Exporter.getBufferConfig()));
     }
   }
 

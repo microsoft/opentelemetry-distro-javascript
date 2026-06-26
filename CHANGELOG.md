@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Bugs Fixed
+- A365: forward `a365.maxQueueSize`, `a365.scheduledDelayMilliseconds`, `a365.maxExportBatchSize`, and `a365.exporterTimeoutMilliseconds` to the `BatchSpanProcessor` that wraps the `Agent365Exporter`.
+
 ## [1.1.0] - 2026-05-29
 
 ### Features Added
