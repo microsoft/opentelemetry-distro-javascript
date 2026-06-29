@@ -45,12 +45,12 @@ export function createInstrumentations(
   config: InternalConfig,
   options?: { filterAzureMonitorRequests?: boolean },
 ): Instrumentation[] {
-  const instrumentations: Instrumentation[] = [];
-  const filterAzureMonitor = options?.filterAzureMonitorRequests ?? false;
+  let instrumentations: Instrumentation[] = [];
+  let filterAzureMonitor = options?.filterAzureMonitorRequests ?? false;
 
   // ── Trace instrumentations ──────────────────────────────────────
   if (config.instrumentationOptions.http?.enabled) {
-    const httpConfig = config.instrumentationOptions.http as HttpInstrumentationConfig;
+    var httpConfig = config.instrumentationOptions.http as HttpInstrumentationConfig;
 
     if (filterAzureMonitor) {
       const providedHook = httpConfig.ignoreOutgoingRequestHook;
@@ -129,7 +129,7 @@ export function createSampler(config: InternalConfig): Sampler {
     return config.sampler;
   }
   if (config.tracesPerSecond && config.tracesPerSecond > 0) {
-    return new RateLimitedSampler(config.tracesPerSecond);
+    return new RateLimitedSampler(config.tracesPerSecond                       );
   }
   return new ApplicationInsightsSampler(config.samplingRatio);
 }
