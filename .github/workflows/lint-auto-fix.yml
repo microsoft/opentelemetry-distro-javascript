@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Fetch and validate PR
         id: find-pr
-        uses: actions/github-script@v9
+        uses: actions/github-script@v7
         with:
           script: |
             const prNumberStr = context.payload.inputs?.pr_number;
@@ -31,7 +31,12 @@ jobs:
               core.setOutput('has-pr', 'false');
               return;
             }
-            const prNumber = parseInt(prNumberStr);
+            const prNumber = Number.parseInt(prNumberStr, 10);
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              core.warning(`Invalid pr_number input: ${prNumberStr}`);
+              core.setOutput('has-pr', 'false');
+              return;
+            }
             core.info(`Got PR #${prNumber} from workflow_dispatch input`);
             const { data: pr } = await github.rest.pulls.get({
               ...context.repo,
@@ -61,12 +66,12 @@ jobs:
 
       - name: Notify fork PR author
         if: steps.find-pr.outputs.is-fork == 'true'
-        uses: actions/github-script@v9
+        uses: actions/github-script@v7
         with:
           script: |
             await github.rest.issues.createComment({
               ...context.repo,
-              issue_number: parseInt(context.payload.inputs.pr_number),
+              issue_number: Number.parseInt(context.payload.inputs.pr_number, 10),
               body: [
                 '⚠️ **Lint auto-fix skipped for fork PR.**',
                 '',
@@ -120,7 +125,7 @@ jobs:
 
             if git diff --cached --quiet; then
               echo "Lint fixes were detected, but none matched the commit allow-list"
-              echo "CHANGES=false" >> $GITHUB_OUTPUT
+              echo "CHANGES=skipped" >> $GITHUB_OUTPUT
             else
               git commit -m "chore: apply eslint lint fixes"
               git push
@@ -130,12 +135,12 @@ jobs:
 
       - name: Post result comment
         if: steps.find-pr.outputs.has-pr == 'true'
-        uses: actions/github-script@v9
+        uses: actions/github-script@v7
         env:
           CHANGES: ${{ steps.commit.outputs.CHANGES }}
         with:
           script: |
-            const prNumber = parseInt(context.payload.inputs.pr_number);
+            const prNumber = Number.parseInt(context.payload.inputs.pr_number, 10);
 
             if (process.env.CHANGES === 'true') {
               await github.rest.issues.createComment({
@@ -144,6 +149,13 @@ jobs:
                 body: '✅ Automatically ran `npm run lint:fix` and pushed the lint fixes. lint should now pass.'
               });
               core.info(`Posted success comment on PR #${prNumber}`);
+            } else if (process.env.CHANGES === 'skipped') {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: prNumber,
+                body: '⚠️ `npm run lint:fix` produced changes, but they only affected files excluded by the commit allow-list. Please review and commit the fixes manually.'
+              });
+              core.info(`Posted skipped-files comment on PR #${prNumber}`);
             } else {
               core.info(`No lint fixes were needed for PR #${prNumber}`);
             }
