@@ -1287,7 +1287,7 @@ describe("Main functions", () => {
     assert.strictEqual(instrumentationOptions.langchain.enabled, true);
   });
 
-  it("preserves BatchSpanProcessor defaults when A365 exporter tuning is omitted", async () => {
+  it("applies A365 exporter defaults to the wrapping BatchSpanProcessor when tuning is omitted", async () => {
     useMicrosoftOpenTelemetry({
       azureMonitor: { enabled: false },
       enableConsoleExporters: false,
@@ -1312,7 +1312,10 @@ describe("Main functions", () => {
     );
 
     assert.isDefined(batchProcessor, "Expected an Agent365 BatchSpanProcessor");
-    assert.strictEqual(batchProcessor["_exportTimeoutMillis"], 30000);
+    assert.strictEqual(batchProcessor["_maxQueueSize"], 2048);
+    assert.strictEqual(batchProcessor["_scheduledDelayMillis"], 5000);
+    assert.strictEqual(batchProcessor["_maxExportBatchSize"], 512);
+    assert.strictEqual(batchProcessor["_exportTimeoutMillis"], 90000);
 
     await shutdownMicrosoftOpenTelemetry();
   });
