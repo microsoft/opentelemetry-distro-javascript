@@ -1287,7 +1287,7 @@ describe("Main functions", () => {
     assert.strictEqual(instrumentationOptions.langchain.enabled, true);
   });
 
-  it("preserves BatchSpanProcessor defaults when A365 exporter tuning is omitted", async () => {
+  it("applies A365 exporter defaults to the wrapping BatchSpanProcessor when tuning is omitted", async () => {
     useMicrosoftOpenTelemetry({
       azureMonitor: { enabled: false },
       enableConsoleExporters: false,
@@ -1312,7 +1312,47 @@ describe("Main functions", () => {
     );
 
     assert.isDefined(batchProcessor, "Expected an Agent365 BatchSpanProcessor");
-    assert.strictEqual(batchProcessor["_exportTimeoutMillis"], 30000);
+    assert.strictEqual(batchProcessor["_maxQueueSize"], 2048);
+    assert.strictEqual(batchProcessor["_scheduledDelayMillis"], 5000);
+    assert.strictEqual(batchProcessor["_maxExportBatchSize"], 512);
+    assert.strictEqual(batchProcessor["_exportTimeoutMillis"], 90000);
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
+  it("forwards A365 exporter batching options to the wrapping BatchSpanProcessor", async () => {
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        enableObservabilityExporter: true,
+        tokenResolver: () => "token",
+        maxQueueSize: 4096,
+        scheduledDelayMilliseconds: 1234,
+        maxExportBatchSize: 256,
+        exporterTimeoutMilliseconds: 45000,
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const batchProcessor = registeredProcessors.find(
+      (processor: any) =>
+        processor.constructor?.name === "BatchSpanProcessor" &&
+        processor["_exporter"]?.constructor?.name === "Agent365Exporter",
+    );
+
+    assert.isDefined(batchProcessor, "Expected an Agent365 BatchSpanProcessor");
+    assert.strictEqual(batchProcessor["_maxQueueSize"], 4096);
+    assert.strictEqual(batchProcessor["_scheduledDelayMillis"], 1234);
+    assert.strictEqual(batchProcessor["_maxExportBatchSize"], 256);
+    assert.strictEqual(batchProcessor["_exportTimeoutMillis"], 45000);
 
     await shutdownMicrosoftOpenTelemetry();
   });

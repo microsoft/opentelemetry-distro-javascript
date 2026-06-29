@@ -3,7 +3,7 @@
 
 import type { ExportResult } from "@opentelemetry/core";
 import { ExportResultCode } from "@opentelemetry/core";
-import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace-base";
+import type { BufferConfig, ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace-base";
 
 import type { Agent365ExporterOptions } from "./Agent365ExporterOptions.js";
 import { ResolvedExporterOptions } from "./Agent365ExporterOptions.js";
@@ -122,6 +122,21 @@ export class Agent365Exporter implements SpanExporter {
    */
   constructor(options?: Agent365ExporterOptions) {
     this.options = new ResolvedExporterOptions(options);
+  }
+
+  /**
+   * Returns the {@link BufferConfig} the host should pass to its
+   * `BatchSpanProcessor`. Any value the caller supplied wins; anything
+   * omitted falls back to the A365 exporter's documented defaults
+   * (not the upstream `BatchSpanProcessor` defaults).
+   */
+  getBufferConfig(): BufferConfig {
+    return {
+      maxQueueSize: this.options.maxQueueSize,
+      scheduledDelayMillis: this.options.scheduledDelayMilliseconds,
+      maxExportBatchSize: this.options.maxExportBatchSize,
+      exportTimeoutMillis: this.options.exporterTimeoutMilliseconds,
+    };
   }
 
   /**
