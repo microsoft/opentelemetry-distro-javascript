@@ -17,7 +17,8 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: write
-      pull-requests: write
+      pull-requests: read
+      issues: write
     steps:
       - name: Fetch and validate PR
         id: find-pr
@@ -72,8 +73,7 @@ jobs:
                 'The auto-fix workflow does not run on pull requests from forks to avoid',
                 'executing untrusted code with repository write access.',
                 '',
-                'Please run `pnpm lint:fix` locally in the affected package(s) and push the',
-                'lint fixes to your branch.',
+                'Please run `npm run lint:fix` locally and push the lint fixes to your branch.',
               ].join('\n'),
             });
 
@@ -89,60 +89,15 @@ jobs:
         if: steps.find-pr.outputs.has-pr == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: '20'
 
-      - name: Setup pnpm
-        if: steps.find-pr.outputs.has-pr == 'true'
-        uses: pnpm/action-setup@v4
-        with:
-          version: '10.33.0'
-
-      - name: Find affected packages and run pnpm lint:fix
+      - name: Install dependencies and run lint:fix
         if: steps.find-pr.outputs.has-pr == 'true'
         run: |
-          UPSTREAM_REPO_URL="${{ github.server_url }}/${{ github.repository }}.git"
-          UPSTREAM_DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
-
-          # `origin` points at the PR head repository after checkout, which may be a fork.
-          # Fetch the workflow repository's default branch explicitly and diff against that.
-          if git remote get-url upstream >/dev/null 2>&1; then
-            git remote set-url upstream "$UPSTREAM_REPO_URL"
-          else
-            git remote add upstream "$UPSTREAM_REPO_URL"
-          fi
-          git fetch --no-tags upstream "${UPSTREAM_DEFAULT_BRANCH}:refs/remotes/upstream/${UPSTREAM_DEFAULT_BRANCH}"
-
-          # Find unique package directories (sdk/<service>/<package>) from changed files
-          PKGS=$(git diff --name-only "upstream/${UPSTREAM_DEFAULT_BRANCH}...HEAD" \
-            | grep '^sdk/' \
-            | sed 's|\(sdk/[^/]*/[^/]*\)/.*|\1|' \
-            | sort -u)
-
-          echo "Affected packages:"
-          echo "$PKGS"
-
-          if [ -z "$PKGS" ]; then
-            echo "No sdk/ packages changed, nothing to lint"
-            exit 0
-          fi
-
-          # Build pnpm/turbo filter args (e.g. --filter=@azure/arm-foo...)
-          FILTERS=""
-          for pkg in $PKGS; do
-            if [ -f "$pkg/package.json" ]; then
-              PKG_NAME=$(node -p "require('./$pkg/package.json').name")
-              FILTERS="$FILTERS --filter=${PKG_NAME}"
-            fi
-          done
-
-          # Install only the affected packages and their dependencies.
-          # --ignore-scripts prevents pre/postinstall lifecycle scripts from running.
-          # Frozen lockfile is the default in CI; if the lockfile is out of sync the
-          # PR author must fix it — this workflow only fixes linting.
-          pnpm install $FILTERS --ignore-scripts
-
-          # Run lint:fix across all affected packages in one turbo invocation
-          pnpm turbo run lint:fix $FILTERS
+          # --ignore-scripts prevents pre/postinstall lifecycle scripts from running
+          # against PR-author code with write credentials in scope.
+          npm ci --ignore-scripts
+          npm run lint:fix
 
       - name: Commit and push lint fixes
         if: steps.find-pr.outputs.has-pr == 'true'
@@ -155,10 +110,13 @@ jobs:
             echo "No lint fixes needed"
             echo "CHANGES=false" >> $GITHUB_OUTPUT
           else
-            git diff --name-only \
+            # GitHub Actions runs bash with `-eo pipefail`, so a `grep` that matches
+            # nothing would fail this step. Tolerate empty matches and rely on the
+            # `git diff --cached --quiet` check below.
+            (git diff --name-only \
               | grep -E '\.(ts|mts|cts|tsx|js|mjs|cjs|jsx|json|md|yaml|yml)$' \
-              | grep -v '^pnpm-lock\.yaml$' \
-              | xargs -r git add --
+              | grep -v '^package-lock\.json$' \
+              | xargs -r git add --) || true
 
             if git diff --cached --quiet; then
               echo "Lint fixes were detected, but none matched the commit allow-list"
@@ -183,7 +141,7 @@ jobs:
               await github.rest.issues.createComment({
                 ...context.repo,
                 issue_number: prNumber,
-                body: '✅ Automatically ran `pnpm lint:fix` and pushed the lint fixes. lint should now pass.'
+                body: '✅ Automatically ran `npm run lint:fix` and pushed the lint fixes. lint should now pass.'
               });
               core.info(`Posted success comment on PR #${prNumber}`);
             } else {
