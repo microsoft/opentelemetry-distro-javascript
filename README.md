@@ -345,18 +345,19 @@ useMicrosoftOpenTelemetry({
 
 A365 options can also be set via environment variables (highest precedence):
 
-| Environment Variable                      | Description                                                                                                                            |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `ENABLE_A365_OBSERVABILITY_EXPORTER`      | `"true"` / `"false"` — override `enabled`                                                                                              |
-| `A365_OBSERVABILITY_SCOPES_OVERRIDE`      | Space-separated list of OAuth scopes                                                                                                   |
-| `A365_OBSERVABILITY_DOMAIN_OVERRIDE`      | Override service domain                                                                                                                |
-| `CLUSTER_CATEGORY`                        | Override cluster category                                                                                                              |
-| `A365_OBSERVABILITY_LOG_LEVEL`            | A365 internal logger filter level (`none`, `info`, `warn`, `error`, or pipe-delimited combination) — overrides `observabilityLogLevel` |
-| `A365_PER_REQUEST_MAX_TRACES`             | Max buffered traces (default: `1000`)                                                                                                  |
-| `A365_PER_REQUEST_MAX_SPANS_PER_TRACE`    | Max spans per trace (default: `5000`)                                                                                                  |
-| `A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS` | Max concurrent exports (default: `20`)                                                                                                 |
-| `A365_PER_REQUEST_FLUSH_GRACE_MS`         | Grace period after root span ends (default: `250`)                                                                                     |
-| `A365_PER_REQUEST_MAX_TRACE_AGE_MS`       | Max trace age before forced flush (default: `1800000`)                                                                                 |
+| Environment Variable                           | Description                                                                                                                            |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `ENABLE_A365_OBSERVABILITY_EXPORTER`           | `"true"` / `"false"` — override `enabled`                                                                                              |
+| `A365_OBSERVABILITY_SCOPES_OVERRIDE`           | Space-separated list of OAuth scopes                                                                                                   |
+| `A365_OBSERVABILITY_DOMAIN_OVERRIDE`           | Override service domain                                                                                                                |
+| `CLUSTER_CATEGORY`                             | Override cluster category                                                                                                              |
+| `A365_OBSERVABILITY_LOG_LEVEL`                 | A365 internal logger filter level (`none`, `info`, `warn`, `error`, or pipe-delimited combination) — overrides `observabilityLogLevel` |
+| `A365_PER_REQUEST_MAX_TRACES`                  | Max buffered traces (default: `1000`)                                                                                                  |
+| `A365_PER_REQUEST_MAX_SPANS_PER_TRACE`         | Max spans per trace (default: `5000`)                                                                                                  |
+| `A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS`      | Max concurrent exports (default: `20`)                                                                                                 |
+| `A365_PER_REQUEST_FLUSH_GRACE_MS`              | Grace period after root span ends (default: `250`)                                                                                     |
+| `A365_PER_REQUEST_MAX_TRACE_AGE_MS`            | Max trace age before forced flush (default: `1800000`)                                                                                 |
+| `A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS` | Per-attempt timeout (ms) for agentic token exchange; `0` or negative disables (default: `30000`)                                       |
 
 ### Example
 

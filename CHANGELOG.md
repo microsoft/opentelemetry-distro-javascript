@@ -4,6 +4,7 @@
 
 ### Bugs Fixed
 - A365: forward `a365.maxQueueSize`, `a365.scheduledDelayMilliseconds`, `a365.maxExportBatchSize`, and `a365.exporterTimeoutMilliseconds` to the `BatchSpanProcessor` that wraps the `Agent365Exporter`.
+- A365: add a configurable timeout to agentic token exchange so an unresponsive STS no longer hangs telemetry exports indefinitely
 
 ## [1.1.0] - 2026-05-29
 

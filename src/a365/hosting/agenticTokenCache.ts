@@ -8,6 +8,9 @@
 import { getA365Logger } from "../logging.js";
 import type { TurnContextLike } from "./types.js";
 
+/** Max setTimeout delay (2^31 - 1 ms); larger values overflow and fire immediately. */
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+
 /**
  * Minimal authorization shape required by AgenticTokenCache.
  *
@@ -55,8 +58,10 @@ export class AgenticTokenCache {
   private readonly _defaultMaxTokenAgeMs = 3_600_000;
   private readonly _maxCacheSize = 10_000;
   private readonly _maxExpSeconds = 86_400; // 24 hours
+  private readonly _defaultExchangeTimeoutMs = 30_000;
   private readonly _keyLocks = new Map<string, Promise<unknown>>();
   private readonly _authScopes: string[];
+  private readonly _exchangeTimeoutMs: number;
 
   constructor(options?: AgenticTokenCacheOptions) {
     const envScopes = process.env.A365_OBSERVABILITY_SCOPES_OVERRIDE?.trim();
@@ -67,6 +72,14 @@ export class AgenticTokenCache {
         "api://9b975845-388f-4429-889e-eab1ef63949c/.default",
       ];
     }
+
+    // A non-positive timeout disables the guard (waits indefinitely).
+    // A blank/unset env var falls through to the option/default.
+    const rawTimeout = process.env.A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS?.trim();
+    const envTimeout = rawTimeout ? Number(rawTimeout) : NaN;
+    this._exchangeTimeoutMs = Number.isFinite(envTimeout)
+      ? envTimeout
+      : (options?.exchangeTimeoutMs ?? this._defaultExchangeTimeoutMs);
   }
 
   public static makeKey(agentId: string, tenantId: string): string {
@@ -152,9 +165,12 @@ export class AgenticTokenCache {
           `[AgenticTokenCache] Exchanging token attempt ${attempt + 1}/${maxRetries + 1}`,
         );
         try {
-          const tokenResponse = await authorization.exchangeToken(turnContext, authHandlerName, {
-            scopes: entry.scopes,
-          });
+          const tokenResponse = await this.exchangeTokenWithTimeout(
+            authorization,
+            turnContext,
+            authHandlerName,
+            entry.scopes,
+          );
           if (!tokenResponse?.token) {
             getA365Logger().error("[AgenticTokenCache] Undefined token returned");
             entry.token = undefined;
@@ -251,6 +267,39 @@ export class AgenticTokenCache {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /**
+   * Wraps exchangeToken in a timeout so an unresponsive STS/auth service
+   * surfaces a (retriable) timeout error instead of hanging the refresh
+   * promise indefinitely and stalling all dependent exports. The rejection
+   * message contains "timeout" so {@link isRetriableError} retries it.
+   */
+  private async exchangeTokenWithTimeout(
+    authorization: AuthorizationLike,
+    turnContext: TurnContextLike,
+    authHandlerName: string,
+    scopes: string[],
+  ): Promise<{ token?: string } | undefined> {
+    const exchange = authorization.exchangeToken(turnContext, authHandlerName, { scopes });
+    if (!(this._exchangeTimeoutMs > 0)) {
+      return exchange;
+    }
+    // setTimeout delays overflow a 32-bit signed int and fire immediately; clamp.
+    const delayMs = Math.min(this._exchangeTimeoutMs, MAX_TIMER_DELAY_MS);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`[AgenticTokenCache] exchangeToken timeout after ${delayMs}ms`));
+      }, delayMs);
+    });
+    try {
+      return await Promise.race([exchange, timeout]);
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
   private withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
     // Chain onto any existing promise for this key so that concurrent
     // callers are serialised rather than racing after the same await.
@@ -277,6 +326,13 @@ export class AgenticTokenCache {
 export interface AgenticTokenCacheOptions {
   /** OAuth scopes for token exchange. Defaults to the A365 observability scope. */
   authScopes?: string[];
+  /**
+   * Per-attempt timeout (ms) for the `exchangeToken` call. A timed-out attempt
+   * is treated as a retriable error. Set to 0 or a negative value to disable
+   * (wait indefinitely). Overridden by the
+   * `A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS` env var. @default 30000
+   */
+  exchangeTimeoutMs?: number;
 }
 
 /**
