@@ -28,10 +28,8 @@
   },
   "lint-staged": {
     "{src,test}/**/*.ts": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{js,json}": "prettier --write"
+      "eslint --fix"
+    ]
   },
   "engines": {
     "node": ">=20.0.0"
