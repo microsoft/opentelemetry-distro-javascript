@@ -80,6 +80,7 @@
     "@microsoft/applicationinsights-web-snippet": "^1.2.3",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.218.0",
+    "@opentelemetry/context-async-hooks": "^2.7.1",
     "@opentelemetry/core": "^2.7.1",
     "@opentelemetry/exporter-logs-otlp-http": "^0.218.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.218.0",

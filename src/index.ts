@@ -8,6 +8,8 @@ export type { AzureMonitorOpenTelemetryOptions };
 export {
   useMicrosoftOpenTelemetry,
   shutdownMicrosoftOpenTelemetry,
+  createMicrosoftOpenTelemetryInstance,
+  runWithMicrosoftOpenTelemetryInstance,
   MICROSOFT_OPENTELEMETRY_VERSION,
 } from "./distro/index.js";
 export type {
@@ -15,6 +17,7 @@ export type {
   InstrumentationOptions,
   BrowserSdkLoaderOptions,
   A365Options,
+  MicrosoftOpenTelemetryInstance,
 } from "./distro/index.js";
 
 // ── Re-exports from A365 configuration ──────────────────────────────────────

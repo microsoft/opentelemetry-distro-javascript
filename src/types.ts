@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import type { AzureMonitorExporterOptions } from "@azure/monitor-opentelemetry-exporter";
+import type { Meter, Tracer } from "@opentelemetry/api";
+import type { Logger } from "@opentelemetry/api-logs";
 import type { InstrumentationConfig } from "@opentelemetry/instrumentation";
 import type { Resource } from "@opentelemetry/resources";
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
@@ -50,6 +52,36 @@ export interface MicrosoftOpenTelemetryOptions {
 
   /** Enable console exporters for traces, metrics, and logs. Auto-enabled when no other exporter is active. */
   enableConsoleExporters?: boolean;
+}
+
+/**
+ * A handle to a single, isolated Microsoft OpenTelemetry SDK instance.
+ *
+ * Multiple instances can be created in the same Node.js runtime via
+ * {@link createMicrosoftOpenTelemetryInstance}. Each instance owns its own
+ * exporter pipeline (resource, sampler, processors, readers). Telemetry created
+ * through this handle — or within {@link MicrosoftOpenTelemetryInstance.runWithInstance} —
+ * is routed only to this instance's pipeline.
+ */
+export interface MicrosoftOpenTelemetryInstance {
+  /** A stable identifier for this instance. */
+  readonly id: string;
+  /** Get a tracer bound to this instance's pipeline. */
+  getTracer(name: string, version?: string): Tracer;
+  /** Get a meter bound to this instance's pipeline. */
+  getMeter(name: string, version?: string): Meter;
+  /** Get a logger bound to this instance's pipeline. */
+  getLogger(name: string, version?: string): Logger;
+  /**
+   * Run `fn` with this instance bound as the ambient "current instance" so that
+   * code using the global OpenTelemetry API (e.g. `trace.getTracer(...)`) routes
+   * to this instance's pipeline.
+   */
+  runWithInstance<T>(fn: () => T): T;
+  /** Flush this instance's pipeline. */
+  forceFlush(): Promise<void>;
+  /** Shut down and detach only this instance, leaving other instances active. */
+  shutdown(): Promise<void>;
 }
 
 /**
