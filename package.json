@@ -22,7 +22,16 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "docs": "typedoc",
-    "prepublishOnly": "npm run build"
+    "lint-staged": "lint-staged",
+    "prepublishOnly": "npm run build",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "{src,test}/**/*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,json}": "prettier --write"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -114,6 +123,8 @@
     "dotenv": "^16.0.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.3.3",
     "rimraf": "^6.0.0",
     "typedoc": "^0.28.19",
