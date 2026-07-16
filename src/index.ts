@@ -8,6 +8,7 @@ export type { AzureMonitorOpenTelemetryOptions };
 export {
   useMicrosoftOpenTelemetry,
   shutdownMicrosoftOpenTelemetry,
+  whenGenAIInstrumentationsReady,
   MICROSOFT_OPENTELEMETRY_VERSION,
 } from "./distro/index.js";
 export type {

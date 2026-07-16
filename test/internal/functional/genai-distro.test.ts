@@ -9,7 +9,11 @@ import {
   BasicTracerProvider,
 } from "@opentelemetry/sdk-trace-base";
 import { trace, type ProxyTracerProvider } from "@opentelemetry/api";
-import { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } from "../../../src/index.js";
+import {
+  useMicrosoftOpenTelemetry,
+  shutdownMicrosoftOpenTelemetry,
+  whenGenAIInstrumentationsReady,
+} from "../../../src/index.js";
 import { LangChainTraceInstrumentor } from "../../../src/genai/instrumentations/langchain/langchainTraceInstrumentor.js";
 import { ATTR_GEN_AI_OPERATION_NAME, GEN_AI_OPERATION_CHAT } from "../../../src/genai/index.js";
 
@@ -108,5 +112,31 @@ describe("GenAI distro integration", () => {
     );
     expect(chatSpan).toBeDefined();
     expect(chatSpan?.instrumentationScope.name).toBe("microsoft-otel-langchain");
+  });
+
+  it("attaches the LangChain tracer synchronously after awaiting whenGenAIInstrumentationsReady (no polling)", async () => {
+    useMicrosoftOpenTelemetry({
+      tracesPerSecond: 0,
+      samplingRatio: 1,
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      instrumentationOptions: {
+        openaiAgents: { enabled: false },
+        langchain: { enabled: true, isContentRecordingEnabled: true },
+      },
+    });
+
+    // Awaiting the readiness promise must guarantee the patch is applied — with
+    // NO vi.waitFor/polling. This is the contract that lets ESM apps (via a
+    // top-level await in their telemetry bootstrap) avoid the init race that
+    // dropped the top-level invoke_agent span on the first invocation.
+    await whenGenAIInstrumentationsReady();
+
+    const manager = CallbackManager.configure([], []);
+    const hasLangChainTracer = manager.inheritableHandlers.some(
+      (h: any) => h?.name === "OpenTelemetryLangChainTracer",
+    );
+    expect(hasLangChainTracer).toBe(true);
   });
 });

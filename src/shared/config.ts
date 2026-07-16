@@ -34,7 +34,7 @@ export class InternalConfig {
   /** Azure Monitor Exporter Configuration */
   public azureMonitorExporterOptions: AzureMonitorExporterOptions;
   /**
-   * OpenTelemetry Instrumentations configuration included as part of Azure Monitor (azureSdk, http, mongoDb, mySql, postgreSql, redis, redis4)
+   * OpenTelemetry Instrumentations configuration included as part of Azure Monitor (azureSdk, http, undici, mongoDb, mySql, postgreSql, redis, redis4)
    */
   public instrumentationOptions: InstrumentationOptions;
   /** Enable Live Metrics feature */
@@ -82,6 +82,7 @@ export class InternalConfig {
     this.metricExportIntervalMillis = this.calculateMetricExportInterval();
     this.instrumentationOptions = {
       http: { enabled: true },
+      undici: { enabled: true },
       azureSdk: { enabled: true },
       mongoDb: { enabled: true },
       mySql: { enabled: true },

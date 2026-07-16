@@ -98,6 +98,7 @@
     "@opentelemetry/instrumentation-mysql": "^0.64.0",
     "@opentelemetry/instrumentation-pg": "^0.70.0",
     "@opentelemetry/instrumentation-redis": "^0.66.0",
+    "@opentelemetry/instrumentation-undici": "^0.29.0",
     "@opentelemetry/instrumentation-winston": "^0.62.0",
     "@opentelemetry/resource-detector-azure": "^0.26.0",
     "@opentelemetry/resources": "^2.8.0",

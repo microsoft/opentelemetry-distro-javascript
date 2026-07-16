@@ -26,8 +26,6 @@ class LangChainTraceInstrumentorImpl extends InstrumentationBase<Instrumentation
   // in that window (typically the first compiled-graph `invoke` after distro
   // startup) silently fell through with no tracer attached, dropping the
   // outer `invoke_agent LangGraph` wrapper span and fragmenting the trace.
-  // A static import is safe: by the time `patch()` runs, the callbacks
-  // manager module is already loaded (it is the `module` argument).
   private _tracerCtor: LangChainTracerCtor = LangChainTracer;
 
   private constructor() {

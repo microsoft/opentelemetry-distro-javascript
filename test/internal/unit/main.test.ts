@@ -362,7 +362,8 @@ describe("Main functions", () => {
     assert.ok(instrumentations & SdkStatsInstrumentation.MYSQL, "MYSQL not set");
     assert.ok(instrumentations & SdkStatsInstrumentation.POSTGRES, "POSTGRES not set");
     assert.ok(instrumentations & SdkStatsInstrumentation.REDIS, "REDIS not set");
-    assert.strictEqual(instrumentations, 31);
+    assert.ok(instrumentations & SdkStatsInstrumentation.UNDICI, "UNDICI not set");
+    assert.strictEqual(instrumentations, 31 | SdkStatsInstrumentation.UNDICI);
   });
 
   it("should set shim feature in SDK Stats if env var is populated", () => {
@@ -589,6 +590,7 @@ describe("Main functions", () => {
       instrumentationOptions: {
         azureSdk: { enabled: false },
         http: { enabled: false },
+        undici: { enabled: false },
         mongoDb: { enabled: false },
         mySql: { enabled: false },
         postgreSql: { enabled: false },

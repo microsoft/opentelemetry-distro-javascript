@@ -16,6 +16,11 @@ import type {
   IgnoreOutgoingRequestFunction,
 } from "@opentelemetry/instrumentation-http";
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
+import type {
+  UndiciInstrumentationConfig,
+  UndiciRequest,
+} from "@opentelemetry/instrumentation-undici";
+import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import { MongoDBInstrumentation } from "@opentelemetry/instrumentation-mongodb";
 import { MySQLInstrumentation } from "@opentelemetry/instrumentation-mysql";
 import { PgInstrumentation } from "@opentelemetry/instrumentation-pg";
@@ -43,10 +48,11 @@ import { logLevelToSeverityNumber } from "../azureMonitor/utils/logUtils.js";
  */
 export function createInstrumentations(
   config: InternalConfig,
-  options?: { filterAzureMonitorRequests?: boolean },
+  options?: { filterAzureMonitorRequests?: boolean; ignoreUndiciOrigins?: string[] },
 ): Instrumentation[] {
   const instrumentations: Instrumentation[] = [];
   const filterAzureMonitor = options?.filterAzureMonitorRequests ?? false;
+  const ignoreUndiciOrigins = options?.ignoreUndiciOrigins ?? [];
 
   // ── Trace instrumentations ──────────────────────────────────────
   if (config.instrumentationOptions.http?.enabled) {
@@ -65,6 +71,32 @@ export function createInstrumentations(
     }
 
     instrumentations.push(new HttpInstrumentation(httpConfig));
+  }
+
+  // Undici / global `fetch` — instruments outgoing requests the Node
+  // http/https instrumentation does not see (e.g. the OpenAI SDK's fetch calls).
+  if (config.instrumentationOptions.undici?.enabled) {
+    let undiciConfig = config.instrumentationOptions.undici as UndiciInstrumentationConfig;
+
+    // Undici does not honour tracing suppression, so requests made by our own
+    // fetch-based telemetry exporters (e.g. the A365 exporter) would otherwise
+    // be traced as spurious client spans. Skip requests to those origins while
+    // still delegating to any caller-provided ignore hook. Clone the config so
+    // the caller-owned object is never mutated.
+    if (ignoreUndiciOrigins.length > 0) {
+      const providedIgnoreRequestHook = undiciConfig.ignoreRequestHook;
+      undiciConfig = {
+        ...undiciConfig,
+        ignoreRequestHook: (request: UndiciRequest) => {
+          if (ignoreUndiciOrigins.includes(request.origin)) {
+            return true;
+          }
+          return providedIgnoreRequestHook ? providedIgnoreRequestHook(request) : false;
+        },
+      };
+    }
+
+    instrumentations.push(new UndiciInstrumentation(undiciConfig));
   }
 
   if (config.instrumentationOptions.azureSdk?.enabled) {

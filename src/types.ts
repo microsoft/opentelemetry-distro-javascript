@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 import type { AzureMonitorExporterOptions } from "@azure/monitor-opentelemetry-exporter";
 import type { InstrumentationConfig } from "@opentelemetry/instrumentation";
+import type { UndiciInstrumentationConfig } from "@opentelemetry/instrumentation-undici";
 import type { Resource } from "@opentelemetry/resources";
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 import type { MetricReader, ViewOptions } from "@opentelemetry/sdk-metrics";
@@ -84,6 +85,13 @@ export interface InstrumentationOptions {
   azureSdk?: InstrumentationConfig;
   /** HTTP Instrumentation Config */
   http?: InstrumentationConfig;
+  /**
+   * Undici / global `fetch` Instrumentation Config.
+   * Instruments outgoing requests made via the global `fetch` API (undici),
+   * which the Node `http`/`https` instrumentation does not cover. Required for
+   * HTTP client spans from `fetch`-based clients such as the OpenAI SDK.
+   */
+  undici?: UndiciInstrumentationConfig;
   /** MongoDB Instrumentation Config */
   mongoDb?: InstrumentationConfig;
   /** MySQL Instrumentation Config */

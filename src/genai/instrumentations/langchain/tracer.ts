@@ -46,6 +46,15 @@ export class LangChainTracer extends BaseTracer {
   constructor(tracer: Tracer) {
     super();
     this.tracer = tracer;
+    // Force LangChain to await this handler's callbacks instead of queuing them
+    // in the background (the default when LANGCHAIN_CALLBACKS_BACKGROUND !==
+    // "false"). Span creation happens in the async `onRunCreate` callback; if it
+    // runs in the background, the run body (e.g. a chat model's `fetch`) can
+    // execute — and `wrapRunExecution` can be invoked — before the span exists,
+    // so client spans race and only intermittently nest under the run's span.
+    // Awaiting guarantees the span is registered before the body runs, making
+    // context propagation (and thus HTTP/`fetch` span nesting) deterministic.
+    this.awaitHandlers = true;
   }
 
   name = "OpenTelemetryLangChainTracer";
@@ -102,10 +111,19 @@ export class LangChainTracer extends BaseTracer {
     let kind: SpanKind = SpanKind.INTERNAL;
     if (operation === "invoke_agent") {
       spanName = `${operation} ${run.name}`;
-      kind = SpanKind.SERVER;
+      // In-process agent orchestration (e.g. LangGraph) maps to the GenAI
+      // "invoke agent internal span" (SpanKind.INTERNAL), not SERVER. The Azure
+      // Monitor exporter turns SERVER spans into requests, which the
+      // Application Insights "AI agents (preview)" experience does not treat as
+      // agent calls; INTERNAL exports them as dependencies so they surface in
+      // the agents graph. Matches the OTel GenAI semconv and the Python distro.
+      kind = SpanKind.INTERNAL;
     } else if (operation === "execute_tool") {
       spanName = `${operation} ${run.name}`;
-      kind = SpanKind.CLIENT;
+      // Tool execution runs in-process, so per the GenAI "execute tool" semantic
+      // convention (and matching the Python distro) the span kind is INTERNAL,
+      // not CLIENT — it is not an outbound/remote dependency.
+      kind = SpanKind.INTERNAL;
     } else if (operation === "chat") {
       spanName = `${operation} ${Utils.getModel(run) || run.name}`.trim();
       kind = SpanKind.CLIENT;
@@ -144,6 +162,29 @@ export class LangChainTracer extends BaseTracer {
     }
 
     this.runs.set(run.id, { run, span, startTime, lastAccessTime: startTime });
+  }
+
+  /**
+   * LangChain-core run-context hook (`BaseCallbackHandler.wrapRunExecution`).
+   *
+   * Core invokes this around the execution of a run *body* — a chat model's
+   * `_generate`, each step of a streaming response, and a tool's `_call` — after
+   * the corresponding span has been opened in {@link startTracing}. We make that
+   * run's span the active OTel span for the duration of `fn` so that any client
+   * instrumentation firing inside the body (HTTP/`fetch`/undici, DB drivers,
+   * etc.) reads it as the current context and nests its spans under the run's
+   * span, instead of emitting disconnected root traces.
+   *
+   * If no span is tracked for `runId` (e.g. an internal/suppressed run that was
+   * skipped), `fn` is invoked directly so behavior is unchanged.
+   */
+  wrapRunExecution<T>(runId: string, fn: () => T): T {
+    const entry = this.runs.get(runId);
+    if (!entry) {
+      return fn();
+    }
+    const runContext = trace.setSpan(context.active(), entry.span);
+    return context.with(runContext, fn);
   }
 
   /**
