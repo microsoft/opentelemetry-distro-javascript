@@ -228,6 +228,7 @@ export class LangChainTracer extends BaseTracer {
       }
       Utils.setModelAttribute(run, span);
       Utils.setChoiceCountAttribute(run, span);
+      Utils.setRequestAttributes(run, span);
       Utils.setResponseIdAttribute(run, span);
       Utils.setFinishReasonsAttribute(run, span);
       Utils.setProviderNameAttribute(run, span);

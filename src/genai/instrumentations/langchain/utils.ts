@@ -9,10 +9,20 @@ import {
   ATTR_GEN_AI_CONVERSATION_ID,
   ATTR_GEN_AI_INPUT_MESSAGES,
   ATTR_GEN_AI_OPERATION_NAME,
+  ATTR_GEN_AI_OUTPUT_TYPE,
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_CHOICE_COUNT,
+  ATTR_GEN_AI_REQUEST_FREQUENCY_PENALTY,
+  ATTR_GEN_AI_REQUEST_MAX_TOKENS,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_REQUEST_PRESENCE_PENALTY,
+  ATTR_GEN_AI_REQUEST_SEED,
+  ATTR_GEN_AI_REQUEST_STOP_SEQUENCES,
+  ATTR_GEN_AI_REQUEST_STREAM,
+  ATTR_GEN_AI_REQUEST_TEMPERATURE,
+  ATTR_GEN_AI_REQUEST_TOP_K,
+  ATTR_GEN_AI_REQUEST_TOP_P,
   ATTR_GEN_AI_RESPONSE_ID,
   ATTR_GEN_AI_RESPONSE_FINISH_REASONS,
   ATTR_GEN_AI_RESPONSE_MODEL,
@@ -564,6 +574,125 @@ export function setChoiceCountAttribute(run: Run, span: Span) {
   if (n !== undefined && n !== 1) {
     span.setAttribute(ATTR_GEN_AI_REQUEST_CHOICE_COUNT, n);
   }
+}
+
+// LangChain exposes provider-specific invocation params as unknown values. Match the upstream
+// OpenTelemetry GenAI instrumentations by accepting typed SDK values without coercing strings.
+function firstDefined(params: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (params[key] !== undefined && params[key] !== null) {
+      return params[key];
+    }
+  }
+  return undefined;
+}
+
+function integer(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value)
+    ? value
+    : undefined;
+}
+
+function stringArray(value: unknown): string[] | undefined {
+  if (isString(value) && value.length > 0) return [value];
+  if (!Array.isArray(value)) return undefined;
+  const strings = value.filter((item): item is string => isString(item) && item.length > 0);
+  return strings.length === value.length && strings.length > 0 ? strings : undefined;
+}
+
+const OUTPUT_TYPES: readonly string[] = ["text", "json", "image", "speech"];
+
+const OUTPUT_TYPE_ALIASES: Readonly<Record<string, string>> = {
+  json_object: "json",
+  json_schema: "json",
+  b64_json: "image",
+  url: "image",
+  audio: "speech",
+};
+
+function normalizeOutputType(value: unknown): string | undefined {
+  if (!isString(value)) return undefined;
+  const normalized = value.trim().toLowerCase();
+  return OUTPUT_TYPES.includes(normalized) ? normalized : OUTPUT_TYPE_ALIASES[normalized];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getOutputType(params: Record<string, unknown>): string | undefined {
+  const explicit = firstDefined(params, ["output_type", "outputType"]);
+  const explicitType = normalizeOutputType(explicit);
+  if (explicitType) return explicitType;
+
+  const responseFormat = firstDefined(params, ["response_format", "responseFormat"]);
+  if (isRecord(responseFormat)) {
+    const formatType = normalizeOutputType(responseFormat.type);
+    if (formatType) return formatType;
+  }
+  const responseFormatType = normalizeOutputType(responseFormat);
+  if (responseFormatType) return responseFormatType;
+
+  const text = params.text;
+  if (isRecord(text)) {
+    const format = text.format;
+    if (isRecord(format)) {
+      return normalizeOutputType(format.type);
+    }
+  }
+  return undefined;
+}
+
+// Request attributes surfaced by LangChain under extra.invocation_params.
+// Both OpenAI-style snake_case and LangChain/provider camelCase aliases are
+// accepted because callback payloads vary by model integration and API path.
+export function setRequestAttributes(run: Run, span: Span): void {
+  const params = run.extra?.invocation_params;
+  if (!isRecord(params)) return;
+
+  const outputType = getOutputType(params);
+  if (outputType) span.setAttribute(ATTR_GEN_AI_OUTPUT_TYPE, outputType);
+
+  const numberAttributes: Array<[string, string[]]> = [
+    [ATTR_GEN_AI_REQUEST_FREQUENCY_PENALTY, ["frequency_penalty", "frequencyPenalty"]],
+    [ATTR_GEN_AI_REQUEST_PRESENCE_PENALTY, ["presence_penalty", "presencePenalty"]],
+    [ATTR_GEN_AI_REQUEST_TEMPERATURE, ["temperature"]],
+    [ATTR_GEN_AI_REQUEST_TOP_P, ["top_p", "topP"]],
+  ];
+  for (const [attribute, keys] of numberAttributes) {
+    const value = firstDefined(params, keys);
+    if (typeof value === "number" && Number.isFinite(value)) {
+      span.setAttribute(attribute, value);
+    }
+  }
+
+  const maxTokens = integer(
+    firstDefined(params, [
+      "max_tokens",
+      "maxTokens",
+      "max_completion_tokens",
+      "maxCompletionTokens",
+      "max_output_tokens",
+      "maxOutputTokens",
+    ]),
+  );
+  if (maxTokens !== undefined) {
+    span.setAttribute(ATTR_GEN_AI_REQUEST_MAX_TOKENS, maxTokens);
+  }
+
+  const seed = integer(firstDefined(params, ["seed"]));
+  if (seed !== undefined) span.setAttribute(ATTR_GEN_AI_REQUEST_SEED, seed);
+
+  const topK = integer(firstDefined(params, ["top_k", "topK"]));
+  if (topK !== undefined) span.setAttribute(ATTR_GEN_AI_REQUEST_TOP_K, topK);
+
+  const stopSequences = stringArray(
+    firstDefined(params, ["stop", "stop_sequences", "stopSequences"]),
+  );
+  if (stopSequences) span.setAttribute(ATTR_GEN_AI_REQUEST_STOP_SEQUENCES, stopSequences);
+
+  const stream = firstDefined(params, ["stream", "streaming"]);
+  if (typeof stream === "boolean") span.setAttribute(ATTR_GEN_AI_REQUEST_STREAM, stream);
 }
 
 // Response identifier - Helper to extract the unique response id returned by

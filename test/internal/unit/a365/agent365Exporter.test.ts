@@ -374,6 +374,35 @@ describe("Agent365Exporter", () => {
       assert.deepStrictEqual(exportedSpan.attributes["number_array_attr"], [1, 2, 3]);
     });
 
+    it("should preserve GenAI request attributes in the A365 payload", async () => {
+      const { exportedSpan } = await exportAndGetPayload(fetchSpy, {
+        "gen_ai.output.type": "json",
+        "gen_ai.request.frequency_penalty": 0.1,
+        "gen_ai.request.max_tokens": 512,
+        "gen_ai.request.presence_penalty": -0.2,
+        "gen_ai.request.seed": 42,
+        "gen_ai.request.stop_sequences": ["DONE", "STOP"],
+        "gen_ai.request.stream": false,
+        "gen_ai.request.temperature": 0.2,
+        "gen_ai.request.top_k": 40,
+        "gen_ai.request.top_p": 0.8,
+      });
+
+      assert.strictEqual(exportedSpan.attributes["gen_ai.output.type"], "json");
+      assert.strictEqual(exportedSpan.attributes["gen_ai.request.frequency_penalty"], 0.1);
+      assert.strictEqual(exportedSpan.attributes["gen_ai.request.max_tokens"], 512);
+      assert.strictEqual(exportedSpan.attributes["gen_ai.request.presence_penalty"], -0.2);
+      assert.strictEqual(exportedSpan.attributes["gen_ai.request.seed"], 42);
+      assert.deepStrictEqual(exportedSpan.attributes["gen_ai.request.stop_sequences"], [
+        "DONE",
+        "STOP",
+      ]);
+      assert.strictEqual(exportedSpan.attributes["gen_ai.request.stream"], false);
+      assert.strictEqual(exportedSpan.attributes["gen_ai.request.temperature"], 0.2);
+      assert.strictEqual(exportedSpan.attributes["gen_ai.request.top_k"], 40);
+      assert.strictEqual(exportedSpan.attributes["gen_ai.request.top_p"], 0.8);
+    });
+
     it("should partition spans by identity and export separately", async () => {
       const exporter = new Agent365Exporter({
         tokenResolver: () => "test-token",

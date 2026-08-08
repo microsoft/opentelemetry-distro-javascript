@@ -16,10 +16,13 @@ import {
   ATTR_ERROR_MESSAGE,
   ATTR_GEN_AI_INPUT_MESSAGES,
   ATTR_GEN_AI_OPERATION_NAME,
+  ATTR_GEN_AI_OUTPUT_TYPE,
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_CHOICE_COUNT,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_REQUEST_TEMPERATURE,
+  ATTR_GEN_AI_REQUEST_TOP_P,
   ATTR_GEN_AI_RESPONSE_ID,
   ATTR_GEN_AI_RESPONSE_MODEL,
   ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
@@ -426,7 +429,13 @@ describe("LangChainTracer", () => {
         },
         extra: {
           metadata: { ls_model_name: "deployment-o4-mini", ls_provider: "openai" },
-          invocation_params: { model: "deployment-o4-mini", n: 3 },
+          invocation_params: {
+            model: "deployment-o4-mini",
+            n: 3,
+            temperature: 0.2,
+            top_p: 0.8,
+            response_format: { type: "json_object" },
+          },
         },
         inputs: {
           messages: [[{ role: "user", content: "hello" }]],
@@ -481,6 +490,9 @@ describe("LangChainTracer", () => {
         3,
         "request choice count should come from invocation_params.n when >1",
       );
+      assert.strictEqual(got(ATTR_GEN_AI_REQUEST_TEMPERATURE), 0.2, "request temperature");
+      assert.strictEqual(got(ATTR_GEN_AI_REQUEST_TOP_P), 0.8, "request top_p");
+      assert.strictEqual(got(ATTR_GEN_AI_OUTPUT_TYPE), "json", "requested output type");
       assert.strictEqual(
         got(ATTR_GEN_AI_RESPONSE_MODEL),
         "o4-mini-2025-04-16",

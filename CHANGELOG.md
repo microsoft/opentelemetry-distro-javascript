@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Features Added
+- Emit `gen_ai.output.type` and available GenAI request parameters on LangChain chat spans. [#213](https://github.com/microsoft/opentelemetry-distro-javascript/pull/213)
+
 ### Bugs Fixed
 - Fix duplicate Bunyan logs, missing HTTP duration metrics, duplicate request filtering, and incorrect performance-counter values. [#212](https://github.com/microsoft/opentelemetry-distro-javascript/pull/212)
 

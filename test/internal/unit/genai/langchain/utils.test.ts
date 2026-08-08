@@ -13,6 +13,7 @@ import {
   setOutputMessagesAttribute,
   setModelAttribute,
   setChoiceCountAttribute,
+  setRequestAttributes,
   setProviderNameAttribute,
   setResponseIdAttribute,
   setFinishReasonsAttribute,
@@ -25,10 +26,20 @@ import {
   ATTR_GEN_AI_AGENT_NAME,
   ATTR_GEN_AI_INPUT_MESSAGES,
   ATTR_GEN_AI_OPERATION_NAME,
+  ATTR_GEN_AI_OUTPUT_TYPE,
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_CHOICE_COUNT,
+  ATTR_GEN_AI_REQUEST_FREQUENCY_PENALTY,
+  ATTR_GEN_AI_REQUEST_MAX_TOKENS,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_REQUEST_PRESENCE_PENALTY,
+  ATTR_GEN_AI_REQUEST_SEED,
+  ATTR_GEN_AI_REQUEST_STOP_SEQUENCES,
+  ATTR_GEN_AI_REQUEST_STREAM,
+  ATTR_GEN_AI_REQUEST_TEMPERATURE,
+  ATTR_GEN_AI_REQUEST_TOP_K,
+  ATTR_GEN_AI_REQUEST_TOP_P,
   ATTR_GEN_AI_RESPONSE_ID,
   ATTR_GEN_AI_RESPONSE_FINISH_REASONS,
   ATTR_GEN_AI_RESPONSE_MODEL,
@@ -798,6 +809,172 @@ describe("setChoiceCountAttribute", () => {
         `should ignore invalid n=${JSON.stringify(n)}`,
       );
     }
+  });
+});
+
+describe("setRequestAttributes", () => {
+  it("sets GenAI request parameters from OpenAI-style invocation params", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      extra: {
+        invocation_params: {
+          temperature: 0.2,
+          top_p: 0.8,
+          top_k: 40,
+          max_completion_tokens: 512,
+          frequency_penalty: 0.1,
+          presence_penalty: -0.2,
+          seed: 42,
+          stop: ["DONE", "STOP"],
+          stream: true,
+          response_format: { type: "json_schema" },
+        },
+      },
+    });
+
+    setRequestAttributes(run, span);
+
+    assert.deepStrictEqual(span.attrs, {
+      [ATTR_GEN_AI_OUTPUT_TYPE]: "json",
+      [ATTR_GEN_AI_REQUEST_FREQUENCY_PENALTY]: 0.1,
+      [ATTR_GEN_AI_REQUEST_MAX_TOKENS]: 512,
+      [ATTR_GEN_AI_REQUEST_PRESENCE_PENALTY]: -0.2,
+      [ATTR_GEN_AI_REQUEST_TEMPERATURE]: 0.2,
+      [ATTR_GEN_AI_REQUEST_TOP_K]: 40,
+      [ATTR_GEN_AI_REQUEST_TOP_P]: 0.8,
+      [ATTR_GEN_AI_REQUEST_SEED]: 42,
+      [ATTR_GEN_AI_REQUEST_STOP_SEQUENCES]: ["DONE", "STOP"],
+      [ATTR_GEN_AI_REQUEST_STREAM]: true,
+    });
+  });
+
+  it("supports typed camelCase provider aliases and normalizes a single stop sequence", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      extra: {
+        invocation_params: {
+          maxOutputTokens: 256,
+          frequencyPenalty: 0.25,
+          presencePenalty: 0,
+          topP: 0.9,
+          topK: 10,
+          stopSequences: "END",
+          streaming: false,
+          responseFormat: "text",
+        },
+      },
+    });
+
+    setRequestAttributes(run, span);
+
+    assert.strictEqual(span.attrs[ATTR_GEN_AI_OUTPUT_TYPE], "text");
+    assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_MAX_TOKENS], 256);
+    assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_FREQUENCY_PENALTY], 0.25);
+    assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_PRESENCE_PENALTY], 0);
+    assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_TOP_P], 0.9);
+    assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_TOP_K], 10);
+    assert.deepStrictEqual(span.attrs[ATTR_GEN_AI_REQUEST_STOP_SEQUENCES], ["END"]);
+    assert.strictEqual(span.attrs[ATTR_GEN_AI_REQUEST_STREAM], false);
+  });
+
+  it("preserves whitespace stop sequences", () => {
+    for (const stop of ["\n", ["STOP", "\n\n"]]) {
+      const span = makeSpan();
+      const run = makeRun({ extra: { invocation_params: { stop } } });
+
+      setRequestAttributes(run, span);
+
+      assert.deepStrictEqual(
+        span.attrs[ATTR_GEN_AI_REQUEST_STOP_SEQUENCES],
+        Array.isArray(stop) ? stop : [stop],
+      );
+    }
+  });
+
+  it("rejects empty stop sequences", () => {
+    for (const stop of ["", ["DONE", ""]]) {
+      const span = makeSpan();
+      const run = makeRun({ extra: { invocation_params: { stop } } });
+
+      setRequestAttributes(run, span);
+
+      assert.deepStrictEqual(span.attrs, {});
+    }
+  });
+
+  it("ignores invocation params that are not objects", () => {
+    for (const invocation_params of [null, "invalid", 1, true, []]) {
+      const span = makeSpan();
+      const run = makeRun({ extra: { invocation_params } });
+
+      setRequestAttributes(run, span);
+
+      assert.deepStrictEqual(span.attrs, {});
+    }
+  });
+
+  it("reads Responses API output type from text.format", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      extra: {
+        invocation_params: {
+          text: { format: { type: "json_schema" } },
+        },
+      },
+    });
+
+    setRequestAttributes(run, span);
+
+    assert.strictEqual(span.attrs[ATTR_GEN_AI_OUTPUT_TYPE], "json");
+  });
+
+  it("normalizes canonical and provider-specific output types", () => {
+    const outputTypes = [
+      ["text", "text"],
+      ["json", "json"],
+      ["image", "image"],
+      ["speech", "speech"],
+      ["json_object", "json"],
+      ["json_schema", "json"],
+      ["b64_json", "image"],
+      ["url", "image"],
+      ["audio", "speech"],
+    ];
+
+    for (const [outputType, expected] of outputTypes) {
+      const span = makeSpan();
+      const run = makeRun({
+        extra: { invocation_params: { output_type: outputType } },
+      });
+
+      setRequestAttributes(run, span);
+
+      assert.strictEqual(span.attrs[ATTR_GEN_AI_OUTPUT_TYPE], expected);
+    }
+  });
+
+  it("ignores absent or invalid request parameters", () => {
+    const span = makeSpan();
+    const run = makeRun({
+      extra: {
+        invocation_params: {
+          temperature: Number.NaN,
+          top_p: "not-a-number",
+          top_k: 1.5,
+          max_tokens: 1.5,
+          maxOutputTokens: "256",
+          frequencyPenalty: "0.25",
+          seed: {},
+          stop: ["valid", 1],
+          stream: "false",
+          response_format: { type: "unsupported" },
+        },
+      },
+    });
+
+    setRequestAttributes(run, span);
+
+    assert.deepStrictEqual(span.attrs, {});
   });
 });
 
