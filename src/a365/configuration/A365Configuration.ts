@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { A365Options, ClusterCategory } from "./A365ConfigurationOptions.js";
+import type { Agent365DurableDeliveryOptions } from "../exporter/durable/index.js";
 import type { ContextualTokenResolver } from "../exporter/Agent365ExporterOptions.js";
 import { getA365Logger } from "../logging.js";
 
@@ -126,6 +127,9 @@ export class A365Configuration {
   /** Maximum estimated payload size (bytes) per HTTP chunk. */
   public readonly maxPayloadBytes?: number;
 
+  /** Durable delivery options for local spool-and-replay behavior. */
+  public readonly durableDelivery?: Agent365DurableDeliveryOptions;
+
   constructor(options?: A365Options) {
     // 1. Set defaults
     let enabled = false;
@@ -211,6 +215,7 @@ export class A365Configuration {
     this.httpRequestTimeoutMilliseconds = options?.httpRequestTimeoutMilliseconds;
     this.maxExportBatchSize = options?.maxExportBatchSize;
     this.maxPayloadBytes = options?.maxPayloadBytes;
+    this.durableDelivery = options?.durableDelivery;
 
     // Warn when A365-scoped options are set but A365 is not enabled
     if (!this.enabled) {
@@ -224,7 +229,8 @@ export class A365Configuration {
     const hasNonTrivialOptions =
       options.tokenResolver !== undefined ||
       options.contextualTokenResolver !== undefined ||
-      options.domainOverride !== undefined;
+      options.domainOverride !== undefined ||
+      options.durableDelivery !== undefined;
 
     if (hasNonTrivialOptions) {
       getA365Logger().warn(

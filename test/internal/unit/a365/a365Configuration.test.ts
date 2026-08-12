@@ -152,6 +152,17 @@ describe("A365Configuration", () => {
       assert.strictEqual(config.maxPayloadBytes, 500 * 1024);
     });
 
+    it("should retain durable delivery options", () => {
+      const durableDelivery = {
+        enabled: true,
+        storageDirectory: "C:\\a365-spool",
+        maxStorageBytes: 1024,
+      };
+      const config = new A365Configuration({ durableDelivery });
+
+      assert.strictEqual(config.durableDelivery, durableDelivery);
+    });
+
     it("should leave exporter tuning options undefined when not set", () => {
       const config = new A365Configuration({ enabled: true });
       assert.strictEqual(config.scheduledDelayMilliseconds, undefined);

@@ -351,6 +351,9 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
         ...(a365Config.maxPayloadBytes !== undefined && {
           maxPayloadBytes: a365Config.maxPayloadBytes,
         }),
+        ...(a365Config.durableDelivery !== undefined && {
+          durableDelivery: a365Config.durableDelivery,
+        }),
       });
       spanProcessors.push(new BatchSpanProcessor(a365Exporter, a365Exporter.getBufferConfig()));
     }

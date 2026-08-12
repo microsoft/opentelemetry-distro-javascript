@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ContextualTokenResolver } from "../exporter/Agent365ExporterOptions.js";
+import type { Agent365DurableDeliveryOptions } from "../exporter/durable/index.js";
 
 /**
  * Cluster categories for A365 service endpoint resolution.
@@ -118,4 +119,7 @@ export interface A365Options {
 
   /** Maximum estimated payload size (bytes) per HTTP chunk. */
   maxPayloadBytes?: number;
+
+  /** Durable delivery options for local spool-and-replay behavior. */
+  durableDelivery?: Agent365DurableDeliveryOptions;
 }

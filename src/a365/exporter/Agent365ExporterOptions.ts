@@ -2,7 +2,13 @@
 // Licensed under the MIT License.
 
 import type { ClusterCategory } from "../configuration/A365ConfigurationOptions.js";
+import {
+  type Agent365DurableDeliveryOptions,
+  ResolvedDurableDeliveryOptions,
+} from "./durable/index.js";
 import type { TokenResolverContext } from "./TokenResolverContext.js";
+
+export type { Agent365DurableDeliveryOptions } from "./durable/index.js";
 
 /**
  * A function that resolves an authentication token for the given agent and tenant.
@@ -79,6 +85,9 @@ export interface Agent365ExporterOptions {
 
   /** Maximum estimated payload size (bytes) per HTTP chunk. @default 900 * 1024 (900KB) */
   maxPayloadBytes?: number;
+
+  /** Durable delivery options for local spool-and-replay behavior. */
+  durableDelivery?: Agent365DurableDeliveryOptions;
 }
 
 /** Resolved options with defaults applied. */
@@ -95,6 +104,7 @@ export class ResolvedExporterOptions {
   public readonly httpRequestTimeoutMilliseconds: number;
   public readonly maxExportBatchSize: number;
   public readonly maxPayloadBytes: number;
+  public readonly durableDelivery: ResolvedDurableDeliveryOptions;
 
   constructor(options?: Agent365ExporterOptions) {
     this.clusterCategory = options?.clusterCategory ?? "prod";
@@ -111,5 +121,6 @@ export class ResolvedExporterOptions {
     this.httpRequestTimeoutMilliseconds = options?.httpRequestTimeoutMilliseconds ?? 30000;
     this.maxExportBatchSize = options?.maxExportBatchSize ?? 512;
     this.maxPayloadBytes = options?.maxPayloadBytes ?? 900 * 1024;
+    this.durableDelivery = new ResolvedDurableDeliveryOptions(options?.durableDelivery);
   }
 }

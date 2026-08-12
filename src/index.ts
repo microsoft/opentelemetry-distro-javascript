@@ -23,6 +23,7 @@ export type { ClusterCategory } from "./a365/index.js";
 export { Agent365Exporter } from "./a365/index.js";
 export type {
   Agent365ExporterOptions,
+  Agent365DurableDeliveryOptions,
   TokenResolver,
   ContextualTokenResolver,
   AgentIdentity,

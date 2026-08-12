@@ -4,6 +4,7 @@
 export { Agent365Exporter } from "./Agent365Exporter.js";
 export type {
   Agent365ExporterOptions,
+  Agent365DurableDeliveryOptions,
   TokenResolver,
   ContextualTokenResolver,
 } from "./Agent365ExporterOptions.js";

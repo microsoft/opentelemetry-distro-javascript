@@ -1495,6 +1495,63 @@ describe("Main functions", () => {
     await shutdownMicrosoftOpenTelemetry();
   });
 
+  it("propagates a365 durableDelivery options to the Agent365Exporter", async () => {
+    type Agent365BatchProcessor = {
+      constructor?: { name?: string };
+      _exporter?: {
+        constructor?: { name?: string };
+        options?: {
+          durableDelivery?: {
+            storageDirectory?: string;
+          };
+        };
+      };
+    };
+    type InternalSdk = {
+      _tracerProvider?: {
+        _activeSpanProcessor?: {
+          _spanProcessors?: Agent365BatchProcessor[];
+        };
+      };
+    };
+
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        enableObservabilityExporter: true,
+        tokenResolver: () => "token",
+        durableDelivery: {
+          enabled: true,
+          storageDirectory: "C:\\a365-spool",
+          maxStorageBytes: 1024,
+        },
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    assert.isDefined(internalSdk);
+
+    const tracerProvider = (internalSdk as InternalSdk)["_tracerProvider"];
+    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+
+    const batchProcessor = registeredProcessors.find(
+      (processor) =>
+        processor.constructor?.name === "BatchSpanProcessor" &&
+        processor["_exporter"]?.constructor?.name === "Agent365Exporter",
+    );
+
+    assert.isDefined(batchProcessor, "Expected an Agent365 BatchSpanProcessor");
+    assert.strictEqual(
+      batchProcessor["_exporter"]?.["options"]?.durableDelivery?.storageDirectory,
+      "C:\\a365-spool",
+    );
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
   it("applies a365.logLevel to the A365 logger filter via configureA365Logger", async () => {
     const { _resetA365LoggerForTest, getA365Logger } = await import("../../../src/a365/logging.js");
     _resetA365LoggerForTest();
