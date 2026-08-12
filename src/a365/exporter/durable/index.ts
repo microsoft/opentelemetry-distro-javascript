@@ -12,3 +12,7 @@ export {
   DEFAULT_DURABLE_TOKEN_TIMEOUT_MS,
   ResolvedDurableDeliveryOptions,
 } from "./DurableDeliveryOptions.js";
+export type { DurableRecordV1 } from "./DurableRecord.js";
+export type { ClaimedRecord } from "./PersistentStore.js";
+export { DURABLE_RECORD_VERSION, createDurableRecord, parseDurableRecord } from "./DurableRecord.js";
+export { PersistentStore } from "./PersistentStore.js";
