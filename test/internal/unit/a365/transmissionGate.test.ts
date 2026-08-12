@@ -78,6 +78,20 @@ describe("TransmissionGate", () => {
     assert.isDefined(gate.acquire());
   });
 
+  it("always uses the injected clock when acquiring", () => {
+    let now = 0;
+    const gate = new TransmissionGate({ now: () => now, random: () => 0 });
+
+    const permit = gate.acquire();
+    assert.isDefined(permit);
+
+    gate.recordRetryableFailure(permit!, undefined);
+
+    now = 5_000;
+
+    assert.isUndefined(gate.acquire(20_000));
+  });
+
   it("increases fallback delay on repeated failures", () => {
     let now = 0;
     const gate = new TransmissionGate({ now: () => now, random: () => 0 });

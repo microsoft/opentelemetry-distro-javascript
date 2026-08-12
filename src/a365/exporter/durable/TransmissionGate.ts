@@ -22,8 +22,8 @@ export class TransmissionGate {
     } = {},
   ) {}
 
-  acquire(now?: number): TransmissionPermit | undefined {
-    const currentTime = now ?? this.now();
+  acquire(): TransmissionPermit | undefined {
+    const currentTime = this.now();
     if (currentTime < this.blockedUntil) return undefined;
     if (this.blockedUntil > 0) {
       if (this.probeInFlight) return undefined;
