@@ -14,7 +14,9 @@ export {
 } from "./DurableDeliveryOptions.js";
 export type { DurableRecordV1 } from "./DurableRecord.js";
 export type { ClaimedRecord } from "./PersistentStore.js";
+export type { DeliveryAttempt, DurableDeliveryDependencies } from "./DurableDeliveryManager.js";
 export { DURABLE_RECORD_VERSION, createDurableRecord, parseDurableRecord } from "./DurableRecord.js";
+export { DurableDeliveryManager } from "./DurableDeliveryManager.js";
 export { TransmissionGate } from "./TransmissionGate.js";
 export type { TransmissionPermit } from "./TransmissionGate.js";
 export { parseRetryAfterMs } from "./TransmissionGate.js";
