@@ -3,7 +3,7 @@
 
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ILogger } from "../../../../src/a365/logging.js";
 import {
@@ -179,6 +179,24 @@ describe("PersistentStore", () => {
     assert.isFalse(await pathExists(claim.leasePath));
   });
 
+  it("keeps quarantined malformed records terminal after lease expiry", async () => {
+    const root = join(scratchRoot, "quarantine-terminal-store");
+    const store = await createStore(root, { leaseDurationMilliseconds: 50 });
+    const badPath = join(root, `1-${randomUUID()}.pending`);
+    await fs.writeFile(badPath, '{"version":2}', "utf8");
+
+    assert.deepEqual(await store.claimBatch(1), []);
+
+    const initialFiles = (await listStoreFiles(root)).sort();
+    const quarantineFile = initialFiles.find((file) => file.endsWith(".quarantine"));
+    assert.isDefined(quarantineFile);
+
+    await fs.utimes(join(root, quarantineFile), new Date(0), new Date(0));
+
+    assert.deepEqual(await store.claimBatch(1), []);
+    assert.deepEqual((await listStoreFiles(root)).sort(), initialFiles);
+  });
+
   it("quarantines malformed records", async () => {
     const root = join(scratchRoot, "malformed-store");
     const store = await createStore(root);
@@ -191,6 +209,34 @@ describe("PersistentStore", () => {
     assert.deepEqual(claims, []);
     assert.isFalse(await pathExists(badPath));
     assert.isTrue(files.some((file) => file.endsWith(".quarantine")));
+  });
+
+  it("does not prune active lease files during capacity eviction", async () => {
+    const root = join(scratchRoot, "active-lease-prune-store");
+    const template = makeRecord({ createdAt: 500, body: "a".repeat(80) });
+    const recordBytes = Buffer.byteLength(JSON.stringify(template), "utf8");
+    const store = await createStore(root, {
+      maxStorageBytes: recordBytes * 2 + 16,
+    });
+    const leasedRecord = makeRecord({ createdAt: 100, body: "l".repeat(80) });
+    await store.persist(leasedRecord);
+
+    const [claim] = await store.claimBatch(1);
+    assert.ok(claim);
+
+    const evictableRecord = makeRecord({ createdAt: 200, body: "p".repeat(80) });
+    await seedPendingRecord(root, evictableRecord);
+
+    const replacement = makeRecord({ createdAt: 300, body: "r".repeat(80) });
+    await store.persist(replacement);
+
+    assert.isTrue(await pathExists(claim.leasePath));
+    assert.include(await listStoreFiles(root), basename(claim.leasePath));
+
+    const bodies = await storedBodies(root);
+    assert.include(bodies, leasedRecord.body);
+    assert.include(bodies, replacement.body);
+    assert.notInclude(bodies, evictableRecord.body);
   });
 
   it("releases claimed records back to pending storage", async () => {
@@ -210,6 +256,32 @@ describe("PersistentStore", () => {
     assert.strictEqual(reclaimed.record.id, record.id);
   });
 
+  it("ignores ENOENT when releasing a claim already recovered elsewhere", async () => {
+    const root = join(scratchRoot, "release-enoent-store");
+    const store = await createStore(root);
+    await store.persist(makeRecord());
+
+    const [claim] = await store.claimBatch(1);
+    assert.ok(claim);
+    await fs.unlink(claim.leasePath);
+
+    await store.release(claim);
+
+    assert.deepEqual(await listStoreFiles(root), []);
+  });
+
+  it("propagates non-ENOENT release failures", async () => {
+    const root = join(scratchRoot, "release-error-store");
+    const store = await createStore(root);
+    await store.persist(makeRecord());
+
+    const [claim] = await store.claimBatch(1);
+    assert.ok(claim);
+
+    const invalidClaim = { ...claim, leasePath: "\u0000invalid-lease-path" };
+    await expect(store.release(invalidClaim)).rejects.not.toMatchObject({ code: "ENOENT" });
+  });
+
   it("deletes completed claims", async () => {
     const root = join(scratchRoot, "complete-store");
     const store = await createStore(root);
@@ -222,6 +294,32 @@ describe("PersistentStore", () => {
 
     assert.isFalse(await pathExists(claim.leasePath));
     assert.deepEqual(await listStoreFiles(root), []);
+  });
+
+  it("ignores ENOENT when completing a claim already removed elsewhere", async () => {
+    const root = join(scratchRoot, "complete-enoent-store");
+    const store = await createStore(root);
+    await store.persist(makeRecord());
+
+    const [claim] = await store.claimBatch(1);
+    assert.ok(claim);
+    await fs.unlink(claim.leasePath);
+
+    await store.complete(claim);
+
+    assert.deepEqual(await listStoreFiles(root), []);
+  });
+
+  it("propagates non-ENOENT completion failures", async () => {
+    const root = join(scratchRoot, "complete-error-store");
+    const store = await createStore(root);
+    await store.persist(makeRecord());
+
+    const [claim] = await store.claimBatch(1);
+    assert.ok(claim);
+
+    const invalidClaim = { ...claim, leasePath: "\u0000invalid-lease-path" };
+    await expect(store.complete(invalidClaim)).rejects.not.toMatchObject({ code: "ENOENT" });
   });
 });
 

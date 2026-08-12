@@ -127,13 +127,25 @@ export class PersistentStore {
   }
 
   public async complete(claim: ClaimedRecord): Promise<void> {
-    await fs.unlink(claim.leasePath);
-    await syncDirectory(this.root);
+    try {
+      await fs.unlink(claim.leasePath);
+      await syncDirectory(this.root);
+    } catch (error) {
+      if (!isEnoent(error)) {
+        throw error;
+      }
+    }
   }
 
   public async release(claim: ClaimedRecord): Promise<void> {
-    await fs.rename(claim.leasePath, this.pendingPath(claim.record, `release-${randomUUID()}`));
-    await syncDirectory(this.root);
+    try {
+      await fs.rename(claim.leasePath, this.pendingPath(claim.record, `release-${randomUUID()}`));
+      await syncDirectory(this.root);
+    } catch (error) {
+      if (!isEnoent(error)) {
+        throw error;
+      }
+    }
   }
 
   private async pruneForCapacity(incomingBytes: number): Promise<void> {
@@ -168,7 +180,7 @@ export class PersistentStore {
 
   private async recoverStaleLeases(): Promise<void> {
     const now = Date.now();
-    const leasePaths = await this.listManagedFilePaths((name) => name.includes(".lease-"));
+    const leasePaths = await this.listManagedFilePaths(isActiveLeaseFileName);
 
     for (const leasePath of leasePaths) {
       let stats: Stats;
@@ -211,7 +223,7 @@ export class PersistentStore {
   }
 
   private async readManagedFiles(): Promise<ManagedFile[]> {
-    const names = await this.listManagedFilePaths(isManagedFileName);
+    const names = await this.listManagedFilePaths(isEvictableFileName);
     const files: ManagedFile[] = [];
 
     for (const fullPath of names) {
@@ -335,7 +347,7 @@ async function probeRoot(root: string): Promise<void> {
 }
 
 async function quarantineFile(path: string): Promise<void> {
-  await fs.rename(path, `${path}${QUARANTINE_SUFFIX}`);
+  await fs.rename(path, join(dirname(path), `${leasePrefix(path)}${QUARANTINE_SUFFIX}`));
   await syncDirectory(dirname(path));
 }
 
@@ -366,8 +378,12 @@ function leasePrefix(path: string): string {
   return basename(path).split(".lease-")[0];
 }
 
-function isManagedFileName(name: string): boolean {
-  return name.endsWith(PENDING_SUFFIX) || name.includes(".lease-") || name.endsWith(QUARANTINE_SUFFIX);
+function isActiveLeaseFileName(name: string): boolean {
+  return /\.lease-[^.]+$/.test(name);
+}
+
+function isEvictableFileName(name: string): boolean {
+  return name.endsWith(PENDING_SUFFIX) || name.endsWith(QUARANTINE_SUFFIX);
 }
 
 function isEnoent(error: unknown): error is NodeJS.ErrnoException {
