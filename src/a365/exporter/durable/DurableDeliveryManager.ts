@@ -5,7 +5,7 @@ import type { ILogger } from "../../logging.js";
 import { ResolvedDurableDeliveryOptions } from "./DurableDeliveryOptions.js";
 import type { DurableRecordV1 } from "./DurableRecord.js";
 import { PersistentStore, type ClaimedRecord } from "./PersistentStore.js";
-import { TransmissionGate } from "./TransmissionGate.js";
+import { TransmissionGate, type TransmissionPermit } from "./TransmissionGate.js";
 
 export type DeliveryAttempt =
   | { kind: "success"; correlationId: string }
@@ -16,6 +16,13 @@ export interface DurableDeliveryDependencies {
   resolveToken(record: DurableRecordV1): Promise<string | null>;
   send(record: DurableRecordV1, token: string, signal: AbortSignal): Promise<DeliveryAttempt>;
 }
+
+type GateDecision =
+  | { kind: "deferred" }
+  | { kind: "abandoned" }
+  | { kind: "success" }
+  | { kind: "permanent" }
+  | { kind: "retryable"; error?: unknown };
 
 export class DurableDeliveryManager {
   private readonly gate = new TransmissionGate();
@@ -79,37 +86,18 @@ export class DurableDeliveryManager {
   }
 
   private async deliverInternal(record: DurableRecordV1): Promise<boolean> {
-    const permit = this.gate.acquire();
-    if (!permit) {
-      return this.persist(record);
+    const decision = await this.attemptSend(record);
+    if (decision.kind === "success") {
+      return true;
+    }
+    if (decision.kind === "permanent" || decision.kind === "abandoned") {
+      return false;
+    }
+    if (decision.kind === "retryable" && decision.error !== undefined) {
+      this.logger.warn("[DurableDeliveryManager] Live delivery failed; persisting for replay", decision.error);
     }
 
-    try {
-      const token = await this.withTimeout(
-        this.dependencies.resolveToken(record),
-        this.options.tokenResolutionTimeoutMilliseconds,
-        "token resolution",
-      );
-      if (!token) {
-        return false;
-      }
-
-      const attempt = await this.dependencies.send(record, token, this.abortController.signal);
-      if (attempt.kind === "success") {
-        this.gate.recordSuccess(permit);
-        return true;
-      }
-      if (attempt.kind === "permanent") {
-        return false;
-      }
-
-      this.gate.recordRetryableFailure(permit, attempt.retryAfterMs);
-      return this.persist(record);
-    } catch (error) {
-      this.gate.recordRetryableFailure(permit);
-      this.logger.warn("[DurableDeliveryManager] Live delivery failed; persisting for replay", error);
-      return this.persist(record);
-    }
+    return this.persist(record);
   }
 
   private scheduleReplay(): void {
@@ -143,29 +131,16 @@ export class DurableDeliveryManager {
   }
 
   private async processClaim(claim: ClaimedRecord): Promise<void> {
-    try {
-      const token = await this.withTimeout(
-        this.dependencies.resolveToken(claim.record),
-        this.options.tokenResolutionTimeoutMilliseconds,
-        "token resolution",
-      );
-
-      if (!token) {
-        await this.releaseClaim(claim);
-        return;
-      }
-
-      const attempt = await this.dependencies.send(claim.record, token, this.abortController.signal);
-      if (attempt.kind === "success" || attempt.kind === "permanent") {
-        await this.completeClaim(claim);
-        return;
-      }
-
-      await this.releaseClaim(claim);
-    } catch (error) {
-      this.logger.warn("[DurableDeliveryManager] Replay failed; releasing durable record", error);
-      await this.releaseClaim(claim);
+    const decision = await this.attemptSend(claim.record);
+    if (decision.kind === "success" || decision.kind === "permanent") {
+      await this.completeClaim(claim);
+      return;
     }
+    if (decision.kind === "retryable" && decision.error !== undefined) {
+      this.logger.warn("[DurableDeliveryManager] Replay failed; releasing durable record", decision.error);
+    }
+
+    await this.releaseClaim(claim);
   }
 
   private async persist(record: DurableRecordV1): Promise<boolean> {
@@ -200,6 +175,45 @@ export class DurableDeliveryManager {
     });
     this.active.add(tracked);
     return tracked;
+  }
+
+  private async attemptSend(record: DurableRecordV1): Promise<GateDecision> {
+    const permit = this.gate.acquire();
+    if (!permit) {
+      return { kind: "deferred" };
+    }
+
+    try {
+      const token = await this.withTimeout(
+        this.dependencies.resolveToken(record),
+        this.options.tokenResolutionTimeoutMilliseconds,
+        "token resolution",
+      );
+      if (!token) {
+        this.gate.abandon(permit);
+        return { kind: "abandoned" };
+      }
+
+      const attempt = await this.dependencies.send(record, token, this.abortController.signal);
+      return this.classifyAttempt(permit, attempt);
+    } catch (error) {
+      this.gate.recordRetryableFailure(permit);
+      return { kind: "retryable", error };
+    }
+  }
+
+  private classifyAttempt(permit: TransmissionPermit, attempt: DeliveryAttempt): GateDecision {
+    if (attempt.kind === "success") {
+      this.gate.recordSuccess(permit);
+      return { kind: "success" };
+    }
+    if (attempt.kind === "permanent") {
+      this.gate.recordSuccess(permit);
+      return { kind: "permanent" };
+    }
+
+    this.gate.recordRetryableFailure(permit, attempt.retryAfterMs);
+    return { kind: "retryable" };
   }
 
   private async withTimeout<T>(operation: Promise<T>, timeoutMs: number, operationName: string): Promise<T> {

@@ -24,6 +24,7 @@ describe("DurableDeliveryManager", () => {
     while (managedInstances.length > 0) {
       await managedInstances.pop()!.shutdown().catch(() => undefined);
     }
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -124,11 +125,7 @@ describe("DurableDeliveryManager", () => {
 
     resolveToken.mockResolvedValueOnce("stale-token").mockResolvedValueOnce("fresh-token");
     send
-      .mockResolvedValueOnce({
-        kind: "retryable",
-        correlationId: "live-retryable",
-        retryAfterMs: 60_000,
-      })
+      .mockResolvedValueOnce({ kind: "success", correlationId: "live-success" })
       .mockResolvedValueOnce({ kind: "success", correlationId: "replayed" });
     claimBatch.mockResolvedValueOnce([claim]);
 
@@ -143,46 +140,113 @@ describe("DurableDeliveryManager", () => {
     assert.strictEqual(release.mock.calls.length, 0);
   });
 
-  it("releases retryable, missing-token, timed-out, and unknown replay claims while completing permanent ones", async () => {
-    const { claimBatch, complete, manager, release, resolveToken, send } = createManager({
+  it("releases replay claims without sending while the transmission gate is backing off", async () => {
+    const { claimBatch, manager, release, resolveToken, send } = createManager();
+    const claim = makeClaim(makeRecord({ id: "replay-while-blocked" }));
+
+    send.mockResolvedValueOnce({
+      kind: "retryable",
+      correlationId: "seed",
+      retryAfterMs: 60_000,
+    });
+
+    assert.isTrue(await manager.deliver(makeRecord({ id: "seed" })));
+
+    claimBatch.mockResolvedValueOnce([claim]);
+    resolveToken.mockClear();
+    send.mockClear();
+
+    await manager.forceFlush();
+
+    assert.strictEqual(resolveToken.mock.calls.length, 0);
+    assert.strictEqual(send.mock.calls.length, 0);
+    assert.deepEqual(release.mock.calls.map(([releasedClaim]) => releasedClaim), [claim]);
+  });
+
+  it("allows only one half-open probe across live delivery and replay", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const { claimBatch, manager, persist, resolveToken, send } = createManager({
+      options: { replayIntervalMilliseconds: 120_000 },
+    });
+    const replayClaim = makeClaim(makeRecord({ id: "replay-probe" }));
+
+    send.mockResolvedValueOnce({
+      kind: "retryable",
+      correlationId: "seed",
+      retryAfterMs: 60_000,
+    });
+    assert.isTrue(await manager.deliver(makeRecord({ id: "seed" })));
+
+    claimBatch.mockResolvedValueOnce([replayClaim]);
+    const replayStarted = deferred<void>();
+    const replayToken = deferred<string | null>();
+    resolveToken.mockReset();
+    resolveToken.mockImplementation(async (record) => {
+      if (record.id === "replay-probe") {
+        replayStarted.resolve();
+        return replayToken.promise;
+      }
+      return "live-token";
+    });
+    send.mockReset();
+    send.mockImplementation(async (record) => ({
+      kind: "success",
+      correlationId: record.id,
+    }));
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const flush = manager.forceFlush();
+    await replayStarted.promise;
+
+    const persistedBeforeLive = persist.mock.calls.length;
+    const delivery = manager.deliver(makeRecord({ id: "live-probe" }));
+
+    assert.isTrue(await delivery);
+    assert.strictEqual(persist.mock.calls.length, persistedBeforeLive + 1);
+    assert.strictEqual(send.mock.calls.length, 0);
+
+    replayToken.resolve("replay-token");
+
+    await flush;
+    assert.deepEqual(send.mock.calls.map(([record]) => record.id), ["replay-probe"]);
+  });
+
+  it("releases retryable, missing-token, timed-out, and unknown replay claims", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const { claimBatch, manager, release, resolveToken, send } = createManager({
       options: { tokenResolutionTimeoutMilliseconds: 5 },
     });
     const retryable = makeClaim(makeRecord({ id: "retryable-claim" }));
     const missingToken = makeClaim(makeRecord({ id: "missing-token-claim" }));
     const timedOut = makeClaim(makeRecord({ id: "timed-out-claim" }));
     const unknown = makeClaim(makeRecord({ id: "unknown-claim" }));
-    const permanent = makeClaim(makeRecord({ id: "permanent-claim" }));
 
-    claimBatch.mockResolvedValueOnce([retryable, missingToken, timedOut, unknown, permanent]);
+    claimBatch
+      .mockResolvedValueOnce([missingToken])
+      .mockResolvedValueOnce([timedOut])
+      .mockResolvedValueOnce([unknown])
+      .mockResolvedValueOnce([retryable]);
     resolveToken.mockImplementation(async (record) => {
       switch (record.id) {
-        case "retryable-claim":
-          return "retryable-token";
         case "missing-token-claim":
           return null;
         case "timed-out-claim":
           return new Promise<string | null>(() => undefined);
-        case "unknown-claim":
-          return "unknown-token";
-        case "permanent-claim":
-          return "permanent-token";
         default:
-          return "default-token";
+          return `${record.id}-token`;
       }
     });
     send.mockImplementation(async (record) => {
       switch (record.id) {
-        case "retryable-claim":
-          return { kind: "retryable", correlationId: "retryable" };
         case "unknown-claim":
           throw new Error("boom");
-        case "permanent-claim":
-          return {
-            kind: "permanent",
-            correlationId: "permanent",
-            status: 400,
-            reason: "bad request",
-          };
+        case "retryable-claim":
+          return { kind: "retryable", correlationId: "retryable", retryAfterMs: 60_000 };
         default:
           return { kind: "success", correlationId: "success" };
       }
@@ -190,18 +254,112 @@ describe("DurableDeliveryManager", () => {
 
     await manager.forceFlush();
 
-    const releasedIds = release.mock.calls.map(([claim]) => claim.record.id).sort();
-    const completedIds = complete.mock.calls.map(([claim]) => claim.record.id).sort();
+    const timedOutFlush = manager.forceFlush();
+    await vi.advanceTimersByTimeAsync(5);
+    await timedOutFlush;
 
-    assert.deepEqual(releasedIds, [
-      "missing-token-claim",
-      "retryable-claim",
-      "timed-out-claim",
-      "unknown-claim",
-    ]);
-    assert.deepEqual(completedIds, ["permanent-claim"]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await manager.forceFlush();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await manager.forceFlush();
+
+    assert.deepEqual(
+      release.mock.calls.map(([claim]) => claim.record.id).sort(),
+      ["missing-token-claim", "retryable-claim", "timed-out-claim", "unknown-claim"],
+    );
     assert.isFalse(send.mock.calls.some(([record]) => record.id === "missing-token-claim"));
     assert.isFalse(send.mock.calls.some(([record]) => record.id === "timed-out-claim"));
+  });
+
+  it("closes the transmission gate after a permanent replay probe response", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const { claimBatch, complete, manager, persist, resolveToken, send } = createManager();
+    const claim = makeClaim(makeRecord({ id: "permanent-replay-probe" }));
+    const firstToken = deferred<string | null>();
+
+    send.mockResolvedValueOnce({
+      kind: "retryable",
+      correlationId: "seed",
+      retryAfterMs: 60_000,
+    });
+    assert.isTrue(await manager.deliver(makeRecord({ id: "seed" })));
+
+    claimBatch.mockResolvedValueOnce([claim]);
+    send.mockResolvedValueOnce({
+      kind: "permanent",
+      correlationId: "permanent",
+      status: 400,
+      reason: "bad request",
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await manager.forceFlush();
+
+    assert.deepEqual(complete.mock.calls.map(([completedClaim]) => completedClaim), [claim]);
+
+    resolveToken.mockReset();
+    resolveToken.mockImplementationOnce(async () => firstToken.promise).mockResolvedValueOnce("second-token");
+    send.mockReset();
+    send
+      .mockResolvedValueOnce({
+        kind: "success",
+        correlationId: "after-permanent-1",
+      })
+      .mockResolvedValueOnce({
+        kind: "success",
+        correlationId: "after-permanent-2",
+      });
+
+    const persistedBeforeRecovery = persist.mock.calls.length;
+    const firstRecovery = manager.deliver(makeRecord({ id: "after-permanent-1" }));
+    await settle();
+    const secondRecovery = manager.deliver(makeRecord({ id: "after-permanent-2" }));
+
+    firstToken.resolve("first-token");
+
+    assert.isTrue(await firstRecovery);
+    assert.isTrue(await secondRecovery);
+    assert.strictEqual(persist.mock.calls.length, persistedBeforeRecovery);
+    assert.deepEqual(
+      send.mock.calls.map(([record]) => record.id).sort(),
+      ["after-permanent-1", "after-permanent-2"],
+    );
+  });
+
+  it("abandons half-open live probes when token resolution returns null", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const { manager, persist, resolveToken, send } = createManager();
+
+    send.mockResolvedValueOnce({
+      kind: "retryable",
+      correlationId: "seed",
+      retryAfterMs: 60_000,
+    });
+    assert.isTrue(await manager.deliver(makeRecord({ id: "seed" })));
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    resolveToken.mockReset();
+    resolveToken.mockResolvedValueOnce(null).mockResolvedValueOnce("retry-token");
+    send.mockReset();
+    send.mockResolvedValueOnce({
+      kind: "success",
+      correlationId: "retry-token",
+    });
+
+    assert.isFalse(await manager.deliver(makeRecord({ id: "null-probe" })));
+
+    const persistedBeforeRetry = persist.mock.calls.length;
+    assert.isTrue(await manager.deliver(makeRecord({ id: "retry-after-null" })));
+
+    assert.strictEqual(persist.mock.calls.length, persistedBeforeRetry);
+    assert.strictEqual(send.mock.calls.length, 1);
+    assert.strictEqual(send.mock.calls[0][0].id, "retry-after-null");
   });
 
   it("waits for active live work before forceFlush starts a replay pass", async () => {

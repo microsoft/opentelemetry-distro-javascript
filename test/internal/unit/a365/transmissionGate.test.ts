@@ -154,6 +154,57 @@ describe("TransmissionGate", () => {
     assert.isDefined(gate.acquire());
     assert.isFalse(gate.acquire()!.probe);
   });
+
+  it("abandons the current half-open probe without erasing backoff", () => {
+    let now = 0;
+    const gate = new TransmissionGate({ now: () => now, random: () => 0 });
+
+    const first = gate.acquire();
+    assert.isDefined(first);
+    gate.recordRetryableFailure(first!, undefined);
+
+    now = 10_000;
+    const probe = gate.acquire();
+    assert.isDefined(probe);
+    assert.isTrue(probe!.probe);
+
+    gate.abandon(probe!);
+
+    const retriedProbe = gate.acquire();
+    assert.isDefined(retriedProbe);
+    assert.isTrue(retriedProbe!.probe);
+
+    gate.recordRetryableFailure(retriedProbe!, undefined);
+
+    now = 25_999;
+    assert.isUndefined(gate.acquire());
+
+    now = 26_000;
+    assert.isDefined(gate.acquire());
+  });
+
+  it("does not let a stale abandon clear the current half-open probe", () => {
+    let now = 0;
+    const gate = new TransmissionGate({ now: () => now, random: () => 0 });
+
+    const first = gate.acquire();
+    assert.isDefined(first);
+    gate.recordRetryableFailure(first!, undefined);
+
+    now = 10_000;
+    const staleProbe = gate.acquire();
+    assert.isDefined(staleProbe);
+    gate.recordRetryableFailure(staleProbe!, undefined);
+
+    now = 30_000;
+    const currentProbe = gate.acquire();
+    assert.isDefined(currentProbe);
+    assert.isTrue(currentProbe!.probe);
+
+    gate.abandon(staleProbe!);
+
+    assert.isUndefined(gate.acquire());
+  });
 });
 
 function makeHeaders(value: string): Pick<Headers, "get"> {

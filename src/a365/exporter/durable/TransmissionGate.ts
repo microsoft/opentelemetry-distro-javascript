@@ -40,6 +40,11 @@ export class TransmissionGate {
     this.consecutiveFailures = 0;
   }
 
+  abandon(permit: TransmissionPermit): void {
+    if (permit.generation !== this.generation || !permit.probe) return;
+    this.probeInFlight = false;
+  }
+
   recordRetryableFailure(permit: TransmissionPermit, retryAfterMs?: number): void {
     if (permit.generation !== this.generation) return;
 
