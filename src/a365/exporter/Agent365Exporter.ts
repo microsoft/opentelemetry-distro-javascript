@@ -23,6 +23,7 @@ import {
   chunkBySize,
   asStr,
 } from "./utils.js";
+import { parseRetryAfterMs } from "./durable/index.js";
 import { getA365Logger } from "../logging.js";
 import { OpenTelemetryConstants } from "../constants.js";
 import {
@@ -581,32 +582,4 @@ function classifyExceptionType(error: unknown): string {
     return name || EXC_CLIENT;
   }
   return EXC_CLIENT;
-}
-
-/**
- * Parse the Retry-After header value into milliseconds.
- * Supports both delay-seconds (e.g. "120") and HTTP-date formats (RFC 7231 §7.1.3).
- * Returns null if the header is absent or unparseable.
- */
-function parseRetryAfterMs(headers: Pick<Headers, "get">): number | null {
-  // fetch Headers.get() is case-insensitive, but Map.get() (used in tests) is not.
-  const value = headers.get("retry-after") ?? headers.get("Retry-After");
-  if (value == null) return null;
-
-  const trimmed = value.trim();
-
-  // Try numeric (delay-seconds)
-  if (/^\d+$/.test(trimmed)) {
-    const seconds = parseInt(trimmed, 10);
-    return seconds * 1000;
-  }
-
-  // Try HTTP-date
-  const dateMs = Date.parse(trimmed);
-  if (!isNaN(dateMs)) {
-    const delayMs = dateMs - Date.now();
-    return delayMs > 0 ? delayMs : 0;
-  }
-
-  return null;
 }

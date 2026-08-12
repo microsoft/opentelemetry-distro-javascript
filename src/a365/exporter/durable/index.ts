@@ -15,4 +15,7 @@ export {
 export type { DurableRecordV1 } from "./DurableRecord.js";
 export type { ClaimedRecord } from "./PersistentStore.js";
 export { DURABLE_RECORD_VERSION, createDurableRecord, parseDurableRecord } from "./DurableRecord.js";
+export { TransmissionGate } from "./TransmissionGate.js";
+export type { TransmissionPermit } from "./TransmissionGate.js";
+export { parseRetryAfterMs } from "./TransmissionGate.js";
 export { PersistentStore } from "./PersistentStore.js";
