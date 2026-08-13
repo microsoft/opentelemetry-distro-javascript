@@ -30,11 +30,6 @@ interface ManagedFile {
   removableWhenExpired: boolean;
 }
 
-interface ManagedFileScan {
-  files: ManagedFile[];
-  racedWithAnotherProcess: boolean;
-}
-
 export class PersistentStore {
   private static readonly persistenceQueues = new Map<string, Promise<void>>();
   private claimQueue: Promise<void> = Promise.resolve();
@@ -164,71 +159,56 @@ export class PersistentStore {
 
   private async pruneForCapacity(incomingBytes: number): Promise<void> {
     const minimumCreatedAt = Date.now() - this.options.maxRecordAgeMilliseconds;
+    let files = await this.readManagedFiles();
+    let usedBytes = sumBytes(files);
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      let scan = await this.readManagedFiles();
-      if (scan.racedWithAnotherProcess) {
+    for (const file of files.sort((left, right) => left.createdAt - right.createdAt)) {
+      if (!file.removableWhenExpired || file.createdAt >= minimumCreatedAt) {
         continue;
       }
 
-      let files = scan.files;
-      let usedBytes = sumBytes(files);
-      let racedWithAnotherProcess = false;
-
-      for (const file of files.sort((left, right) => left.createdAt - right.createdAt)) {
-        if (!file.removableWhenExpired || file.createdAt >= minimumCreatedAt) {
-          continue;
-        }
-
-        if (await unlinkIfExists(file.path)) {
-          usedBytes -= file.size;
-        } else {
-          racedWithAnotherProcess = true;
-        }
+      if (await unlinkIfExists(file.path)) {
+        this.logger.warn("[PersistentStore] Evicted expired durable record", {
+          path: file.path,
+          bytes: file.size,
+        });
       }
-
-      if (racedWithAnotherProcess) {
-        continue;
-      }
-
-      if (usedBytes + incomingBytes <= this.options.maxStorageBytes) {
-        return;
-      }
-
-      scan = await this.readManagedFiles();
-      if (scan.racedWithAnotherProcess) {
-        continue;
-      }
-
-      files = scan.files;
-      usedBytes = sumBytes(files);
-      for (const file of files.sort((left, right) => left.createdAt - right.createdAt)) {
-        if (usedBytes + incomingBytes <= this.options.maxStorageBytes) {
-          break;
-        }
-        if (!file.evictable) {
-          continue;
-        }
-
-        if (await unlinkIfExists(file.path)) {
-          usedBytes -= file.size;
-        } else {
-          racedWithAnotherProcess = true;
-        }
-      }
-
-      if (racedWithAnotherProcess) {
-        continue;
-      }
-
-      if (usedBytes + incomingBytes <= this.options.maxStorageBytes) {
-        return;
-      }
-
-      throw new RangeError("Durable storage capacity is occupied by active durable files");
+      usedBytes -= file.size;
     }
 
-    throw new RangeError("Durable storage capacity changed while pruning");
+    if (usedBytes + incomingBytes <= this.options.maxStorageBytes) {
+      return;
+    }
+
+    files = await this.readManagedFiles();
+    usedBytes = sumBytes(files);
+    for (const file of files.sort((left, right) => left.createdAt - right.createdAt)) {
+      if (usedBytes + incomingBytes <= this.options.maxStorageBytes) {
+        break;
+      }
+      if (!file.evictable) {
+        continue;
+      }
+
+      if (await unlinkIfExists(file.path)) {
+        this.logger.warn("[PersistentStore] Evicted durable record for capacity", {
+          path: file.path,
+          bytes: file.size,
+        });
+      }
+      usedBytes -= file.size;
+    }
+
+    if (usedBytes + incomingBytes <= this.options.maxStorageBytes) {
+      return;
+    }
+
+    const survivingFiles = await this.readManagedFiles();
+    if (sumBytes(survivingFiles) + incomingBytes <= this.options.maxStorageBytes) {
+      return;
+    }
+
+    throw new RangeError("Durable storage capacity is occupied by active durable files");
   }
 
   private async recoverStaleLeases(): Promise<void> {
@@ -255,11 +235,8 @@ export class PersistentStore {
         continue;
       }
 
-      const recoveredPath = join(
-        this.root,
-        `${leasePrefix(leasePath)}.recovered-${randomUUID()}${PENDING_SUFFIX}`,
-      );
       try {
+        const recoveredPath = await this.recoveredPendingPath(leasePath);
         await fs.rename(leasePath, recoveredPath);
         await syncDirectory(this.root);
       } catch (error) {
@@ -272,11 +249,21 @@ export class PersistentStore {
   }
 
   private pendingPath(record: DurableRecordV1, suffix?: string): string {
-    const baseName = `${record.createdAt}-${record.id}`;
+    const baseName = recordBasename(record);
     return join(
       this.root,
       suffix ? `${baseName}.${suffix}${PENDING_SUFFIX}` : `${baseName}${PENDING_SUFFIX}`,
     );
+  }
+
+  private async recoveredPendingPath(leasePath: string): Promise<string> {
+    const text = await fs.readFile(leasePath, "utf8");
+    const suffix = `recovered-${randomUUID()}`;
+    try {
+      return this.pendingPath(parseDurableRecord(text), suffix);
+    } catch {
+      return join(this.root, `${stableRecordBasename(leasePath)}.${suffix}${PENDING_SUFFIX}`);
+    }
   }
 
   private leasePath(pendingPath: string): string {
@@ -300,10 +287,9 @@ export class PersistentStore {
     );
   }
 
-  private async readManagedFiles(): Promise<ManagedFileScan> {
+  private async readManagedFiles(): Promise<ManagedFile[]> {
     const names = await this.listManagedFilePaths(isManagedFileName);
     const files: ManagedFile[] = [];
-    let racedWithAnotherProcess = false;
 
     for (const fullPath of names) {
       try {
@@ -319,14 +305,13 @@ export class PersistentStore {
         });
       } catch (error) {
         if (isEnoent(error)) {
-          racedWithAnotherProcess = true;
           continue;
         }
         throw error;
       }
     }
 
-    return { files, racedWithAnotherProcess };
+    return files;
   }
 
   private async listManagedFilePaths(predicate: (name: string) => boolean): Promise<string[]> {
@@ -525,6 +510,14 @@ function parseCreatedAt(path: string): number | undefined {
 
 function leasePrefix(path: string): string {
   return basename(path).split(".lease-")[0];
+}
+
+function recordBasename(record: DurableRecordV1): string {
+  return `${record.createdAt}-${record.id}`;
+}
+
+function stableRecordBasename(path: string): string {
+  return leasePrefix(path).split(".")[0];
 }
 
 function parseLeaseClaimedAt(path: string): number | undefined {

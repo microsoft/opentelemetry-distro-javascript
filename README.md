@@ -368,7 +368,7 @@ Durable delivery applies only to the A365 HTTP exporter, so set both `a365.enabl
 | Option                              | Type      | Default                         | Description |
 | ----------------------------------- | --------- | ------------------------------- | ----------- |
 | `enabled`                           | `boolean` | `false`                         | Opt in to local spool-and-replay for retryable A365 export requests |
-| `storageDirectory`                  | `string`  | auto                            | Root directory for durable records. When omitted, the SDK probes `LOCALAPPDATA`, then `TEMP`, then `os.tmpdir()` on Windows, or `TMPDIR`, then `/var/tmp`, then `os.tmpdir()` elsewhere, and appends `Microsoft/A365/otel-durable` |
+| `storageDirectory`                  | `string`  | auto                            | Root directory for durable records. When omitted, the SDK probes `LOCALAPPDATA`, then `TEMP`, then `os.tmpdir()` on Windows and appends `Microsoft/A365/otel-durable`; on POSIX it probes `TMPDIR`, then `/var/tmp`, then `os.tmpdir()` and uses the single `a365-otel-durable-<uid>` leaf |
 | `maxStorageBytes`                   | `number`  | `50 * 1024 * 1024`             | Maximum total bytes retained for pending and quarantined durable records |
 | `maxRecordAgeMilliseconds`          | `number`  | `2 * 24 * 60 * 60 * 1000`      | Maximum record age before expiry pruning |
 | `replayIntervalMilliseconds`        | `number`  | `2 * 60 * 1000`                | Delay between scheduled replay passes |

@@ -29,6 +29,7 @@ export class DurableDeliveryManager {
   private readonly abortController = new AbortController();
   private readonly active = new Set<Promise<unknown>>();
   private replayTimer?: ReturnType<typeof setTimeout>;
+  private replayQueue: Promise<void> = Promise.resolve();
   private closed = false;
   private replayStopped = false;
   private shutdownComplete = false;
@@ -149,28 +150,41 @@ export class DurableDeliveryManager {
   }
 
   private runReplayPass(): Promise<void> {
-    return this.track(this.runReplayPassInternal());
+    const replayPass = this.replayQueue.then(async () => {
+      if (this.closed || this.replayStopped) {
+        return;
+      }
+      await this.runReplayPassInternal();
+    });
+    this.replayQueue = replayPass.catch(() => undefined);
+    return this.track(replayPass);
   }
 
   private async runReplayPassInternal(): Promise<void> {
-    let claims: ClaimedRecord[];
-    try {
-      claims = await this.store.claimBatch(this.options.maxReplayBatchSize);
-    } catch (error) {
-      this.logger.error("[DurableDeliveryManager] Failed to claim durable records", error);
-      return;
-    }
+    for (let index = 0; index < this.options.maxReplayBatchSize; index++) {
+      let claim: ClaimedRecord | undefined;
+      try {
+        [claim] = await this.store.claimBatch(1);
+      } catch (error) {
+        this.logger.error("[DurableDeliveryManager] Failed to claim durable records", error);
+        return;
+      }
 
-    for (const claim of claims) {
-      await this.processClaim(claim);
+      if (!claim) {
+        return;
+      }
+
+      if (!(await this.processClaim(claim))) {
+        return;
+      }
     }
   }
 
-  private async processClaim(claim: ClaimedRecord): Promise<void> {
+  private async processClaim(claim: ClaimedRecord): Promise<boolean> {
     const decision = await this.attemptSend(claim.record);
     if (decision.kind === "success" || decision.kind === "permanent") {
       await this.completeClaim(claim);
-      return;
+      return true;
     }
     if (decision.kind === "retryable" && decision.error !== undefined) {
       this.logger.warn(
@@ -180,6 +194,7 @@ export class DurableDeliveryManager {
     }
 
     await this.releaseClaim(claim);
+    return false;
   }
 
   private async persist(record: DurableRecordV1): Promise<boolean> {

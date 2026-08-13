@@ -17,6 +17,27 @@ import type {
   DurableRecordV1,
 } from "../../../../src/a365/exporter/durable/index.js";
 
+const disappearingFileScan = vi.hoisted(() => ({
+  path: undefined as string | undefined,
+  count: 0,
+}));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    stat: async (path: string | Buffer | URL, options?: unknown) => {
+      if (path === disappearingFileScan.path) {
+        disappearingFileScan.count += 1;
+        const error = new Error("simulated disappearing file") as NodeJS.ErrnoException;
+        error.code = "ENOENT";
+        throw error;
+      }
+      return actual.stat(path, options as never);
+    },
+  };
+});
+
 describe("PersistentStore", () => {
   const originalEnv = { ...process.env };
   const nativePlatform = process.platform;
@@ -24,6 +45,8 @@ describe("PersistentStore", () => {
 
   beforeEach(async () => {
     process.env = { ...originalEnv };
+    disappearingFileScan.path = undefined;
+    disappearingFileScan.count = 0;
     scratchRoot = join(process.cwd(), ".superpowers", "sdd", "task-2-test-artifacts", randomUUID());
     await fs.mkdir(scratchRoot, { recursive: true });
   });
@@ -181,6 +204,59 @@ describe("PersistentStore", () => {
     assert.include(bodies, replacement.body);
   });
 
+  it("warns with reason, path, and bytes for expired and capacity evictions", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+
+    const root = join(scratchRoot, "pruning-warning-store");
+    const logger = makeLogger();
+    const template = makeRecord({ createdAt: 990, body: "a".repeat(80) });
+    const recordBytes = Buffer.byteLength(JSON.stringify(template), "utf8");
+    const store = await createStore(
+      root,
+      {
+        maxStorageBytes: recordBytes * 2 + 16,
+        maxRecordAgeMilliseconds: 50,
+      },
+      logger,
+    );
+
+    const expired = makeRecord({ createdAt: 800, body: "e".repeat(80) });
+    const oldest = makeRecord({ createdAt: 960, body: "o".repeat(80) });
+    const newest = makeRecord({ createdAt: 970, body: "n".repeat(80) });
+    const expiredPath = await seedPendingRecord(root, expired);
+    const oldestPath = await seedPendingRecord(root, oldest);
+    await seedPendingRecord(root, newest);
+
+    await store.persist(makeRecord({ createdAt: 1_000, body: "r".repeat(80) }));
+
+    expect(logger.warn).toHaveBeenCalledWith("[PersistentStore] Evicted expired durable record", {
+      path: expiredPath,
+      bytes: Buffer.byteLength(JSON.stringify(expired), "utf8"),
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[PersistentStore] Evicted durable record for capacity",
+      {
+        path: oldestPath,
+        bytes: Buffer.byteLength(JSON.stringify(oldest), "utf8"),
+      },
+    );
+    assert.strictEqual(logger.warn.mock.calls.length, 2);
+  });
+
+  it("tolerates consecutive disappeared file scans when storage has capacity", async () => {
+    const root = join(scratchRoot, "disappearing-scan-store");
+    const store = await createStore(root);
+    const disappearingPath = join(root, `${Date.now()}-${randomUUID()}.pending`);
+    await fs.writeFile(disappearingPath, "disappearing bytes", "utf8");
+
+    disappearingFileScan.path = disappearingPath;
+
+    const storedPath = await store.persist(makeRecord());
+
+    assert.isAtLeast(disappearingFileScan.count, 2);
+    assert.isTrue(await pathExists(storedPath));
+  });
+
   it("allows only one concurrent claimant", async () => {
     const root = join(scratchRoot, "concurrency-store");
     const store = await createStore(root);
@@ -243,6 +319,40 @@ describe("PersistentStore", () => {
     assert.strictEqual(reclaimed.record.id, record.id);
     assert.notStrictEqual(reclaimed.leasePath, claim.leasePath);
     assert.isFalse(await pathExists(claim.leasePath));
+  });
+
+  it("reclaims a record through repeated stale lease recoveries with bounded names", async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+
+    const root = join(scratchRoot, "repeated-stale-lease-store");
+    const store = await createStore(root, { leaseDurationMilliseconds: 50 });
+    const record = makeRecord({ createdAt: now, id: "record.with.dot" });
+    const stableBaseName = `${record.createdAt}-${record.id}`;
+    await store.persist(record);
+
+    const [initialClaim] = await store.claimBatch(1);
+    assert.ok(initialClaim);
+    await store.release(initialClaim);
+
+    let [claim] = await store.claimBatch(1);
+    assert.ok(claim);
+    for (let recovery = 0; recovery < 5; recovery++) {
+      now += 51;
+
+      const [reclaimed] = await store.claimBatch(1);
+      assert.ok(reclaimed);
+      assert.strictEqual(reclaimed.record.id, record.id);
+
+      const leaseName = basename(reclaimed.leasePath);
+      assert.isTrue(leaseName.startsWith(`${stableBaseName}.recovered-`));
+      assert.strictEqual(leaseName.split(".recovered-").length - 1, 1);
+      assert.notInclude(leaseName, ".release-");
+
+      claim = reclaimed;
+    }
+
+    assert.ok(claim);
   });
 
   it("does not expire a fresh record because a parent directory starts with digits", async () => {
@@ -526,7 +636,7 @@ describe("PersistentStore", () => {
   });
 });
 
-function makeLogger(): ILogger {
+function makeLogger() {
   return {
     info: vi.fn(),
     warn: vi.fn(),
@@ -552,6 +662,7 @@ function makeRecord(overrides: Partial<DurableRecordV1> = {}): DurableRecordV1 {
 async function createStore(
   storageDirectory: string,
   overrides: Partial<Agent365DurableDeliveryOptions> = {},
+  logger: ILogger = makeLogger(),
 ): Promise<PersistentStore> {
   return PersistentStore.create(
     new ResolvedDurableDeliveryOptions({
@@ -559,7 +670,7 @@ async function createStore(
       storageDirectory,
       ...overrides,
     }),
-    makeLogger(),
+    logger,
   );
 }
 

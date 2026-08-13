@@ -149,6 +149,103 @@ describe("DurableDeliveryManager", () => {
     assert.strictEqual(release.mock.calls.length, 0);
   });
 
+  it("serializes simultaneous startReplay, forceFlush, and scheduled replay attempts", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const { claimBatch, manager, send } = createManager({
+      options: { replayIntervalMilliseconds: 1 },
+    });
+    const claim = makeClaim(makeRecord({ id: "shared-replay-record" }));
+    const firstSendStarted = deferred<void>();
+    const allowSendsToFinish = deferred<DeliveryAttempt>();
+    let activeSends = 0;
+    let maximumActiveSends = 0;
+
+    claimBatch.mockResolvedValue([claim]);
+    send.mockImplementation(async () => {
+      activeSends += 1;
+      maximumActiveSends = Math.max(maximumActiveSends, activeSends);
+      firstSendStarted.resolve();
+      try {
+        return await allowSendsToFinish.promise;
+      } finally {
+        activeSends -= 1;
+      }
+    });
+
+    manager.startReplay();
+    await firstSendStarted.promise;
+
+    const flush = manager.forceFlush();
+    await vi.advanceTimersByTimeAsync(1);
+    await settle();
+
+    try {
+      assert.strictEqual(maximumActiveSends, 1);
+      assert.strictEqual(claimBatch.mock.calls.length, 1);
+    } finally {
+      allowSendsToFinish.resolve({ kind: "success", correlationId: "serialized" });
+      await flush;
+    }
+  });
+
+  it("claims each replay record only when ready to process it", async () => {
+    const { claimBatch, manager, send } = createManager({
+      options: { maxReplayBatchSize: 2 },
+    });
+    const first = makeClaim(makeRecord({ id: "first-replay-record" }));
+    const second = makeClaim(makeRecord({ id: "second-replay-record" }));
+    const pendingClaims = [first, second];
+    const firstSendStarted = deferred<void>();
+    const finishFirstSend = deferred<DeliveryAttempt>();
+
+    claimBatch.mockImplementation(async (limit) => pendingClaims.splice(0, limit));
+    send.mockImplementation(async (record) => {
+      if (record.id === first.record.id) {
+        firstSendStarted.resolve();
+        return finishFirstSend.promise;
+      }
+      return { kind: "success", correlationId: record.id };
+    });
+
+    const flush = manager.forceFlush();
+    await firstSendStarted.promise;
+
+    try {
+      assert.deepEqual(claimBatch.mock.calls, [[1]]);
+      assert.deepEqual(pendingClaims, [second]);
+    } finally {
+      finishFirstSend.resolve({ kind: "success", correlationId: first.record.id });
+      await flush;
+    }
+
+    assert.deepEqual(claimBatch.mock.calls, [[1], [1]]);
+    assert.deepEqual(pendingClaims, []);
+  });
+
+  it("does not reclaim a released record within the same replay pass", async () => {
+    const { claimBatch, manager, release, send } = createManager({
+      options: { maxReplayBatchSize: 3 },
+    });
+    const claim = makeClaim(makeRecord({ id: "released-replay-record" }));
+
+    claimBatch.mockResolvedValue([claim]);
+    send.mockResolvedValue({
+      kind: "retryable",
+      correlationId: "retryable-replay-record",
+      retryAfterMs: 60_000,
+    });
+
+    await manager.forceFlush();
+
+    assert.deepEqual(claimBatch.mock.calls, [[1]]);
+    assert.deepEqual(
+      release.mock.calls.map(([releasedClaim]) => releasedClaim),
+      [claim],
+    );
+  });
+
   it("releases replay claims without sending while the transmission gate is backing off", async () => {
     const { claimBatch, manager, release, resolveToken, send } = createManager();
     const claim = makeClaim(makeRecord({ id: "replay-while-blocked" }));
@@ -234,7 +331,10 @@ describe("DurableDeliveryManager", () => {
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
 
     const { claimBatch, manager, release, resolveToken, send } = createManager({
-      options: { tokenResolutionTimeoutMilliseconds: 5 },
+      options: {
+        maxReplayBatchSize: 1,
+        tokenResolutionTimeoutMilliseconds: 5,
+      },
     });
     const retryable = makeClaim(makeRecord({ id: "retryable-claim" }));
     const missingToken = makeClaim(makeRecord({ id: "missing-token-claim" }));
