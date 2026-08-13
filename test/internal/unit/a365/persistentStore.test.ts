@@ -3,7 +3,7 @@
 
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ILogger } from "../../../../src/a365/logging.js";
 import {
@@ -19,8 +19,8 @@ import type {
 
 describe("PersistentStore", () => {
   const originalEnv = { ...process.env };
+  const nativePlatform = process.platform;
   let scratchRoot: string;
-  const cleanupRoots = new Set<string>();
 
   beforeEach(async () => {
     process.env = { ...originalEnv };
@@ -31,10 +31,6 @@ describe("PersistentStore", () => {
   afterEach(async () => {
     process.env = { ...originalEnv };
     vi.restoreAllMocks();
-    for (const root of cleanupRoots) {
-      await fs.rm(root, { recursive: true, force: true });
-    }
-    cleanupRoots.clear();
     await fs.rm(scratchRoot, { recursive: true, force: true });
   });
 
@@ -86,24 +82,64 @@ describe("PersistentStore", () => {
     const fallbackBase = join(scratchRoot, "fallback-base");
     await fs.writeFile(firstCandidate, "blocked", "utf8");
     await fs.mkdir(fallbackBase, { recursive: true });
+    const restorePlatform = useWindowsDefaultCandidates(nativePlatform);
 
-    if (process.platform === "win32") {
+    try {
       process.env.LOCALAPPDATA = firstCandidate;
       process.env.TEMP = fallbackBase;
-    } else {
-      process.env.TMPDIR = firstCandidate;
-      cleanupRoots.add(join("/var/tmp", "Microsoft", "A365", "otel-durable"));
+
+      const store = await createDefaultStore();
+      const storedPath = await store.persist(makeRecord());
+      const expectedRoot = defaultStorageRoot(fallbackBase);
+
+      assert.ok(storedPath.startsWith(expectedRoot));
+      assert.isTrue(await pathExists(expectedRoot));
+    } finally {
+      restorePlatform();
+    }
+  });
+
+  it("rejects a symlinked default root before falling back", async () => {
+    const firstCandidate = join(scratchRoot, "symlinked-default-candidate");
+    const fallbackBase = join(scratchRoot, "fallback-base");
+    const symlinkedRoot = join(firstCandidate, "Microsoft", "A365", "otel-durable");
+    const target = join(scratchRoot, "symlink-target");
+    await fs.mkdir(dirname(symlinkedRoot), { recursive: true });
+    await fs.mkdir(target, { recursive: true });
+    await fs.symlink(target, symlinkedRoot, nativePlatform === "win32" ? "junction" : "dir");
+    const restorePlatform = useWindowsDefaultCandidates(nativePlatform);
+
+    try {
+      process.env.LOCALAPPDATA = firstCandidate;
+      process.env.TEMP = fallbackBase;
+
+      const storedPath = await (await createDefaultStore()).persist(makeRecord());
+      const expectedRoot = defaultStorageRoot(fallbackBase);
+
+      assert.ok(storedPath.startsWith(expectedRoot));
+      assert.isFalse(storedPath.startsWith(symlinkedRoot));
+    } finally {
+      restorePlatform();
+    }
+  });
+
+  it("uses a single owner-only per-user leaf for a POSIX default root", async () => {
+    if (nativePlatform === "win32") {
+      return;
     }
 
-    const store = await createDefaultStore();
-    const storedPath = await store.persist(makeRecord());
-    const expectedRoot =
-      process.platform === "win32"
-        ? join(fallbackBase, "Microsoft", "A365", "otel-durable")
-        : join("/var/tmp", "Microsoft", "A365", "otel-durable");
+    const candidate = join(scratchRoot, "posix-default-candidate");
+    await fs.mkdir(candidate, { recursive: true });
+    process.env.TMPDIR = candidate;
 
-    assert.ok(storedPath.startsWith(expectedRoot));
-    assert.isTrue(await pathExists(expectedRoot));
+    const storedPath = await (await createDefaultStore()).persist(makeRecord());
+    const root = defaultStorageRoot(candidate);
+
+    assert.ok(storedPath.startsWith(root));
+    assert.strictEqual(dirname(root), candidate);
+    assert.match(basename(root), /^a365-otel-durable-\d+$/);
+    assert.strictEqual((await fs.stat(root)).mode & 0o777, 0o700);
+    assert.strictEqual((await fs.stat(root)).uid, process.getuid!());
   });
 
   it("rejects records larger than configured storage capacity", async () => {
@@ -157,7 +193,41 @@ describe("PersistentStore", () => {
     assert.strictEqual((first[0] ?? second[0]).record.id, record.id);
   });
 
-  it("recovers stale leases before selecting pending records", async () => {
+  it("does not recover an old record claimed within the lease duration across concurrent stores", async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+
+    const root = join(scratchRoot, "fresh-claim-store");
+    const record = makeRecord({ createdAt: now - 10_000 });
+    const store = await createStore(root, { leaseDurationMilliseconds: 50 });
+    const competingStore = await createStore(root, { leaseDurationMilliseconds: 50 });
+    const pendingPath = await seedPendingRecord(root, record);
+    await fs.utimes(pendingPath, new Date(record.createdAt), new Date(record.createdAt));
+
+    const [claim] = await store.claimBatch(1);
+    assert.ok(claim);
+
+    const [firstConcurrentClaims, secondConcurrentClaims] = await Promise.all([
+      store.claimBatch(1),
+      competingStore.claimBatch(1),
+    ]);
+    assert.deepEqual(firstConcurrentClaims, []);
+    assert.deepEqual(secondConcurrentClaims, []);
+
+    now += 50;
+    assert.deepEqual(await competingStore.claimBatch(1), []);
+
+    now += 1;
+    const [reclaimed] = await competingStore.claimBatch(1);
+    assert.ok(reclaimed);
+    assert.strictEqual(reclaimed.record.id, record.id);
+    assert.notStrictEqual(reclaimed.leasePath, claim.leasePath);
+  });
+
+  it("recovers leases after their acquisition timestamp expires", async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+
     const root = join(scratchRoot, "stale-lease-store");
     const store = await createStore(root, { leaseDurationMilliseconds: 50 });
     const record = makeRecord();
@@ -166,13 +236,150 @@ describe("PersistentStore", () => {
     const [claim] = await store.claimBatch(1);
     assert.ok(claim);
 
-    await fs.utimes(claim.leasePath, new Date(0), new Date(0));
+    now += 51;
 
     const [reclaimed] = await store.claimBatch(1);
     assert.ok(reclaimed);
     assert.strictEqual(reclaimed.record.id, record.id);
     assert.notStrictEqual(reclaimed.leasePath, claim.leasePath);
     assert.isFalse(await pathExists(claim.leasePath));
+  });
+
+  it("does not expire a fresh record because a parent directory starts with digits", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+
+    const root = join(scratchRoot, "365-svc", "basename-created-at-store");
+    const store = await createStore(root, {
+      maxRecordAgeMilliseconds: 50,
+      maxStorageBytes: 10_000,
+    });
+    const freshRecord = makeRecord({ createdAt: 1_000, body: "fresh" });
+    const freshPath = join(root, "fresh.pending");
+    await fs.writeFile(freshPath, JSON.stringify(freshRecord), "utf8");
+    await fs.utimes(freshPath, new Date(1_000), new Date(1_000));
+
+    await store.persist(makeRecord({ createdAt: 1_000, body: "replacement" }));
+
+    assert.isTrue(await pathExists(freshPath));
+  });
+
+  it("removes a temporary file when writing it fails", async () => {
+    const root = join(scratchRoot, "write-failure-store");
+    const store = await createStore(root);
+    const probePath = join(root, "file-handle-prototype-probe");
+    const probeHandle = await fs.open(probePath, "w");
+    const fileHandlePrototype = Object.getPrototypeOf(probeHandle) as typeof probeHandle;
+    await probeHandle.close();
+    await fs.unlink(probePath);
+    vi.spyOn(fileHandlePrototype, "writeFile").mockRejectedValueOnce(
+      new Error("simulated write failure"),
+    );
+
+    await expect(store.persist(makeRecord())).rejects.toThrow(/simulated write failure/);
+
+    assert.isEmpty((await listStoreFiles(root)).filter((file) => file.endsWith(".tmp")));
+  });
+
+  it("sweeps stale temporary files before accepting a new record", async () => {
+    const now = 1_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(now);
+
+    const root = join(scratchRoot, "stale-temp-store");
+    const store = await createStore(root, { maxRecordAgeMilliseconds: 50 });
+    const staleTemporary = join(root, `${now - 51}-${randomUUID()}.tmp`);
+    await fs.writeFile(staleTemporary, "stale temporary bytes", "utf8");
+
+    await store.persist(makeRecord());
+
+    assert.isFalse(await pathExists(staleTemporary));
+  });
+
+  it("counts non-stale temporary bytes against storage capacity without evicting them", async () => {
+    const now = 1_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(now);
+
+    const root = join(scratchRoot, "temporary-capacity-store");
+    const record = makeRecord({ createdAt: now, body: "record-body" });
+    const recordBytes = Buffer.byteLength(JSON.stringify(record), "utf8");
+    const store = await createStore(root, { maxStorageBytes: recordBytes + 1 });
+    const temporaryPath = join(root, `${now}-${randomUUID()}.tmp`);
+    await fs.writeFile(temporaryPath, "x".repeat(recordBytes), "utf8");
+
+    await expect(store.persist(record)).rejects.toThrow(/capacity/i);
+
+    assert.isTrue(await pathExists(temporaryPath));
+    assert.isEmpty((await listStoreFiles(root)).filter((file) => file.endsWith(".pending")));
+  });
+
+  it("counts active leases against storage capacity without evicting them", async () => {
+    const root = join(scratchRoot, "active-lease-capacity-store");
+    const leasedRecord = makeRecord({ body: "same-sized-record" });
+    const replacement = makeRecord({ body: "same-sized-record" });
+    const maxStorageBytes =
+      Math.max(
+        Buffer.byteLength(JSON.stringify(leasedRecord), "utf8"),
+        Buffer.byteLength(JSON.stringify(replacement), "utf8"),
+      ) + 1;
+    const store = await createStore(root, { maxStorageBytes });
+    await store.persist(leasedRecord);
+    const [claim] = await store.claimBatch(1);
+    assert.ok(claim);
+
+    await expect(store.persist(replacement)).rejects.toThrow(/capacity/i);
+
+    assert.isTrue(await pathExists(claim.leasePath));
+  });
+
+  it("serializes concurrent persists sharing a storage root to preserve capacity", async () => {
+    const root = join(scratchRoot, "concurrent-persist-capacity-store");
+    const firstRecord = makeRecord({ body: "first concurrent record" });
+    const secondRecord = makeRecord({ body: "second concurrent record" });
+    const firstRecordBytes = Buffer.byteLength(JSON.stringify(firstRecord), "utf8");
+    const secondRecordBytes = Buffer.byteLength(JSON.stringify(secondRecord), "utf8");
+
+    const options = { maxStorageBytes: Math.max(firstRecordBytes, secondRecordBytes) + 1 };
+    const firstStore = await createStore(root, options);
+    const secondStore = await createStore(root, options);
+
+    await Promise.all([firstStore.persist(firstRecord), secondStore.persist(secondRecord)]);
+
+    const pendingFiles = (await listStoreFiles(root)).filter((file) => file.endsWith(".pending"));
+    const retainedBytes = await Promise.all(
+      pendingFiles.map(async (file) => (await fs.stat(join(root, file))).size),
+    );
+    assert.strictEqual(pendingFiles.length, 1);
+    assert.isAtMost(
+      retainedBytes.reduce((total, size) => total + size, 0),
+      options.maxStorageBytes,
+    );
+  });
+
+  it("migrates legacy leases to a fresh claim timestamp before recovering them", async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+
+    const root = join(scratchRoot, "legacy-lease-store");
+    const store = await createStore(root, { leaseDurationMilliseconds: 50 });
+    const record = makeRecord({ createdAt: now - 10_000 });
+    const pendingPath = await seedPendingRecord(root, record);
+    await fs.utimes(pendingPath, new Date(record.createdAt), new Date(record.createdAt));
+    const legacyLeasePath = pendingPath.replace(
+      /\.pending$/,
+      `.lease-${process.pid}-${randomUUID()}`,
+    );
+    await fs.rename(pendingPath, legacyLeasePath);
+
+    assert.deepEqual(await store.claimBatch(1), []);
+    assert.isFalse(await pathExists(legacyLeasePath));
+    assert.isTrue((await listStoreFiles(root)).some((file) => file.includes(".lease-at-1000000-")));
+
+    now += 50;
+    assert.deepEqual(await store.claimBatch(1), []);
+
+    now += 1;
+    const [reclaimed] = await store.claimBatch(1);
+    assert.ok(reclaimed);
+    assert.strictEqual(reclaimed.record.id, record.id);
   });
 
   it("keeps quarantined malformed records terminal after lease expiry", async () => {
@@ -419,4 +626,26 @@ function setFallbackEnvironment(basePath: string): void {
   }
 
   process.env.TMPDIR = basePath;
+}
+
+function defaultStorageRoot(candidate: string): string {
+  if (process.platform === "win32") {
+    return join(candidate, "Microsoft", "A365", "otel-durable");
+  }
+
+  return join(candidate, `a365-otel-durable-${process.getuid?.() ?? "unknown"}`);
+}
+
+function useWindowsDefaultCandidates(nativePlatform: string): () => void {
+  if (nativePlatform === "win32") {
+    return () => {};
+  }
+
+  const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
+  if (!descriptor) {
+    throw new Error("Unable to override process.platform for this test");
+  }
+
+  Object.defineProperty(process, "platform", { ...descriptor, value: "win32" });
+  return () => Object.defineProperty(process, "platform", descriptor);
 }

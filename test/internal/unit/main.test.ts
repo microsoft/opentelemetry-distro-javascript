@@ -28,6 +28,9 @@ import type { LogRecordProcessor, SdkLogRecord } from "@opentelemetry/sdk-logs";
 import { getInstance } from "../../../src/utils/sdkStats.js";
 import type { Instrumentation, InstrumentationConfig } from "@opentelemetry/instrumentation";
 import { describe, it, beforeEach, afterEach, expect, assert, vi, afterAll } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { OpenAIAgentsTraceInstrumentor } from "../../../src/genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js";
 import { LangChainTraceInstrumentor } from "../../../src/genai/instrumentations/langchain/langchainTraceInstrumentor.js";
 
@@ -1496,6 +1499,7 @@ describe("Main functions", () => {
   });
 
   it("propagates a365 durableDelivery options to the Agent365Exporter", async () => {
+    const storageDirectory = await mkdtemp(join(tmpdir(), "a365-spool-"));
     type Agent365BatchProcessor = {
       constructor?: { name?: string };
       _exporter?: {
@@ -1515,41 +1519,44 @@ describe("Main functions", () => {
       };
     };
 
-    useMicrosoftOpenTelemetry({
-      azureMonitor: { enabled: false },
-      enableConsoleExporters: false,
-      a365: {
-        enabled: true,
-        enableObservabilityExporter: true,
-        tokenResolver: () => "token",
-        durableDelivery: {
+    try {
+      useMicrosoftOpenTelemetry({
+        azureMonitor: { enabled: false },
+        enableConsoleExporters: false,
+        a365: {
           enabled: true,
-          storageDirectory: "C:\\a365-spool",
-          maxStorageBytes: 1024,
+          enableObservabilityExporter: true,
+          tokenResolver: () => "token",
+          durableDelivery: {
+            enabled: true,
+            storageDirectory,
+            maxStorageBytes: 1024,
+          },
         },
-      },
-    });
+      });
 
-    const internalSdk = _getSdkInstance();
-    assert.isDefined(internalSdk);
+      const internalSdk = _getSdkInstance();
+      assert.isDefined(internalSdk);
 
-    const tracerProvider = (internalSdk as InternalSdk)["_tracerProvider"];
-    const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
-    const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
+      const tracerProvider = (internalSdk as InternalSdk)["_tracerProvider"];
+      const activeSpanProcessor = tracerProvider?.["_activeSpanProcessor"];
+      const registeredProcessors = activeSpanProcessor?.["_spanProcessors"] || [];
 
-    const batchProcessor = registeredProcessors.find(
-      (processor) =>
-        processor.constructor?.name === "BatchSpanProcessor" &&
-        processor["_exporter"]?.constructor?.name === "Agent365Exporter",
-    );
+      const batchProcessor = registeredProcessors.find(
+        (processor) =>
+          processor.constructor?.name === "BatchSpanProcessor" &&
+          processor["_exporter"]?.constructor?.name === "Agent365Exporter",
+      );
 
-    assert.isDefined(batchProcessor, "Expected an Agent365 BatchSpanProcessor");
-    assert.strictEqual(
-      batchProcessor["_exporter"]?.["options"]?.durableDelivery?.storageDirectory,
-      "C:\\a365-spool",
-    );
-
-    await shutdownMicrosoftOpenTelemetry();
+      assert.isDefined(batchProcessor, "Expected an Agent365 BatchSpanProcessor");
+      assert.strictEqual(
+        batchProcessor["_exporter"]?.["options"]?.durableDelivery?.storageDirectory,
+        storageDirectory,
+      );
+    } finally {
+      await shutdownMicrosoftOpenTelemetry().catch(() => undefined);
+      await rm(storageDirectory, { recursive: true, force: true });
+    }
   });
 
   it("applies a365.logLevel to the A365 logger filter via configureA365Logger", async () => {

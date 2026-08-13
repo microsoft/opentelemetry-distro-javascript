@@ -136,6 +136,44 @@ describe("TransmissionGate", () => {
     assert.isDefined(gate.acquire());
   });
 
+  it("caps a huge Retry-After delay-seconds value at one hour", () => {
+    let now = 0;
+    const gate = new TransmissionGate({ now: () => now, random: () => 0 });
+    const permit = gate.acquire();
+    assert.isDefined(permit);
+
+    const retryAfterMs = parseRetryAfterMs(makeHeaders("999999999999999999"));
+    assert.isNotNull(retryAfterMs);
+    gate.recordRetryableFailure(permit!, retryAfterMs!);
+
+    now = 3_599_999;
+    assert.isUndefined(gate.acquire());
+
+    now = 3_600_000;
+    assert.isDefined(gate.acquire());
+  });
+
+  it("caps a future Retry-After HTTP-date at one hour", () => {
+    const fakeNow = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(fakeNow);
+    let now = fakeNow;
+    const gate = new TransmissionGate({ now: () => now, random: () => 0 });
+    const permit = gate.acquire();
+    assert.isDefined(permit);
+
+    const retryAfterMs = parseRetryAfterMs(
+      makeHeaders(new Date(fakeNow + 4 * 3_600_000).toUTCString()),
+    );
+    assert.isNotNull(retryAfterMs);
+    gate.recordRetryableFailure(permit!, retryAfterMs!);
+
+    now += 3_599_999;
+    assert.isUndefined(gate.acquire());
+
+    now += 1;
+    assert.isDefined(gate.acquire());
+  });
+
   it("resets after a current-generation success", () => {
     let now = 0;
     const gate = new TransmissionGate({ now: () => now, random: () => 0 });

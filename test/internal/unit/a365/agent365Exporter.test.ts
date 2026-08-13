@@ -1130,6 +1130,26 @@ describe("Agent365Exporter", () => {
     });
   });
 
+  it("does not wait for a hanging export during non-durable shutdown", async () => {
+    let notifyRequestStarted: (() => void) | undefined;
+    const requestStarted = new Promise<void>((resolve) => {
+      notifyRequestStarted = resolve;
+    });
+    fetchSpy.mockImplementation(() => {
+      notifyRequestStarted!();
+      return new Promise(() => undefined);
+    });
+    const exporter = new Agent365Exporter({
+      tokenResolver: () => "token",
+      durableDelivery: { enabled: false, shutdownTimeoutMilliseconds: 5 },
+    });
+
+    void exportResult(exporter, [makeSpan()]);
+    await requestStarted;
+
+    await expect(exporter.shutdown()).resolves.toBeUndefined();
+  });
+
   describe("durable delivery", () => {
     it("hands a retryable failure to durable storage after one attempt", async () => {
       const directory = await createStorageDirectory();

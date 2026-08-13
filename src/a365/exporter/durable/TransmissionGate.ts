@@ -54,7 +54,7 @@ export class TransmissionGate {
 
     const currentTime = this.now();
     const fallback = this.computeFallbackDelay();
-    const delayMs = Math.max(retryAfterMs ?? 0, fallback);
+    const delayMs = Math.min(MAX_FALLBACK_DELAY_MS, Math.max(retryAfterMs ?? 0, fallback));
     this.blockedUntil = currentTime + delayMs;
   }
 

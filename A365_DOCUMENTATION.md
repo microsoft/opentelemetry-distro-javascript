@@ -140,8 +140,8 @@ set `enableObservabilityExporter: true` alongside `a365.enabled: true`.
 | Option | Default | Notes |
 | --- | --- | --- |
 | `enabled` | `false` | Durable delivery is off unless you opt in |
-| `storageDirectory` | auto | Uses the configured directory, or probes OS-specific local temp roots and appends `Microsoft/A365/otel-durable` |
-| `maxStorageBytes` | `50 * 1024 * 1024` | Bounds retained pending + quarantined records |
+| `storageDirectory` | auto | Uses the configured directory, or creates a secure platform-specific default root |
+| `maxStorageBytes` | `50 * 1024 * 1024` | Bounds pending, quarantined, active leased, and non-stale temporary records |
 | `maxRecordAgeMilliseconds` | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction |
 | `replayIntervalMilliseconds` | `2 * 60 * 1000` | Scheduled replay cadence |
 | `maxReplayBatchSize` | `10` | Maximum records claimed per replay pass |
@@ -152,16 +152,24 @@ set `enableObservabilityExporter: true` alongside `a365.enabled: true`.
 ### Operational Notes
 
 - Durable records are stored as plaintext JSON files. On POSIX, the SDK creates owner-only durable
-  directories/files (`0700` / `0600`). On Windows, use a protected storage directory or persistent
-  volume with owner-only ACLs.
+  directories/files (`0700` / `0600`), rejects symlink roots, and requires the root to be owned by
+  the current user. Default POSIX storage probes `TMPDIR`, `/var/tmp`, and `os.tmpdir()` and
+  atomically creates one `a365-otel-durable-<uid>` leaf under each candidate; it does not create a
+  multi-directory SDK-owned tree under a shared temp directory. Windows defaults use the per-user
+  `Microsoft/A365/otel-durable` location under the selected candidate and also reject a symlinked
+  final root. On Windows, use a protected storage directory or persistent volume with owner-only
+  ACLs.
 - Delivery is at-least-once. A retryable request can be replayed after a crash, timeout, or
   shutdown race, so downstream consumers must tolerate duplicates.
 - Replay and `forceFlush()` resolve a fresh token for each send attempt; durable files do not store
   bearer tokens.
-- Storage is bounded by both age and capacity. The SDK prunes expired records first, then evicts
-  the oldest remaining durable records until the new record fits within `maxStorageBytes`.
+- Storage is bounded by both age and capacity. The SDK sweeps stale temporary files, prunes expired
+  records, then evicts the oldest remaining pending or quarantined record until the new record fits
+  within `maxStorageBytes`; active temporary and leased files count against that bound and are not
+  evicted.
 - Live delivery and replay share one `Retry-After` / exponential-backoff transmission gate. A
-  retryable response pauses both immediate sends and replay probes until the gate reopens.
+  retryable response pauses both immediate sends and replay probes until the gate reopens. The
+  effective delay is capped at one hour.
 - If records must survive container restarts, rescheduling, or host restarts, point
   `storageDirectory` at a protected persistent volume. Default temp directories and container
   filesystems are convenient for process restarts, but ephemeral storage can be lost when a
@@ -183,4 +191,5 @@ process.on("SIGTERM", async () => {
 With durable delivery enabled, shutdown waits for in-flight A365 exports and then drains durable
 replay until `durableDelivery.shutdownTimeoutMilliseconds` expires (10 seconds by default). When
 the deadline is reached, in-flight durable requests are aborted; already stored records remain on
-disk for replay after the next process start.
+disk for replay after the next process start. With durable delivery disabled, exporter shutdown
+retains its immediate, non-waiting behavior.

@@ -760,6 +760,11 @@ export class Agent365Exporter implements SpanExporter {
   }
 
   private async shutdownInternal(): Promise<void> {
+    if (!this.options.durableDelivery.enabled) {
+      this.shutdownFinalized = true;
+      return;
+    }
+
     const deadline = Date.now() + this.options.durableDelivery.shutdownTimeoutMilliseconds;
 
     try {

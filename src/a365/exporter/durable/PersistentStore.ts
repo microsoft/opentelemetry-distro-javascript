@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { randomUUID } from "node:crypto";
-import type { Stats } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -14,7 +13,9 @@ const OWNER_DIRECTORY_MODE = 0o700;
 const OWNER_FILE_MODE = 0o600;
 const PENDING_SUFFIX = ".pending";
 const QUARANTINE_SUFFIX = ".quarantine";
-const PROBE_DIRECTORY = ["Microsoft", "A365", "otel-durable"] as const;
+const TEMPORARY_SUFFIX = ".tmp";
+const WINDOWS_PROBE_DIRECTORY = ["Microsoft", "A365", "otel-durable"] as const;
+const POSIX_DEFAULT_LEAF_PREFIX = "a365-otel-durable";
 
 export interface ClaimedRecord {
   record: DurableRecordV1;
@@ -25,9 +26,17 @@ interface ManagedFile {
   path: string;
   size: number;
   createdAt: number;
+  evictable: boolean;
+  removableWhenExpired: boolean;
+}
+
+interface ManagedFileScan {
+  files: ManagedFile[];
+  racedWithAnotherProcess: boolean;
 }
 
 export class PersistentStore {
+  private static readonly persistenceQueues = new Map<string, Promise<void>>();
   private claimQueue: Promise<void> = Promise.resolve();
 
   private constructor(
@@ -44,7 +53,11 @@ export class PersistentStore {
     return new PersistentStore(root, options, logger);
   }
 
-  public async persist(record: DurableRecordV1): Promise<string> {
+  public persist(record: DurableRecordV1): Promise<string> {
+    return this.withPersistenceLock(() => this.persistInternal(record));
+  }
+
+  private async persistInternal(record: DurableRecordV1): Promise<string> {
     const serialized = JSON.stringify(record);
     const recordBytes = Buffer.byteLength(serialized, "utf8");
     if (recordBytes > this.options.maxStorageBytes) {
@@ -53,17 +66,18 @@ export class PersistentStore {
 
     await this.pruneForCapacity(recordBytes);
 
-    const temporaryPath = join(this.root, `.${record.id}.${process.pid}.tmp`);
+    const temporaryPath = this.temporaryPath(record);
     const pendingPath = this.pendingPath(record);
     const handle = await fs.open(temporaryPath, "wx", OWNER_FILE_MODE);
     try {
-      await handle.writeFile(serialized, "utf8");
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
+      try {
+        await handle.writeFile(serialized, "utf8");
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
 
-    try {
+      await this.pruneForCapacity(0);
       await fs.rename(temporaryPath, pendingPath);
       await syncDirectory(this.root);
       return pendingPath;
@@ -149,33 +163,72 @@ export class PersistentStore {
   }
 
   private async pruneForCapacity(incomingBytes: number): Promise<void> {
-    let files = await this.readManagedFiles();
-    let usedBytes = sumBytes(files);
     const minimumCreatedAt = Date.now() - this.options.maxRecordAgeMilliseconds;
 
-    for (const file of files.sort((left, right) => left.createdAt - right.createdAt)) {
-      if (file.createdAt >= minimumCreatedAt) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let scan = await this.readManagedFiles();
+      if (scan.racedWithAnotherProcess) {
         continue;
       }
 
-      await ignoreEnoent(() => fs.unlink(file.path));
-      usedBytes -= file.size;
-    }
+      let files = scan.files;
+      let usedBytes = sumBytes(files);
+      let racedWithAnotherProcess = false;
 
-    if (usedBytes + incomingBytes <= this.options.maxStorageBytes) {
-      return;
-    }
+      for (const file of files.sort((left, right) => left.createdAt - right.createdAt)) {
+        if (!file.removableWhenExpired || file.createdAt >= minimumCreatedAt) {
+          continue;
+        }
 
-    files = await this.readManagedFiles();
-    usedBytes = sumBytes(files);
-    for (const file of files.sort((left, right) => left.createdAt - right.createdAt)) {
-      if (usedBytes + incomingBytes <= this.options.maxStorageBytes) {
-        break;
+        if (await unlinkIfExists(file.path)) {
+          usedBytes -= file.size;
+        } else {
+          racedWithAnotherProcess = true;
+        }
       }
 
-      await ignoreEnoent(() => fs.unlink(file.path));
-      usedBytes -= file.size;
+      if (racedWithAnotherProcess) {
+        continue;
+      }
+
+      if (usedBytes + incomingBytes <= this.options.maxStorageBytes) {
+        return;
+      }
+
+      scan = await this.readManagedFiles();
+      if (scan.racedWithAnotherProcess) {
+        continue;
+      }
+
+      files = scan.files;
+      usedBytes = sumBytes(files);
+      for (const file of files.sort((left, right) => left.createdAt - right.createdAt)) {
+        if (usedBytes + incomingBytes <= this.options.maxStorageBytes) {
+          break;
+        }
+        if (!file.evictable) {
+          continue;
+        }
+
+        if (await unlinkIfExists(file.path)) {
+          usedBytes -= file.size;
+        } else {
+          racedWithAnotherProcess = true;
+        }
+      }
+
+      if (racedWithAnotherProcess) {
+        continue;
+      }
+
+      if (usedBytes + incomingBytes <= this.options.maxStorageBytes) {
+        return;
+      }
+
+      throw new RangeError("Durable storage capacity is occupied by active durable files");
     }
+
+    throw new RangeError("Durable storage capacity changed while pruning");
   }
 
   private async recoverStaleLeases(): Promise<void> {
@@ -183,17 +236,22 @@ export class PersistentStore {
     const leasePaths = await this.listManagedFilePaths(isActiveLeaseFileName);
 
     for (const leasePath of leasePaths) {
-      let stats: Stats;
-      try {
-        stats = await fs.stat(leasePath);
-      } catch (error) {
-        if (isEnoent(error)) {
-          continue;
+      const claimedAt = parseLeaseClaimedAt(leasePath);
+      if (claimedAt === undefined) {
+        const migratedLeasePath = this.migratedLeasePath(leasePath, now);
+        try {
+          await fs.rename(leasePath, migratedLeasePath);
+          await syncDirectory(this.root);
+        } catch (error) {
+          if (isEnoent(error)) {
+            continue;
+          }
+          throw error;
         }
-        throw error;
+        continue;
       }
 
-      if (now - stats.mtimeMs <= this.options.leaseDurationMilliseconds) {
+      if (now - claimedAt <= this.options.leaseDurationMilliseconds) {
         continue;
       }
 
@@ -222,30 +280,53 @@ export class PersistentStore {
   }
 
   private leasePath(pendingPath: string): string {
-    return pendingPath.replace(/\.pending$/, `.lease-${process.pid}-${randomUUID()}`);
+    return pendingPath.replace(
+      /\.pending$/,
+      `.lease-at-${Date.now()}-${process.pid}-${randomUUID()}`,
+    );
   }
 
-  private async readManagedFiles(): Promise<ManagedFile[]> {
-    const names = await this.listManagedFilePaths(isEvictableFileName);
+  private migratedLeasePath(leasePath: string, claimedAt: number): string {
+    return join(
+      this.root,
+      `${leasePrefix(leasePath)}.lease-at-${claimedAt}-${process.pid}-${randomUUID()}`,
+    );
+  }
+
+  private temporaryPath(record: DurableRecordV1): string {
+    return join(
+      this.root,
+      `${Date.now()}-${record.id}.${process.pid}-${randomUUID()}${TEMPORARY_SUFFIX}`,
+    );
+  }
+
+  private async readManagedFiles(): Promise<ManagedFileScan> {
+    const names = await this.listManagedFilePaths(isManagedFileName);
     const files: ManagedFile[] = [];
+    let racedWithAnotherProcess = false;
 
     for (const fullPath of names) {
       try {
         const stats = await fs.stat(fullPath);
+        const name = basename(fullPath);
+        const activeLease = isActiveLeaseFileName(name);
         files.push({
           path: fullPath,
           size: stats.size,
           createdAt: parseCreatedAt(fullPath) ?? Math.floor(stats.mtimeMs),
+          evictable: isEvictableFileName(name),
+          removableWhenExpired: !activeLease,
         });
       } catch (error) {
         if (isEnoent(error)) {
+          racedWithAnotherProcess = true;
           continue;
         }
         throw error;
       }
     }
 
-    return files;
+    return { files, racedWithAnotherProcess };
   }
 
   private async listManagedFilePaths(predicate: (name: string) => boolean): Promise<string[]> {
@@ -276,6 +357,25 @@ export class PersistentStore {
       release();
     }
   }
+
+  private async withPersistenceLock<T>(callback: () => Promise<T>): Promise<T> {
+    const previous = PersistentStore.persistenceQueues.get(this.root) ?? Promise.resolve();
+    let release = () => {};
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    PersistentStore.persistenceQueues.set(this.root, current);
+
+    await previous;
+    try {
+      return await callback();
+    } finally {
+      release();
+      if (PersistentStore.persistenceQueues.get(this.root) === current) {
+        PersistentStore.persistenceQueues.delete(this.root);
+      }
+    }
+  }
 }
 
 async function resolveStorageRoot(
@@ -283,7 +383,7 @@ async function resolveStorageRoot(
   logger: ILogger,
 ): Promise<string> {
   if (options.storageDirectory !== undefined) {
-    return initializeRoot(options.storageDirectory);
+    return initializeExplicitRoot(options.storageDirectory);
   }
 
   const candidates =
@@ -297,9 +397,9 @@ async function resolveStorageRoot(
       continue;
     }
 
-    const root = join(candidate, ...PROBE_DIRECTORY);
+    const root = defaultStorageRoot(candidate);
     try {
-      return await initializeRoot(root);
+      return await initializeDefaultRoot(root);
     } catch (error) {
       lastError = error;
       logger.warn("[PersistentStore] Durable storage candidate unavailable", root, error);
@@ -322,17 +422,63 @@ async function initializeRoot(root: string): Promise<string> {
     }
   }
 
-  const stats = await fs.lstat(root);
+  return verifyRoot(root);
+}
+
+async function initializeExplicitRoot(root: string): Promise<string> {
+  return initializeRoot(root);
+}
+
+async function initializeDefaultRoot(root: string): Promise<string> {
+  try {
+    await fs.mkdir(root, {
+      recursive: process.platform === "win32",
+      mode: OWNER_DIRECTORY_MODE,
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
+    }
+  }
+
+  return verifyRoot(root);
+}
+
+async function verifyRoot(root: string): Promise<string> {
+  let stats = await fs.lstat(root);
   if (stats.isSymbolicLink() || !stats.isDirectory()) {
     throw new Error(`Durable storage root must be a real directory: ${root}`);
   }
 
   if (process.platform !== "win32") {
+    const uid = process.getuid?.();
+    if (uid !== undefined && stats.uid !== uid) {
+      throw new Error(`Durable storage root must be owned by the current user: ${root}`);
+    }
+
     await fs.chmod(root, OWNER_DIRECTORY_MODE);
+    stats = await fs.lstat(root);
+    if (
+      stats.isSymbolicLink() ||
+      !stats.isDirectory() ||
+      (uid !== undefined && stats.uid !== uid)
+    ) {
+      throw new Error(
+        `Durable storage root must be a real directory owned by the current user: ${root}`,
+      );
+    }
   }
 
   await probeRoot(root);
   return root;
+}
+
+function defaultStorageRoot(candidate: string): string {
+  if (process.platform === "win32") {
+    return join(candidate, ...WINDOWS_PROBE_DIRECTORY);
+  }
+
+  return join(candidate, `${POSIX_DEFAULT_LEAF_PREFIX}-${process.getuid?.() ?? "unknown"}`);
 }
 
 async function probeRoot(root: string): Promise<void> {
@@ -368,7 +514,7 @@ async function syncDirectory(root: string): Promise<void> {
 }
 
 function parseCreatedAt(path: string): number | undefined {
-  const match = /(?:^|[\\/])(\d+)-/.exec(path);
+  const match = /^(\d+)-/.exec(basename(path));
   if (!match) {
     return undefined;
   }
@@ -381,6 +527,16 @@ function leasePrefix(path: string): string {
   return basename(path).split(".lease-")[0];
 }
 
+function parseLeaseClaimedAt(path: string): number | undefined {
+  const match = /\.lease-at-(\d+)-\d+-[^.]+$/.exec(basename(path));
+  if (!match) {
+    return undefined;
+  }
+
+  const claimedAt = Number.parseInt(match[1], 10);
+  return Number.isFinite(claimedAt) ? claimedAt : undefined;
+}
+
 function isActiveLeaseFileName(name: string): boolean {
   return /\.lease-[^.]+$/.test(name);
 }
@@ -389,8 +545,26 @@ function isEvictableFileName(name: string): boolean {
   return name.endsWith(PENDING_SUFFIX) || name.endsWith(QUARANTINE_SUFFIX);
 }
 
+function isManagedFileName(name: string): boolean {
+  return (
+    isEvictableFileName(name) || name.endsWith(TEMPORARY_SUFFIX) || isActiveLeaseFileName(name)
+  );
+}
+
 function isEnoent(error: unknown): error is NodeJS.ErrnoException {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
+}
+
+async function unlinkIfExists(path: string): Promise<boolean> {
+  try {
+    await fs.unlink(path);
+    return true;
+  } catch (error) {
+    if (isEnoent(error)) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 async function ignoreEnoent(action: () => Promise<unknown>): Promise<void> {
