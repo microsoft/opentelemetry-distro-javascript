@@ -120,8 +120,7 @@ useMicrosoftOpenTelemetry({
   a365: {
     enabled: true,
     enableObservabilityExporter: true,
-    tokenResolver: (agentId, tenantId, authScopes) =>
-      getToken(agentId, tenantId, authScopes),
+    tokenResolver: (agentId, tenantId, authScopes) => getToken(agentId, tenantId, authScopes),
     durableDelivery: {
       enabled: true,
       storageDirectory: process.env.A365_DURABLE_STORAGE_DIRECTORY,
@@ -137,17 +136,17 @@ set `enableObservabilityExporter: true` alongside `a365.enabled: true`.
 
 ### Durable Delivery Defaults
 
-| Option | Default | Notes |
-| --- | --- | --- |
-| `enabled` | `false` | Durable delivery is off unless you opt in |
-| `storageDirectory` | auto | Uses the configured directory, or creates a secure platform-specific default root |
-| `maxStorageBytes` | `50 * 1024 * 1024` | Bounds pending, quarantined, active leased, and non-stale temporary records |
-| `maxRecordAgeMilliseconds` | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction |
-| `replayIntervalMilliseconds` | `2 * 60 * 1000` | Scheduled replay cadence |
-| `maxReplayBatchSize` | `10` | Maximum records claimed per replay pass |
-| `leaseDurationMilliseconds` | `2 * 60 * 1000` | Reclaims stale replay leases |
-| `shutdownTimeoutMilliseconds` | `10_000` | Shutdown replay/drain budget |
-| `tokenResolutionTimeoutMilliseconds` | `30_000` | Timeout per replay token-resolution attempt |
+| Option                               | Default                   | Notes                                                                             |
+| ------------------------------------ | ------------------------- | --------------------------------------------------------------------------------- |
+| `enabled`                            | `false`                   | Durable delivery is off unless you opt in                                         |
+| `storageDirectory`                   | auto                      | Uses the configured directory, or creates a secure platform-specific default root |
+| `maxStorageBytes`                    | `50 * 1024 * 1024`        | Bounds pending, quarantined, active leased, and non-stale temporary records       |
+| `maxRecordAgeMilliseconds`           | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction                               |
+| `replayIntervalMilliseconds`         | `2 * 60 * 1000`           | Scheduled replay cadence                                                          |
+| `maxReplayBatchSize`                 | `10`                      | Maximum records claimed per replay pass                                           |
+| `leaseDurationMilliseconds`          | `2 * 60 * 1000`           | Reclaims stale replay leases                                                      |
+| `shutdownTimeoutMilliseconds`        | `10_000`                  | Shutdown budget for admitted durable handoff completion                           |
+| `tokenResolutionTimeoutMilliseconds` | `30_000`                  | Timeout per replay token-resolution attempt                                       |
 
 ### Operational Notes
 
@@ -188,8 +187,10 @@ process.on("SIGTERM", async () => {
 });
 ```
 
-With durable delivery enabled, shutdown waits for in-flight A365 exports and then drains durable
-replay until `durableDelivery.shutdownTimeoutMilliseconds` expires (10 seconds by default). When
-the deadline is reached, in-flight durable requests are aborted; already stored records remain on
-disk for replay after the next process start. With durable delivery disabled, exporter shutdown
-retains its immediate, non-waiting behavior.
+With durable delivery enabled, shutdown stops replay scheduling immediately, aborts in-flight
+durable HTTP, and then waits up to `durableDelivery.shutdownTimeoutMilliseconds` for already
+admitted records to complete durable handoff (10 seconds by default). Retryable aborted payloads
+stay on disk for replay on the next process or startup pass; shutdown does not drain the existing
+spool. If you use `Agent365Exporter` directly, you may call `forceFlush()` before shutdown for one
+bounded replay pass. The distro shutdown path does not call `exporter.forceFlush()`. With durable
+delivery disabled, exporter shutdown retains its immediate, non-waiting behavior.

@@ -95,8 +95,7 @@ useMicrosoftOpenTelemetry({
   a365: {
     enabled: true,
     enableObservabilityExporter: true,
-    tokenResolver: (agentId, tenantId, authScopes) =>
-      getToken(agentId, tenantId, authScopes),
+    tokenResolver: (agentId, tenantId, authScopes) => getToken(agentId, tenantId, authScopes),
     durableDelivery: {
       enabled: true,
       storageDirectory: process.env.A365_DURABLE_STORAGE_DIRECTORY,
@@ -144,19 +143,19 @@ That's it — traces, metrics, and logs are collected automatically with built-i
 
 ### `MicrosoftOpenTelemetryOptions`
 
-| Option                   | Type                               | Default       | Description                                                                  |
-| ------------------------ | ---------------------------------- | ------------- | ---------------------------------------------------------------------------- |
-| `resource`               | `Resource`                         | auto-detected | OpenTelemetry Resource (service name, version, etc.)                         |
-| `samplingRatio`          | `number`                           | `1.0`         | Ratio of telemetry items to transmit (0.0–1.0)                               |
-| `tracesPerSecond`        | `number`                           | `5`           | Max traces per second. Set to `0` to use `samplingRatio` instead             |
-| `instrumentationOptions` | `InstrumentationOptions`           | all enabled   | Toggle built-in instrumentations (see below)                                 |
-| `spanProcessors`         | `SpanProcessor[]`                  | —             | Additional span processors                                                   |
-| `logRecordProcessors`    | `LogRecordProcessor[]`             | —             | Additional log record processors                                             |
-| `metricReaders`          | `MetricReader[]`                   | —             | Additional metric readers                                                    |
-| `views`                  | `ViewOptions[]`                    | —             | Metric views                                                                 |
-| `azureMonitor`           | `AzureMonitorOpenTelemetryOptions` | —             | Azure Monitor backend config. When provided, Azure Monitor export is enabled |
-| `a365`                   | `A365Options`                      | —             | A365 observability config                                                    |
-| `enableConsoleExporters` | `boolean`                          | auto          | Enable console exporters for traces, metrics, and logs                       |
+| Option                   | Type                               | Default       | Description                                                                                                                                                          |
+| ------------------------ | ---------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resource`               | `Resource`                         | auto-detected | OpenTelemetry Resource (service name, version, etc.)                                                                                                                 |
+| `samplingRatio`          | `number`                           | `1.0`         | Ratio of telemetry items to transmit (0.0–1.0)                                                                                                                       |
+| `tracesPerSecond`        | `number`                           | `5`           | Max traces per second. Set to `0` to use `samplingRatio` instead                                                                                                     |
+| `instrumentationOptions` | `InstrumentationOptions`           | all enabled   | Toggle built-in instrumentations (see below)                                                                                                                         |
+| `spanProcessors`         | `SpanProcessor[]`                  | —             | Additional span processors                                                                                                                                           |
+| `logRecordProcessors`    | `LogRecordProcessor[]`             | —             | Additional log record processors                                                                                                                                     |
+| `metricReaders`          | `MetricReader[]`                   | —             | Additional metric readers                                                                                                                                            |
+| `views`                  | `ViewOptions[]`                    | —             | Metric views                                                                                                                                                         |
+| `azureMonitor`           | `AzureMonitorOpenTelemetryOptions` | —             | Azure Monitor backend config. When provided, Azure Monitor export is enabled                                                                                         |
+| `a365`                   | `A365Options`                      | —             | A365 observability config                                                                                                                                            |
+| `enableConsoleExporters` | `boolean`                          | auto          | Enable console exporters for traces, metrics, and logs                                                                                                               |
 | `enableSensitiveData`    | `boolean`                          | `false`       | Capture GenAI message content (prompts, completions, tool args/results, system instructions) on LangChain spans. Only enable in trusted, non-production environments |
 
 ### `InstrumentationOptions`
@@ -281,7 +280,7 @@ See the [OpenTelemetry OTLP Exporter specification](https://opentelemetry.io/doc
 | `observabilityScopeOverride`  | `string`                                                                       | —                                                         | Single-string scope override (highest precedence). Equivalent to `A365_OBSERVABILITY_SCOPES_OVERRIDE` env var                                                                                                                                            |
 | `logLevel`                    | `string`                                                                       | `"none"`                                                  | A365 internal log level: `none`, `info`, `warn`, `error`, or pipe-separated combination. Overrides `A365_OBSERVABILITY_LOG_LEVEL` env var                                                                                                                |
 | `useS2SEndpoint`              | `boolean`                                                                      | `false`                                                   | Use the S2S (service-to-service) endpoint path for export                                                                                                                                                                                                |
-| `durableDelivery`             | `Agent365DurableDeliveryOptions`                                               | disabled                                                  | Opt-in local store-and-replay for retryable A365 HTTP export requests. Replays use fresh tokens, delivery is at-least-once, and records are kept in bounded plaintext local storage                                                                     |
+| `durableDelivery`             | `Agent365DurableDeliveryOptions`                                               | disabled                                                  | Opt-in local store-and-replay for retryable A365 HTTP export requests. Replays use fresh tokens, delivery is at-least-once, and records are kept in bounded plaintext local storage                                                                      |
 
 When A365 export is enabled, Microsoft OpenTelemetry defaults to GenAI-focused telemetry. To opt back into non-GenAI auto-instrumentation, set explicit overrides:
 
@@ -351,31 +350,31 @@ new ObservabilityHostingManager().configure(adapter as unknown as { use(...m: un
 
 #### A365 exporter tuning
 
-| Option                           | Type     | Default | Description                                                  |
-| -------------------------------- | -------- | ------- | ------------------------------------------------------------ |
-| `maxQueueSize`                   | `number` | `2048`  | Maximum span queue size before drops occur                   |
-| `scheduledDelayMilliseconds`     | `number` | `5000`  | Delay (ms) between automatic batch flush attempts            |
-| `exporterTimeoutMilliseconds`    | `number` | `90000` | Maximum time (ms) for the entire export call                 |
-| `httpRequestTimeoutMilliseconds` | `number` | `30000` | HTTP request timeout (ms) when sending spans to A365 service |
-| `maxExportBatchSize`             | `number` | `512`   | Maximum number of spans per export batch                     |
-| `maxPayloadBytes`                | `number` | `900 * 1024` | Maximum estimated payload size (bytes) per HTTP chunk    |
+| Option                           | Type     | Default      | Description                                                  |
+| -------------------------------- | -------- | ------------ | ------------------------------------------------------------ |
+| `maxQueueSize`                   | `number` | `2048`       | Maximum span queue size before drops occur                   |
+| `scheduledDelayMilliseconds`     | `number` | `5000`       | Delay (ms) between automatic batch flush attempts            |
+| `exporterTimeoutMilliseconds`    | `number` | `90000`      | Maximum time (ms) for the entire export call                 |
+| `httpRequestTimeoutMilliseconds` | `number` | `30000`      | HTTP request timeout (ms) when sending spans to A365 service |
+| `maxExportBatchSize`             | `number` | `512`        | Maximum number of spans per export batch                     |
+| `maxPayloadBytes`                | `number` | `900 * 1024` | Maximum estimated payload size (bytes) per HTTP chunk        |
 
 #### A365 durable delivery
 
 Durable delivery applies only to the A365 HTTP exporter, so set both `a365.enabled: true` and
 `a365.enableObservabilityExporter: true` when you use it.
 
-| Option                              | Type      | Default                         | Description |
-| ----------------------------------- | --------- | ------------------------------- | ----------- |
-| `enabled`                           | `boolean` | `false`                         | Opt in to local spool-and-replay for retryable A365 export requests |
-| `storageDirectory`                  | `string`  | auto                            | Root directory for durable records. When omitted, the SDK probes `LOCALAPPDATA`, then `TEMP`, then `os.tmpdir()` on Windows and appends `Microsoft/A365/otel-durable`; on POSIX it probes `TMPDIR`, then `/var/tmp`, then `os.tmpdir()` and uses the single `a365-otel-durable-<uid>` leaf |
-| `maxStorageBytes`                   | `number`  | `50 * 1024 * 1024`             | Maximum total bytes retained for pending and quarantined durable records |
-| `maxRecordAgeMilliseconds`          | `number`  | `2 * 24 * 60 * 60 * 1000`      | Maximum record age before expiry pruning |
-| `replayIntervalMilliseconds`        | `number`  | `2 * 60 * 1000`                | Delay between scheduled replay passes |
-| `maxReplayBatchSize`                | `number`  | `10`                            | Maximum records claimed per replay pass |
-| `leaseDurationMilliseconds`         | `number`  | `2 * 60 * 1000`                | How long a claimed replay lease stays active before recovery |
-| `shutdownTimeoutMilliseconds`       | `number`  | `10_000`                        | Graceful-shutdown budget for durable replay and in-flight requests |
-| `tokenResolutionTimeoutMilliseconds`| `number`  | `30_000`                        | Timeout for each replay token-resolution attempt |
+| Option                               | Type      | Default                   | Description                                                                                                                                                                                                                                                                                |
+| ------------------------------------ | --------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `enabled`                            | `boolean` | `false`                   | Opt in to local spool-and-replay for retryable A365 export requests                                                                                                                                                                                                                        |
+| `storageDirectory`                   | `string`  | auto                      | Root directory for durable records. When omitted, the SDK probes `LOCALAPPDATA`, then `TEMP`, then `os.tmpdir()` on Windows and appends `Microsoft/A365/otel-durable`; on POSIX it probes `TMPDIR`, then `/var/tmp`, then `os.tmpdir()` and uses the single `a365-otel-durable-<uid>` leaf |
+| `maxStorageBytes`                    | `number`  | `50 * 1024 * 1024`        | Maximum total bytes retained for pending and quarantined durable records                                                                                                                                                                                                                   |
+| `maxRecordAgeMilliseconds`           | `number`  | `2 * 24 * 60 * 60 * 1000` | Maximum record age before expiry pruning                                                                                                                                                                                                                                                   |
+| `replayIntervalMilliseconds`         | `number`  | `2 * 60 * 1000`           | Delay between scheduled replay passes                                                                                                                                                                                                                                                      |
+| `maxReplayBatchSize`                 | `number`  | `10`                      | Maximum records claimed per replay pass                                                                                                                                                                                                                                                    |
+| `leaseDurationMilliseconds`          | `number`  | `2 * 60 * 1000`           | How long a claimed replay lease stays active before recovery                                                                                                                                                                                                                               |
+| `shutdownTimeoutMilliseconds`        | `number`  | `10_000`                  | Graceful-shutdown budget for admitted durable handoff completion                                                                                                                                                                                                                           |
+| `tokenResolutionTimeoutMilliseconds` | `number`  | `30_000`                  | Timeout for each replay token-resolution attempt                                                                                                                                                                                                                                           |
 
 Operational notes:
 
@@ -393,10 +392,12 @@ Operational notes:
 - If you run in containers and need records to survive container restarts, rescheduling, or host
   restarts outside the current container filesystem, set `storageDirectory` to a protected
   persistent volume and size `maxStorageBytes` within your platform's storage quota.
-- During `shutdownMicrosoftOpenTelemetry()`, the exporter waits for in-flight A365 exports, then
-  drains durable replay until `shutdownTimeoutMilliseconds` expires. At the deadline, in-flight
-  durable requests are aborted and already stored records remain eligible for replay on the next
-  process start.
+- During `shutdownMicrosoftOpenTelemetry()`, the exporter stops replay scheduling immediately,
+  aborts in-flight durable HTTP, and then waits up to `shutdownTimeoutMilliseconds` for already
+  admitted records to complete durable handoff. Retryable aborted payloads stay on disk for replay
+  on the next process or startup pass; shutdown does not drain the existing spool. If you use
+  `Agent365Exporter` directly, you may call `forceFlush()` before shutdown for one bounded replay
+  pass. The distro shutdown path does not call `exporter.forceFlush()`.
 
 Example:
 
@@ -417,19 +418,19 @@ useMicrosoftOpenTelemetry({
 
 A365 also reads the following environment overrides:
 
-| Environment Variable                           | Description                                                                                                                            |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Environment Variable                           | Description                                                                                                                                               |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ENABLE_A365_OBSERVABILITY_EXPORTER`           | `"true"` / `"false"` — secondary toggle for the A365 HTTP exporter when `a365` options are provided in code; it does not enable `a365.enabled` on its own |
-| `A365_OBSERVABILITY_SCOPES_OVERRIDE`           | Space-separated list of OAuth scopes                                                                                                   |
-| `A365_OBSERVABILITY_DOMAIN_OVERRIDE`           | Override service domain                                                                                                                |
-| `CLUSTER_CATEGORY`                             | Override cluster category                                                                                                              |
-| `A365_OBSERVABILITY_LOG_LEVEL`                 | A365 internal logger filter level (`none`, `info`, `warn`, `error`, or pipe-delimited combination) — overrides `observabilityLogLevel` |
-| `A365_PER_REQUEST_MAX_TRACES`                  | Max buffered traces (default: `1000`)                                                                                                  |
-| `A365_PER_REQUEST_MAX_SPANS_PER_TRACE`         | Max spans per trace (default: `5000`)                                                                                                  |
-| `A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS`      | Max concurrent exports (default: `20`)                                                                                                 |
-| `A365_PER_REQUEST_FLUSH_GRACE_MS`              | Grace period after root span ends (default: `250`)                                                                                     |
-| `A365_PER_REQUEST_MAX_TRACE_AGE_MS`            | Max trace age before forced flush (default: `1800000`)                                                                                 |
-| `A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS` | Per-attempt timeout (ms) for agentic token exchange; `0` or negative disables (default: `30000`)                                       |
+| `A365_OBSERVABILITY_SCOPES_OVERRIDE`           | Space-separated list of OAuth scopes                                                                                                                      |
+| `A365_OBSERVABILITY_DOMAIN_OVERRIDE`           | Override service domain                                                                                                                                   |
+| `CLUSTER_CATEGORY`                             | Override cluster category                                                                                                                                 |
+| `A365_OBSERVABILITY_LOG_LEVEL`                 | A365 internal logger filter level (`none`, `info`, `warn`, `error`, or pipe-delimited combination) — overrides `observabilityLogLevel`                    |
+| `A365_PER_REQUEST_MAX_TRACES`                  | Max buffered traces (default: `1000`)                                                                                                                     |
+| `A365_PER_REQUEST_MAX_SPANS_PER_TRACE`         | Max spans per trace (default: `5000`)                                                                                                                     |
+| `A365_PER_REQUEST_MAX_CONCURRENT_EXPORTS`      | Max concurrent exports (default: `20`)                                                                                                                    |
+| `A365_PER_REQUEST_FLUSH_GRACE_MS`              | Grace period after root span ends (default: `250`)                                                                                                        |
+| `A365_PER_REQUEST_MAX_TRACE_AGE_MS`            | Max trace age before forced flush (default: `1800000`)                                                                                                    |
+| `A365_OBSERVABILITY_TOKEN_EXCHANGE_TIMEOUT_MS` | Per-attempt timeout (ms) for agentic token exchange; `0` or negative disables (default: `30000`)                                                          |
 
 ### Example
 
