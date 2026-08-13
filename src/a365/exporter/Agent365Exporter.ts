@@ -23,7 +23,13 @@ import {
   chunkBySize,
   asStr,
 } from "./utils.js";
-import { parseRetryAfterMs } from "./durable/index.js";
+import {
+  createDurableRecord,
+  DurableDeliveryManager,
+  type DeliveryAttempt,
+  parseRetryAfterMs,
+  PersistentStore,
+} from "./durable/index.js";
 import { getA365Logger } from "../logging.js";
 import { OpenTelemetryConstants } from "../constants.js";
 import {
@@ -110,6 +116,10 @@ interface MappedSpan {
 export class Agent365Exporter implements SpanExporter {
   private closed = false;
   private readonly options: ResolvedExporterOptions;
+  private durableManager?: DurableDeliveryManager;
+  private durableManagerPromise?: Promise<DurableDeliveryManager>;
+  private shutdownPromise?: Promise<void>;
+  private readonly activeExports = new Set<Promise<void>>();
 
   private get logger() {
     return getA365Logger();
@@ -151,15 +161,27 @@ export class Agent365Exporter implements SpanExporter {
    * @param spans The spans to export.
    * @param resultCallback Callback invoked with the export result.
    */
-  async export(
+  export(
     spans: ReadableSpan[],
     resultCallback: (result: ExportResult) => void,
   ): Promise<void> {
     if (this.closed) {
       resultCallback({ code: ExportResultCode.FAILED });
-      return;
+      return Promise.resolve();
     }
 
+    const operation = this.exportInternal(spans, resultCallback);
+    const tracked = operation.finally(() => {
+      this.activeExports.delete(tracked);
+    });
+    this.activeExports.add(tracked);
+    return tracked;
+  }
+
+  private async exportInternal(
+    spans: ReadableSpan[],
+    resultCallback: (result: ExportResult) => void,
+  ): Promise<void> {
     try {
       const exportStart = Date.now();
       this.logger.info(`[Agent365Exporter] Exporting ${spans.length} spans`);
@@ -228,6 +250,11 @@ export class Agent365Exporter implements SpanExporter {
       );
     }
 
+    if (this.options.durableDelivery.enabled) {
+      await this.exportDurableGroup(tenantId, agentId, spans, chunks, resourceAttrs, start);
+      return;
+    }
+
     const servicePrefix = this.options.useS2SEndpoint ? "/observabilityService" : "/observability";
     const endpointPath = `${servicePrefix}/tenants/${encodeURIComponent(tenantId)}/otlp/agents/${encodeURIComponent(agentId)}/traces`;
 
@@ -292,18 +319,91 @@ export class Agent365Exporter implements SpanExporter {
     );
   }
 
+  private async exportDurableGroup(
+    tenantId: string,
+    agentId: string,
+    spans: ReadableSpan[],
+    chunks: MappedSpan[][],
+    resourceAttrs: Record<string, unknown>,
+    start: number,
+  ): Promise<void> {
+    let manager: DurableDeliveryManager;
+    try {
+      manager = await this.getDurableManager();
+    } catch (error) {
+      this.logExporterEvent(
+        ExporterEventNames.EXPORT_GROUP,
+        false,
+        Date.now() - start,
+        "durable delivery initialization failed",
+        { tenantId, agentId },
+      );
+      throw error;
+    }
+
+    const agenticUserId = this.getAgenticUserId(spans);
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const body = JSON.stringify(this.buildEnvelope(chunk, resourceAttrs));
+      const record = createDurableRecord({
+        tenantId,
+        agentId,
+        agenticUserId,
+        clusterCategory: this.options.clusterCategory,
+        domainOverride: this.options.domainOverride,
+        useS2SEndpoint: this.options.useS2SEndpoint,
+        body,
+      });
+
+      this.logger.info(
+        `[Agent365Exporter] Delivering durable chunk ${i + 1} of ${chunks.length} (${chunk.length} spans)`,
+      );
+
+      if (await manager.deliver(record)) {
+        continue;
+      }
+
+      this.logExporterEvent(
+        ExporterEventNames.EXPORT_GROUP,
+        false,
+        Date.now() - start,
+        `durable chunk ${i + 1} of ${chunks.length} failed`,
+        { tenantId, agentId, correlationId: "durable" },
+      );
+      throw new Error(`Failed to durably export spans (chunk ${i + 1} of ${chunks.length})`);
+    }
+
+    this.logExporterEvent(
+      ExporterEventNames.EXPORT_GROUP,
+      true,
+      Date.now() - start,
+      `${chunks.length} chunk(s) delivered or persisted durably`,
+      { tenantId, agentId, correlationId: "durable" },
+    );
+  }
+
   private async resolveToken(
     agentId: string,
     tenantId: string,
     spans: ReadableSpan[],
   ): Promise<string | null> {
-    // Prefer ContextualTokenResolver when set; extract agentic user ID from the
-    // first span in the group (1:1 relationship between agent and agentic user).
+    return this.resolveTokenForIdentity(agentId, tenantId, this.getAgenticUserId(spans));
+  }
+
+  private async resolveRecordToken(record: {
+    agentId: string;
+    tenantId: string;
+    agenticUserId?: string;
+  }): Promise<string | null> {
+    return this.resolveTokenForIdentity(record.agentId, record.tenantId, record.agenticUserId);
+  }
+
+  private async resolveTokenForIdentity(
+    agentId: string,
+    tenantId: string,
+    agenticUserId?: string,
+  ): Promise<string | null> {
     if (this.options.contextualTokenResolver) {
-      const agenticUserId =
-        spans.length > 0
-          ? asStr(spans[0].attributes?.[OpenTelemetryConstants.GEN_AI_AGENT_AUID_KEY])
-          : undefined;
       const identity: AgentIdentity = { agentId, agenticUserId };
       const context: TokenResolverContext = { identity, tenantId };
       const result = this.options.contextualTokenResolver(context);
@@ -313,6 +413,120 @@ export class Agent365Exporter implements SpanExporter {
     if (!this.options.tokenResolver) return null;
     const result = this.options.tokenResolver(agentId, tenantId, this.options.authScopes);
     return result instanceof Promise ? result : result;
+  }
+
+  private getAgenticUserId(spans: ReadableSpan[]): string | undefined {
+    return spans.length > 0
+      ? asStr(spans[0].attributes?.[OpenTelemetryConstants.GEN_AI_AGENT_AUID_KEY])
+      : undefined;
+  }
+
+  private async getDurableManager(): Promise<DurableDeliveryManager> {
+    if (this.durableManager) {
+      return this.durableManager;
+    }
+
+    this.durableManagerPromise ??= PersistentStore.create(
+      this.options.durableDelivery,
+      this.logger,
+    ).then(
+      (store) =>
+        new DurableDeliveryManager(this.options.durableDelivery, store, this.logger, {
+          resolveToken: (record) => this.resolveRecordToken(record),
+          send: (record, token, signal) => this.postRecordOnce(record, token, signal),
+        }),
+    );
+    this.durableManager = await this.durableManagerPromise;
+    return this.durableManager;
+  }
+
+  private async postRecordOnce(
+    record: {
+      tenantId: string;
+      agentId: string;
+      clusterCategory: ResolvedExporterOptions["clusterCategory"];
+      domainOverride?: string;
+      useS2SEndpoint: boolean;
+      body: string;
+    },
+    token: string,
+    signal: AbortSignal,
+  ): Promise<DeliveryAttempt> {
+    const servicePrefix = record.useS2SEndpoint ? "/observabilityService" : "/observability";
+    const endpointPath = `${servicePrefix}/tenants/${encodeURIComponent(record.tenantId)}/otlp/agents/${encodeURIComponent(record.agentId)}/traces`;
+    const baseUrl = record.domainOverride ?? resolveAgent365Endpoint(record.clusterCategory);
+    const url = `${baseUrl}${endpointPath}?api-version=1`;
+    const recordA365Stats = isSdkStatsEnabled();
+    const endpointCategory = A365_ENDPOINT_CATEGORY;
+    const host = recordA365Stats ? shortHost(url) : url;
+    const requestStart = Date.now();
+    let correlationId = "unknown";
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-ms-tenant-id": record.tenantId,
+          "authorization": `Bearer ${token}`,
+        },
+        body: record.body,
+        signal: AbortSignal.any([
+          signal,
+          AbortSignal.timeout(this.options.httpRequestTimeoutMilliseconds),
+        ]),
+      });
+      correlationId =
+        response.headers.get("x-ms-correlation-id") ??
+        response.headers.get("x-correlation-id") ??
+        "unknown";
+
+      if (recordA365Stats) {
+        recordDuration(endpointCategory, host, Date.now() - requestStart);
+        const kind = classifyStatusCode(response.status);
+        switch (kind) {
+          case "success":
+            recordSuccess(endpointCategory, host);
+            break;
+          case "retry":
+            recordRetry(endpointCategory, host, response.status);
+            break;
+          case "throttle":
+            recordThrottle(endpointCategory, host, response.status);
+            break;
+          case "failure":
+            recordFailure(endpointCategory, host, response.status);
+            break;
+          case "ignored":
+            break;
+        }
+      }
+
+      if (response.status >= 200 && response.status < 300) {
+        return { kind: "success", correlationId };
+      }
+      if ([408, 429].includes(response.status) || (response.status >= 500 && response.status < 600)) {
+        return {
+          kind: "retryable",
+          correlationId,
+          status: response.status,
+          retryAfterMs: parseRetryAfterMs(response.headers) ?? undefined,
+        };
+      }
+      return {
+        kind: "permanent",
+        correlationId,
+        status: response.status,
+        reason: `HTTP ${response.status}`,
+      };
+    } catch (error) {
+      if (recordA365Stats) {
+        recordDuration(endpointCategory, host, Date.now() - requestStart);
+        recordException(endpointCategory, host, classifyExceptionType(error));
+      }
+      this.logger.error("[Agent365Exporter] Request error:", error);
+      return { kind: "retryable", correlationId };
+    }
   }
 
   private async postWithRetries(
@@ -528,18 +742,35 @@ export class Agent365Exporter implements SpanExporter {
 
   /**
    * Shuts down the exporter. After this resolves, subsequent {@link export}
-   * calls fail immediately. Any in-flight exports are not awaited.
+   * calls fail immediately. In-flight exports settle before shutdown completes;
+   * durable delivery requests are aborted at their configured shutdown deadline.
    */
-  async shutdown(): Promise<void> {
-    this.closed = true;
+  shutdown(): Promise<void> {
+    if (!this.shutdownPromise) {
+      this.closed = true;
+      this.shutdownPromise = this.shutdownInternal();
+    }
+    return this.shutdownPromise;
   }
 
   /**
-   * Flushes any pending spans. This is a no-op because spans are exported
-   * immediately on each {@link export} call rather than being buffered.
+   * Waits for accepted exports and drains pending durable records when durable
+   * delivery is enabled.
    */
   async forceFlush(): Promise<void> {
-    // No-op — spans are exported immediately on export() call
+    await Promise.allSettled([...this.activeExports]);
+    if (this.closed || !this.options.durableDelivery.enabled) {
+      return;
+    }
+
+    await (await this.getDurableManager()).forceFlush();
+  }
+
+  private async shutdownInternal(): Promise<void> {
+    if (this.durableManagerPromise) {
+      await (await this.durableManagerPromise).shutdown();
+    }
+    await Promise.allSettled([...this.activeExports]);
   }
 
   private logExporterEvent(

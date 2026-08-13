@@ -2,6 +2,9 @@
 // Licensed under the MIT License.
 
 import { afterEach, assert, beforeEach, describe, it, vi } from "vitest";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ExportResultCode } from "@opentelemetry/core";
 import { SpanKind, SpanStatusCode, TraceFlags } from "@opentelemetry/api";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
@@ -25,6 +28,7 @@ import { configureA365Logger, _resetA365LoggerForTest } from "../../../../src/a3
 
 const TENANT_ID = "tenant-11111111-1111-1111-1111-111111111111";
 const AGENT_ID = "agent-22222222-2222-2222-2222-222222222222";
+const temporaryDirectories: string[] = [];
 
 function makeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
   return {
@@ -87,6 +91,18 @@ async function exportAndGetPayload(
   return { result, exportedSpan, span, body };
 }
 
+async function createStorageDirectory(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "a365-exporter-"));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+
+async function exportResult(exporter: Agent365Exporter, spans: ReadableSpan[]): Promise<number> {
+  return new Promise<number>((resolve) => {
+    void exporter.export(spans, (result) => resolve(result.code));
+  });
+}
+
 describe("Agent365Exporter", () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
 
@@ -98,7 +114,10 @@ describe("Agent365Exporter", () => {
     vi.stubGlobal("fetch", fetchSpy);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await Promise.all(
+      temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
+    );
     _resetA365LoggerForTest();
     vi.restoreAllMocks();
   });
@@ -1096,6 +1115,243 @@ describe("Agent365Exporter", () => {
       const first = exporter.getBufferConfig();
       first.maxQueueSize = 1;
       assert.strictEqual(exporter.getBufferConfig().maxQueueSize, 4096);
+    });
+  });
+
+  describe("durable delivery", () => {
+    it("hands a retryable failure to durable storage after one attempt", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValue({
+        status: 503,
+        headers: new Headers({ "retry-after": "60" }),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "durable-token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+      const pending = (await readdir(directory)).filter((name) => name.endsWith(".pending"));
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      assert.strictEqual(pending.length, 1);
+      assert.notInclude(await readFile(join(directory, pending[0]), "utf8"), "durable-token");
+      await exporter.shutdown();
+    });
+
+    it("persists one durable record for each serialized chunk", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValue({
+        status: 503,
+        headers: new Headers(),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        maxPayloadBytes: 1,
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan(), makeSpan({ name: "second-span" })]);
+      const pending = (await readdir(directory)).filter((name) => name.endsWith(".pending"));
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      assert.strictEqual(pending.length, 2);
+      await exporter.shutdown();
+    });
+
+    it("fails when durable persistence fails but still handles another identity", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValue({
+        status: 503,
+        headers: new Headers(),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: {
+          enabled: true,
+          storageDirectory: directory,
+          maxStorageBytes: 4096,
+        },
+      });
+      const oversizedFirstIdentity = makeSpan({
+        attributes: {
+          "microsoft.tenant.id": "tenant-first",
+          "gen_ai.agent.id": "agent-first",
+          "gen_ai.operation.name": "invoke_agent",
+          oversized: "x".repeat(10_000),
+        },
+      });
+      const secondIdentity = makeSpan({
+        attributes: {
+          "microsoft.tenant.id": "tenant-second",
+          "gen_ai.agent.id": "agent-second",
+          "gen_ai.operation.name": "invoke_agent",
+        },
+      });
+
+      const result = await exportResult(exporter, [oversizedFirstIdentity, secondIdentity]);
+      const pending = (await readdir(directory)).filter((name) => name.endsWith(".pending"));
+
+      assert.strictEqual(result, ExportResultCode.FAILED);
+      assert.strictEqual(fetchSpy.mock.calls.length, 2);
+      assert.strictEqual(pending.length, 1);
+      await exporter.shutdown();
+    });
+
+    it("fails without persisting when a durable export has no token", async () => {
+      const directory = await createStorageDirectory();
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => null,
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+
+      assert.strictEqual(result, ExportResultCode.FAILED);
+      assert.strictEqual(fetchSpy.mock.calls.length, 0);
+      assert.isEmpty((await readdir(directory)).filter((name) => name.endsWith(".pending")));
+      await exporter.shutdown();
+    });
+
+    it("fails without persisting after a durable permanent response", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValue({
+        status: 400,
+        headers: new Headers(),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+
+      assert.strictEqual(result, ExportResultCode.FAILED);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      assert.isEmpty((await readdir(directory)).filter((name) => name.endsWith(".pending")));
+      await exporter.shutdown();
+    });
+
+    it("replays persisted records with a fresh token after exporter restart", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValueOnce({
+        status: 503,
+        headers: new Headers(),
+      });
+      const failingExporter = new Agent365Exporter({
+        tokenResolver: () => "initial-token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      assert.strictEqual(await exportResult(failingExporter, [makeSpan()]), ExportResultCode.SUCCESS);
+      await failingExporter.shutdown();
+
+      fetchSpy.mockClear();
+      fetchSpy.mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+      });
+      const freshToken = "fresh-token";
+      const resolver = vi.fn().mockResolvedValue(freshToken);
+      const restartedExporter = new Agent365Exporter({
+        tokenResolver: resolver,
+        durableDelivery: {
+          enabled: true,
+          storageDirectory: directory,
+          replayIntervalMilliseconds: 60_000,
+        },
+      });
+
+      await restartedExporter.forceFlush();
+
+      assert.strictEqual(resolver.mock.calls.length, 1);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      assert.strictEqual(
+        fetchSpy.mock.calls[0][1].headers.authorization,
+        ["Bearer", freshToken].join(" "),
+      );
+      assert.isEmpty((await readdir(directory)).filter((name) => name.endsWith(".pending")));
+      await restartedExporter.shutdown();
+    });
+
+    it("aborts an in-flight durable request during shutdown", async () => {
+      const directory = await createStorageDirectory();
+      let signal: AbortSignal | undefined;
+      let notifyRequestStarted: (() => void) | undefined;
+      const requestStarted = new Promise<void>((resolve) => {
+        notifyRequestStarted = resolve;
+      });
+      fetchSpy.mockImplementation((_url, request) => {
+        signal = request.signal as AbortSignal;
+        notifyRequestStarted!();
+        return new Promise((_resolve, reject) => {
+          signal!.addEventListener(
+            "abort",
+            () => reject(Object.assign(new Error("request aborted"), { name: "AbortError" })),
+            { once: true },
+          );
+        });
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+      const result = exportResult(exporter, [makeSpan()]);
+
+      await requestStarted;
+      await exporter.shutdown();
+
+      assert.isTrue(signal!.aborted);
+      assert.strictEqual(await result, ExportResultCode.SUCCESS);
+      assert.strictEqual((await readdir(directory)).filter((name) => name.endsWith(".pending")).length, 1);
+    });
+
+    it("rejects shutdown after the durable deadline when an in-flight request ignores abort", async () => {
+      const directory = await createStorageDirectory();
+      let notifyRequestStarted: (() => void) | undefined;
+      const requestStarted = new Promise<void>((resolve) => {
+        notifyRequestStarted = resolve;
+      });
+      fetchSpy.mockImplementation(() => {
+        notifyRequestStarted!();
+        return new Promise(() => {});
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        httpRequestTimeoutMilliseconds: 1,
+        durableDelivery: {
+          enabled: true,
+          storageDirectory: directory,
+          shutdownTimeoutMilliseconds: 5,
+        },
+      });
+      void exportResult(exporter, [makeSpan()]);
+
+      await requestStarted;
+      let shutdownError: unknown;
+      try {
+        await exporter.shutdown();
+      } catch (error) {
+        shutdownError = error;
+      }
+
+      assert.instanceOf(shutdownError, Error);
+      assert.match((shutdownError as Error).message, /shutdown timed out/);
+    });
+
+    it("is idempotent after completed durable shutdown", async () => {
+      const directory = await createStorageDirectory();
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      await exporter.shutdown();
+      await exporter.shutdown();
+
+      assert.strictEqual(await exportResult(exporter, [makeSpan()]), ExportResultCode.FAILED);
     });
   });
 });
