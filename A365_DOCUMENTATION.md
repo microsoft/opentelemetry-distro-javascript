@@ -109,6 +109,64 @@ useMicrosoftOpenTelemetry({
 
 When both `tokenResolver` and `contextualTokenResolver` are set, `contextualTokenResolver` takes precedence.
 
+## Durable Delivery
+
+Use durable delivery when retryable A365 HTTP exports must survive process restarts.
+
+```typescript
+import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+
+useMicrosoftOpenTelemetry({
+  a365: {
+    enabled: true,
+    enableObservabilityExporter: true,
+    tokenResolver: (agentId, tenantId, authScopes) =>
+      getToken(agentId, tenantId, authScopes),
+    durableDelivery: {
+      enabled: true,
+      storageDirectory: process.env.A365_DURABLE_STORAGE_DIRECTORY,
+      maxStorageBytes: 50 * 1024 * 1024,
+      maxRecordAgeMilliseconds: 2 * 24 * 60 * 60 * 1000,
+    },
+  },
+});
+```
+
+Durable delivery is opt-in and disabled by default. It applies only to the A365 HTTP exporter, so
+set `enableObservabilityExporter: true` alongside `a365.enabled: true`.
+
+### Durable Delivery Defaults
+
+| Option | Default | Notes |
+| --- | --- | --- |
+| `enabled` | `false` | Durable delivery is off unless you opt in |
+| `storageDirectory` | auto | Uses the configured directory, or probes OS-specific local temp roots and appends `Microsoft/A365/otel-durable` |
+| `maxStorageBytes` | `50 * 1024 * 1024` | Bounds retained pending + quarantined records |
+| `maxRecordAgeMilliseconds` | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction |
+| `replayIntervalMilliseconds` | `2 * 60 * 1000` | Scheduled replay cadence |
+| `maxReplayBatchSize` | `10` | Maximum records claimed per replay pass |
+| `leaseDurationMilliseconds` | `2 * 60 * 1000` | Reclaims stale replay leases |
+| `shutdownTimeoutMilliseconds` | `10_000` | Shutdown replay/drain budget |
+| `tokenResolutionTimeoutMilliseconds` | `30_000` | Timeout per replay token-resolution attempt |
+
+### Operational Notes
+
+- Durable records are stored as plaintext JSON files. On POSIX, the SDK creates owner-only durable
+  directories/files (`0700` / `0600`). On Windows, use a protected storage directory or persistent
+  volume with owner-only ACLs.
+- Delivery is at-least-once. A retryable request can be replayed after a crash, timeout, or
+  shutdown race, so downstream consumers must tolerate duplicates.
+- Replay and `forceFlush()` resolve a fresh token for each send attempt; durable files do not store
+  bearer tokens.
+- Storage is bounded by both age and capacity. The SDK prunes expired records first, then evicts
+  the oldest remaining durable records until the new record fits within `maxStorageBytes`.
+- Live delivery and replay share one `Retry-After` / exponential-backoff transmission gate. A
+  retryable response pauses both immediate sends and replay probes until the gate reopens.
+- If records must survive container restarts, rescheduling, or host restarts, point
+  `storageDirectory` at a protected persistent volume. Default temp directories and container
+  filesystems are convenient for process restarts, but ephemeral storage can be lost when a
+  container is replaced and still counts against container ephemeral-storage limits.
+
 ## Shutdown
 
 Call `shutdownMicrosoftOpenTelemetry()` during graceful shutdown to flush pending telemetry and release resources:
@@ -121,3 +179,8 @@ process.on("SIGTERM", async () => {
   process.exit(0);
 });
 ```
+
+With durable delivery enabled, shutdown waits for in-flight A365 exports and then drains durable
+replay until `durableDelivery.shutdownTimeoutMilliseconds` expires (10 seconds by default). When
+the deadline is reached, in-flight durable requests are aborted; already stored records remain on
+disk for replay after the next process start.

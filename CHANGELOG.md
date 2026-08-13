@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Features Added
+- Add opt-in A365 durable store-and-forward delivery with bounded local plaintext storage, replay with fresh tokens, shared `Retry-After` backoff, and bounded shutdown
 - Emit `gen_ai.output.type` and available GenAI request parameters on LangChain chat spans. [#213](https://github.com/microsoft/opentelemetry-distro-javascript/pull/213)
 
 ### Bugs Fixed
