@@ -215,7 +215,10 @@ export class PersistentStore {
 
   private pendingPath(record: DurableRecordV1, suffix?: string): string {
     const baseName = `${record.createdAt}-${record.id}`;
-    return join(this.root, suffix ? `${baseName}.${suffix}${PENDING_SUFFIX}` : `${baseName}${PENDING_SUFFIX}`);
+    return join(
+      this.root,
+      suffix ? `${baseName}.${suffix}${PENDING_SUFFIX}` : `${baseName}${PENDING_SUFFIX}`,
+    );
   }
 
   private leasePath(pendingPath: string): string {

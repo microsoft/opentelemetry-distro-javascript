@@ -30,7 +30,9 @@ export class DurableDeliveryManager {
   private readonly active = new Set<Promise<unknown>>();
   private replayTimer?: ReturnType<typeof setTimeout>;
   private closed = false;
+  private replayStopped = false;
   private shutdownComplete = false;
+  private shutdownPromise?: Promise<void>;
 
   constructor(
     private readonly options: ResolvedDurableDeliveryOptions,
@@ -39,6 +41,21 @@ export class DurableDeliveryManager {
     private readonly dependencies: DurableDeliveryDependencies,
   ) {
     this.scheduleReplay();
+  }
+
+  /**
+   * Starts a replay pass immediately. The regular replay timer remains active
+   * for subsequent passes.
+   */
+  public startReplay(): void {
+    if (this.closed || this.replayStopped) {
+      return;
+    }
+
+    void this.runReplayPass().then(
+      () => undefined,
+      (error) => this.logger.error("[DurableDeliveryManager] Initial replay failed", error),
+    );
   }
 
   public deliver(record: DurableRecordV1): Promise<boolean> {
@@ -53,7 +70,7 @@ export class DurableDeliveryManager {
       return;
     }
 
-    await Promise.allSettled([...this.active]);
+    await this.waitForActiveWorkToStability();
     if (this.closed) {
       return;
     }
@@ -61,24 +78,34 @@ export class DurableDeliveryManager {
     await this.runReplayPass();
   }
 
-  public async shutdown(): Promise<void> {
-    if (this.shutdownComplete) {
-      return;
-    }
-
-    this.closed = true;
+  /**
+   * Stops new replay work and aborts active network requests without rejecting
+   * already-admitted durable records. Callers can then wait for those records
+   * to finish their durable handoff before invoking {@link shutdown}.
+   */
+  public beginShutdown(): void {
+    this.replayStopped = true;
     if (this.replayTimer) {
       clearTimeout(this.replayTimer);
       this.replayTimer = undefined;
     }
     this.abortController.abort();
+  }
 
-    const completed = await Promise.race([
-      Promise.allSettled([...this.active]).then(() => true),
-      delay(this.options.shutdownTimeoutMilliseconds).then(() => false),
-    ]);
+  public shutdown(): Promise<void> {
+    if (this.shutdownComplete) {
+      return Promise.resolve();
+    }
 
-    if (!completed) {
+    this.shutdownPromise ??= this.shutdownInternal();
+    return this.shutdownPromise;
+  }
+
+  private async shutdownInternal(): Promise<void> {
+    this.closed = true;
+    this.beginShutdown();
+
+    if (!(await this.waitForActiveWork(this.options.shutdownTimeoutMilliseconds))) {
       throw new Error("Agent365 durable delivery shutdown timed out");
     }
 
@@ -94,20 +121,29 @@ export class DurableDeliveryManager {
       return false;
     }
     if (decision.kind === "retryable" && decision.error !== undefined) {
-      this.logger.warn("[DurableDeliveryManager] Live delivery failed; persisting for replay", decision.error);
+      this.logger.warn(
+        "[DurableDeliveryManager] Live delivery failed; persisting for replay",
+        decision.error,
+      );
     }
 
     return this.persist(record);
   }
 
   private scheduleReplay(): void {
-    if (this.closed || this.replayTimer) {
+    if (this.closed || this.replayStopped || this.replayTimer) {
       return;
     }
 
     this.replayTimer = setTimeout(() => {
       this.replayTimer = undefined;
-      void this.runReplayPass().finally(() => this.scheduleReplay());
+      void this.runReplayPass().then(
+        () => this.scheduleReplay(),
+        (error) => {
+          this.logger.error("[DurableDeliveryManager] Scheduled replay failed", error);
+          this.scheduleReplay();
+        },
+      );
     }, this.options.replayIntervalMilliseconds);
     this.replayTimer.unref();
   }
@@ -137,7 +173,10 @@ export class DurableDeliveryManager {
       return;
     }
     if (decision.kind === "retryable" && decision.error !== undefined) {
-      this.logger.warn("[DurableDeliveryManager] Replay failed; releasing durable record", decision.error);
+      this.logger.warn(
+        "[DurableDeliveryManager] Replay failed; releasing durable record",
+        decision.error,
+      );
     }
 
     await this.releaseClaim(claim);
@@ -175,6 +214,33 @@ export class DurableDeliveryManager {
     });
     this.active.add(tracked);
     return tracked;
+  }
+
+  private async waitForActiveWork(timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+
+    while (this.active.size > 0) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        return false;
+      }
+
+      const settled = await Promise.race([
+        Promise.allSettled([...this.active]).then(() => true),
+        delay(remainingMs).then(() => false),
+      ]);
+      if (!settled) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private async waitForActiveWorkToStability(): Promise<void> {
+    while (this.active.size > 0) {
+      await Promise.allSettled([...this.active]);
+    }
   }
 
   private async attemptSend(record: DurableRecordV1): Promise<GateDecision> {
@@ -216,7 +282,11 @@ export class DurableDeliveryManager {
     return { kind: "retryable" };
   }
 
-  private async withTimeout<T>(operation: Promise<T>, timeoutMs: number, operationName: string): Promise<T> {
+  private async withTimeout<T>(
+    operation: Promise<T>,
+    timeoutMs: number,
+    operationName: string,
+  ): Promise<T> {
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
     try {

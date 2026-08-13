@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { afterEach, assert, beforeEach, describe, it, vi } from "vitest";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ExportResultCode } from "@opentelemetry/core";
@@ -103,6 +103,16 @@ async function exportResult(exporter: Agent365Exporter, spans: ReadableSpan[]): 
   });
 }
 
+async function waitFor(predicate: () => boolean, timeoutMilliseconds = 1_000): Promise<void> {
+  const deadline = Date.now() + timeoutMilliseconds;
+  while (!predicate()) {
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for condition");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 describe("Agent365Exporter", () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
 
@@ -116,7 +126,9 @@ describe("Agent365Exporter", () => {
 
   afterEach(async () => {
     await Promise.all(
-      temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
+      temporaryDirectories
+        .splice(0)
+        .map((directory) => rm(directory, { recursive: true, force: true })),
     );
     _resetA365LoggerForTest();
     vi.restoreAllMocks();
@@ -1234,7 +1246,7 @@ describe("Agent365Exporter", () => {
       await exporter.shutdown();
     });
 
-    it("replays persisted records with a fresh token after exporter restart", async () => {
+    it("replays persisted records with a fresh token after exporter restart without forceFlush", async () => {
       const directory = await createStorageDirectory();
       fetchSpy.mockResolvedValueOnce({
         status: 503,
@@ -1245,7 +1257,10 @@ describe("Agent365Exporter", () => {
         durableDelivery: { enabled: true, storageDirectory: directory },
       });
 
-      assert.strictEqual(await exportResult(failingExporter, [makeSpan()]), ExportResultCode.SUCCESS);
+      assert.strictEqual(
+        await exportResult(failingExporter, [makeSpan()]),
+        ExportResultCode.SUCCESS,
+      );
       await failingExporter.shutdown();
 
       fetchSpy.mockClear();
@@ -1260,11 +1275,11 @@ describe("Agent365Exporter", () => {
         durableDelivery: {
           enabled: true,
           storageDirectory: directory,
-          replayIntervalMilliseconds: 60_000,
+          replayIntervalMilliseconds: 5,
         },
       });
 
-      await restartedExporter.forceFlush();
+      await waitFor(() => fetchSpy.mock.calls.length === 1);
 
       assert.strictEqual(resolver.mock.calls.length, 1);
       assert.strictEqual(fetchSpy.mock.calls.length, 1);
@@ -1274,6 +1289,78 @@ describe("Agent365Exporter", () => {
       );
       assert.isEmpty((await readdir(directory)).filter((name) => name.endsWith(".pending")));
       await restartedExporter.shutdown();
+    });
+
+    it("preserves every admitted chunk when shutdown aborts a multi-chunk export", async () => {
+      const directory = await createStorageDirectory();
+      let signal: AbortSignal | undefined;
+      let notifyRequestStarted: (() => void) | undefined;
+      const requestStarted = new Promise<void>((resolve) => {
+        notifyRequestStarted = resolve;
+      });
+      let requestCount = 0;
+      fetchSpy.mockImplementation((_url, request) => {
+        requestCount += 1;
+        if (requestCount > 1) {
+          return Promise.resolve({ status: 503, headers: new Headers() });
+        }
+
+        signal = request.signal as AbortSignal;
+        notifyRequestStarted!();
+        return new Promise((_resolve, reject) => {
+          signal!.addEventListener(
+            "abort",
+            () => reject(Object.assign(new Error("request aborted"), { name: "AbortError" })),
+            { once: true },
+          );
+        });
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        maxPayloadBytes: 1,
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+      const result = exportResult(exporter, [makeSpan(), makeSpan({ name: "second-span" })]);
+
+      await requestStarted;
+      await exporter.shutdown();
+
+      assert.isTrue(signal!.aborted);
+      assert.strictEqual(await result, ExportResultCode.SUCCESS);
+      assert.strictEqual(
+        (await readdir(directory)).filter((name) => name.endsWith(".pending")).length,
+        2,
+      );
+    });
+
+    it("does not initialize durable delivery after shutdown", async () => {
+      const directory = await createStorageDirectory();
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      await exporter.shutdown();
+
+      const getDurableManager = (exporter as unknown as { getDurableManager(): Promise<unknown> })
+        .getDurableManager;
+      await expect(getDurableManager.call(exporter)).rejects.toThrow(/shut down/);
+    });
+
+    it("surfaces durable store initialization failures without poisoning flush or shutdown", async () => {
+      const directory = await createStorageDirectory();
+      const invalidStoragePath = join(directory, "not-a-directory");
+      await writeFile(invalidStoragePath, "not a directory");
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true, storageDirectory: invalidStoragePath },
+      });
+
+      const result = exportResult(exporter, [makeSpan()]);
+      await exporter.forceFlush();
+
+      assert.strictEqual(await result, ExportResultCode.FAILED);
+      await exporter.shutdown();
     });
 
     it("aborts an in-flight durable request during shutdown", async () => {
@@ -1305,7 +1392,10 @@ describe("Agent365Exporter", () => {
 
       assert.isTrue(signal!.aborted);
       assert.strictEqual(await result, ExportResultCode.SUCCESS);
-      assert.strictEqual((await readdir(directory)).filter((name) => name.endsWith(".pending")).length, 1);
+      assert.strictEqual(
+        (await readdir(directory)).filter((name) => name.endsWith(".pending")).length,
+        1,
+      );
     });
 
     it("rejects shutdown after the durable deadline when an in-flight request ignores abort", async () => {

@@ -24,13 +24,7 @@ describe("PersistentStore", () => {
 
   beforeEach(async () => {
     process.env = { ...originalEnv };
-    scratchRoot = join(
-      process.cwd(),
-      ".superpowers",
-      "sdd",
-      "task-2-test-artifacts",
-      randomUUID(),
-    );
+    scratchRoot = join(process.cwd(), ".superpowers", "sdd", "task-2-test-artifacts", randomUUID());
     await fs.mkdir(scratchRoot, { recursive: true });
   });
 
@@ -69,7 +63,9 @@ describe("PersistentStore", () => {
     await fs.mkdir(target, { recursive: true });
     await fs.symlink(target, link, process.platform === "win32" ? "junction" : "dir");
 
-    await expect(createStore(link)).rejects.toThrow(/Durable storage root must be a real directory/);
+    await expect(createStore(link)).rejects.toThrow(
+      /Durable storage root must be a real directory/,
+    );
   });
 
   it("surfaces explicit directory failures without fallback", async () => {
@@ -342,7 +338,7 @@ function makeRecord(overrides: Partial<DurableRecordV1> = {}): DurableRecordV1 {
     clusterCategory: overrides.clusterCategory ?? "prod",
     domainOverride: overrides.domainOverride,
     useS2SEndpoint: overrides.useS2SEndpoint ?? false,
-    body: overrides.body ?? "{\"resourceSpans\":[]}",
+    body: overrides.body ?? '{"resourceSpans":[]}',
   };
 }
 

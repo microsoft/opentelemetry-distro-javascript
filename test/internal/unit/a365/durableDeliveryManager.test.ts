@@ -22,25 +22,31 @@ const managedInstances: DurableDeliveryManager[] = [];
 describe("DurableDeliveryManager", () => {
   afterEach(async () => {
     while (managedInstances.length > 0) {
-      await managedInstances.pop()!.shutdown().catch(() => undefined);
+      await managedInstances
+        .pop()!
+        .shutdown()
+        .catch(() => undefined);
     }
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it.each([408, 429, 500, 503])("persists retryable live attempts for status %s", async (status) => {
-    const { manager, persist, send } = createManager();
-    send.mockResolvedValue({
-      kind: "retryable",
-      correlationId: `retryable-${status}`,
-      status,
-      retryAfterMs: 60_000,
-    });
+  it.each([408, 429, 500, 503])(
+    "persists retryable live attempts for status %s",
+    async (status) => {
+      const { manager, persist, send } = createManager();
+      send.mockResolvedValue({
+        kind: "retryable",
+        correlationId: `retryable-${status}`,
+        status,
+        retryAfterMs: 60_000,
+      });
 
-    assert.isTrue(await manager.deliver(makeRecord()));
-    assert.strictEqual(send.mock.calls.length, 1);
-    assert.strictEqual(persist.mock.calls.length, 1);
-  });
+      assert.isTrue(await manager.deliver(makeRecord()));
+      assert.strictEqual(send.mock.calls.length, 1);
+      assert.strictEqual(persist.mock.calls.length, 1);
+    },
+  );
 
   it("persists live records while the transmission gate is deferring sends", async () => {
     const { manager, persist, send } = createManager();
@@ -136,7 +142,10 @@ describe("DurableDeliveryManager", () => {
     assert.strictEqual(resolveToken.mock.calls.length, 2);
     assert.strictEqual(send.mock.calls.length, 2);
     assert.strictEqual(send.mock.calls[1][1], "fresh-token");
-    assert.deepEqual(complete.mock.calls.map(([releasedClaim]) => releasedClaim), [claim]);
+    assert.deepEqual(
+      complete.mock.calls.map(([releasedClaim]) => releasedClaim),
+      [claim],
+    );
     assert.strictEqual(release.mock.calls.length, 0);
   });
 
@@ -160,7 +169,10 @@ describe("DurableDeliveryManager", () => {
 
     assert.strictEqual(resolveToken.mock.calls.length, 0);
     assert.strictEqual(send.mock.calls.length, 0);
-    assert.deepEqual(release.mock.calls.map(([releasedClaim]) => releasedClaim), [claim]);
+    assert.deepEqual(
+      release.mock.calls.map(([releasedClaim]) => releasedClaim),
+      [claim],
+    );
   });
 
   it("allows only one half-open probe across live delivery and replay", async () => {
@@ -211,7 +223,10 @@ describe("DurableDeliveryManager", () => {
     replayToken.resolve("replay-token");
 
     await flush;
-    assert.deepEqual(send.mock.calls.map(([record]) => record.id), ["replay-probe"]);
+    assert.deepEqual(
+      send.mock.calls.map(([record]) => record.id),
+      ["replay-probe"],
+    );
   });
 
   it("releases retryable, missing-token, timed-out, and unknown replay claims", async () => {
@@ -264,10 +279,12 @@ describe("DurableDeliveryManager", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     await manager.forceFlush();
 
-    assert.deepEqual(
-      release.mock.calls.map(([claim]) => claim.record.id).sort(),
-      ["missing-token-claim", "retryable-claim", "timed-out-claim", "unknown-claim"],
-    );
+    assert.deepEqual(release.mock.calls.map(([claim]) => claim.record.id).sort(), [
+      "missing-token-claim",
+      "retryable-claim",
+      "timed-out-claim",
+      "unknown-claim",
+    ]);
     assert.isFalse(send.mock.calls.some(([record]) => record.id === "missing-token-claim"));
     assert.isFalse(send.mock.calls.some(([record]) => record.id === "timed-out-claim"));
   });
@@ -298,10 +315,15 @@ describe("DurableDeliveryManager", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     await manager.forceFlush();
 
-    assert.deepEqual(complete.mock.calls.map(([completedClaim]) => completedClaim), [claim]);
+    assert.deepEqual(
+      complete.mock.calls.map(([completedClaim]) => completedClaim),
+      [claim],
+    );
 
     resolveToken.mockReset();
-    resolveToken.mockImplementationOnce(async () => firstToken.promise).mockResolvedValueOnce("second-token");
+    resolveToken
+      .mockImplementationOnce(async () => firstToken.promise)
+      .mockResolvedValueOnce("second-token");
     send.mockReset();
     send
       .mockResolvedValueOnce({
@@ -323,10 +345,10 @@ describe("DurableDeliveryManager", () => {
     assert.isTrue(await firstRecovery);
     assert.isTrue(await secondRecovery);
     assert.strictEqual(persist.mock.calls.length, persistedBeforeRecovery);
-    assert.deepEqual(
-      send.mock.calls.map(([record]) => record.id).sort(),
-      ["after-permanent-1", "after-permanent-2"],
-    );
+    assert.deepEqual(send.mock.calls.map(([record]) => record.id).sort(), [
+      "after-permanent-1",
+      "after-permanent-2",
+    ]);
   });
 
   it("abandons half-open live probes when token resolution returns null", async () => {
@@ -386,21 +408,23 @@ describe("DurableDeliveryManager", () => {
     const originalSetTimeout = globalThis.setTimeout;
     const unref = vi.fn();
 
-    const setTimeoutSpy = vi
-      .spyOn(globalThis, "setTimeout")
-      .mockImplementation(((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
-        const timer = originalSetTimeout(
-          handler as (...callbackArgs: unknown[]) => void,
-          timeout,
-          ...(args as []),
-        );
-        const originalUnref = timer.unref.bind(timer);
-        timer.unref = vi.fn(() => {
-          unref();
-          return originalUnref();
-        });
-        return timer;
-      }) as typeof setTimeout);
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ) => {
+      const timer = originalSetTimeout(
+        handler as (...callbackArgs: unknown[]) => void,
+        timeout,
+        ...(args as []),
+      );
+      const originalUnref = timer.unref.bind(timer);
+      timer.unref = vi.fn(() => {
+        unref();
+        return originalUnref();
+      });
+      return timer;
+    }) as typeof setTimeout);
 
     const { manager } = createManager();
 
@@ -467,9 +491,11 @@ describe("DurableDeliveryManager", () => {
   });
 });
 
-function createManager(overrides: {
-  options?: Partial<Agent365DurableDeliveryOptions>;
-} = {}) {
+function createManager(
+  overrides: {
+    options?: Partial<Agent365DurableDeliveryOptions>;
+  } = {},
+) {
   const logger = makeLogger();
   const persist = vi.fn(async (_record: DurableRecordV1) => "record.pending");
   const claimBatch = vi.fn(async (_limit: number) => [] as ClaimedRecord[]);
@@ -477,7 +503,11 @@ function createManager(overrides: {
   const release = vi.fn(async (_claim: ClaimedRecord) => undefined);
   const resolveToken = vi.fn(async (_record: DurableRecordV1) => "token");
   const send = vi.fn(
-    async (_record: DurableRecordV1, _token: string, _signal: AbortSignal): Promise<DeliveryAttempt> => ({
+    async (
+      _record: DurableRecordV1,
+      _token: string,
+      _signal: AbortSignal,
+    ): Promise<DeliveryAttempt> => ({
       kind: "success",
       correlationId: "success",
     }),

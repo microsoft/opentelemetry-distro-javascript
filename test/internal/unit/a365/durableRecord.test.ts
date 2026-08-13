@@ -22,7 +22,7 @@ describe("DurableRecord", () => {
       agenticUserId: "user",
       clusterCategory: "prod",
       useS2SEndpoint: false,
-      body: "{\"resourceSpans\":[]}",
+      body: '{"resourceSpans":[]}',
     });
 
     assert.strictEqual(record.version, DURABLE_RECORD_VERSION);
@@ -35,10 +35,7 @@ describe("DurableRecord", () => {
   });
 
   it("rejects unsupported versions", () => {
-    assert.throws(
-      () => parseDurableRecord('{"version":2}'),
-      /Unsupported durable record version/,
-    );
+    assert.throws(() => parseDurableRecord('{"version":2}'), /Unsupported durable record version/);
   });
 
   it("rejects invalid record shapes", () => {
@@ -53,7 +50,7 @@ describe("DurableRecord", () => {
             agentId: "agent",
             clusterCategory: "prod",
             useS2SEndpoint: "false",
-            body: "{\"resourceSpans\":[]}",
+            body: '{"resourceSpans":[]}',
           }),
         ),
       /Invalid durable record/,

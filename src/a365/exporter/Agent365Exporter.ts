@@ -27,6 +27,7 @@ import {
   createDurableRecord,
   DurableDeliveryManager,
   type DeliveryAttempt,
+  type DurableRecordV1,
   parseRetryAfterMs,
   PersistentStore,
 } from "./durable/index.js";
@@ -117,8 +118,11 @@ export class Agent365Exporter implements SpanExporter {
   private closed = false;
   private readonly options: ResolvedExporterOptions;
   private durableManager?: DurableDeliveryManager;
-  private durableManagerPromise?: Promise<DurableDeliveryManager>;
+  private durableInitializationPromise?: Promise<void>;
+  private durableInitializationError?: unknown;
+  private durableInitializationFailed = false;
   private shutdownPromise?: Promise<void>;
+  private shutdownFinalized = false;
   private readonly activeExports = new Set<Promise<void>>();
 
   private get logger() {
@@ -133,6 +137,9 @@ export class Agent365Exporter implements SpanExporter {
    */
   constructor(options?: Agent365ExporterOptions) {
     this.options = new ResolvedExporterOptions(options);
+    if (this.options.durableDelivery.enabled) {
+      void this.startDurableInitialization();
+    }
   }
 
   /**
@@ -161,10 +168,7 @@ export class Agent365Exporter implements SpanExporter {
    * @param spans The spans to export.
    * @param resultCallback Callback invoked with the export result.
    */
-  export(
-    spans: ReadableSpan[],
-    resultCallback: (result: ExportResult) => void,
-  ): Promise<void> {
+  export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): Promise<void> {
     if (this.closed) {
       resultCallback({ code: ExportResultCode.FAILED });
       return Promise.resolve();
@@ -255,12 +259,13 @@ export class Agent365Exporter implements SpanExporter {
       return;
     }
 
-    const servicePrefix = this.options.useS2SEndpoint ? "/observabilityService" : "/observability";
-    const endpointPath = `${servicePrefix}/tenants/${encodeURIComponent(tenantId)}/otlp/agents/${encodeURIComponent(agentId)}/traces`;
-
-    const baseUrl =
-      this.options.domainOverride ?? resolveAgent365Endpoint(this.options.clusterCategory);
-    const url = `${baseUrl}${endpointPath}?api-version=1`;
+    const url = buildAgent365Url({
+      tenantId,
+      agentId,
+      clusterCategory: this.options.clusterCategory,
+      domainOverride: this.options.domainOverride,
+      useS2SEndpoint: this.options.useS2SEndpoint,
+    });
 
     const headers: Record<string, string> = {
       "content-type": "application/json",
@@ -422,43 +427,71 @@ export class Agent365Exporter implements SpanExporter {
   }
 
   private async getDurableManager(): Promise<DurableDeliveryManager> {
+    if (this.closed) {
+      throw new Error("Agent365 durable delivery has shut down");
+    }
+
+    await this.startDurableInitialization();
     if (this.durableManager) {
       return this.durableManager;
     }
 
-    this.durableManagerPromise ??= PersistentStore.create(
+    if (this.durableInitializationFailed) {
+      throw new Error("Agent365 durable delivery initialization failed", {
+        cause: this.durableInitializationError,
+      });
+    }
+
+    throw new Error("Agent365 durable delivery initialization did not create a manager");
+  }
+
+  private startDurableInitialization(): Promise<void> {
+    if (!this.options.durableDelivery.enabled) {
+      return Promise.resolve();
+    }
+
+    this.durableInitializationPromise ??= PersistentStore.create(
       this.options.durableDelivery,
       this.logger,
-    ).then(
-      (store) =>
-        new DurableDeliveryManager(this.options.durableDelivery, store, this.logger, {
-          resolveToken: (record) => this.resolveRecordToken(record),
-          send: (record, token, signal) => this.postRecordOnce(record, token, signal),
-        }),
-    );
-    this.durableManager = await this.durableManagerPromise;
-    return this.durableManager;
+    )
+      .then((store) => {
+        const manager = new DurableDeliveryManager(
+          this.options.durableDelivery,
+          store,
+          this.logger,
+          {
+            resolveToken: (record) => this.resolveRecordToken(record),
+            send: (record, token, signal) => this.postRecordOnce(record, token, signal),
+          },
+        );
+        this.durableManager = manager;
+
+        if (this.closed) {
+          manager.beginShutdown();
+          if (this.shutdownFinalized) {
+            this.closeLateDurableManager(manager);
+          }
+          return;
+        }
+
+        manager.startReplay();
+      })
+      .catch((error) => {
+        this.durableInitializationFailed = true;
+        this.durableInitializationError = error;
+        this.logger.error("[Agent365Exporter] Durable delivery initialization failed:", error);
+      });
+
+    return this.durableInitializationPromise;
   }
 
   private async postRecordOnce(
-    record: {
-      tenantId: string;
-      agentId: string;
-      clusterCategory: ResolvedExporterOptions["clusterCategory"];
-      domainOverride?: string;
-      useS2SEndpoint: boolean;
-      body: string;
-    },
+    record: DurableRecordV1,
     token: string,
     signal: AbortSignal,
   ): Promise<DeliveryAttempt> {
-    const servicePrefix = record.useS2SEndpoint ? "/observabilityService" : "/observability";
-    const endpointPath = `${servicePrefix}/tenants/${encodeURIComponent(record.tenantId)}/otlp/agents/${encodeURIComponent(record.agentId)}/traces`;
-    const baseUrl = record.domainOverride ?? resolveAgent365Endpoint(record.clusterCategory);
-    const url = `${baseUrl}${endpointPath}?api-version=1`;
-    const recordA365Stats = isSdkStatsEnabled();
-    const endpointCategory = A365_ENDPOINT_CATEGORY;
-    const host = recordA365Stats ? shortHost(url) : url;
+    const url = buildAgent365Url(record);
+    const stats = createRequestStats(url);
     const requestStart = Date.now();
     let correlationId = "unknown";
 
@@ -468,7 +501,7 @@ export class Agent365Exporter implements SpanExporter {
         headers: {
           "content-type": "application/json",
           "x-ms-tenant-id": record.tenantId,
-          "authorization": `Bearer ${token}`,
+          authorization: `Bearer ${token}`,
         },
         body: record.body,
         signal: AbortSignal.any([
@@ -481,31 +514,15 @@ export class Agent365Exporter implements SpanExporter {
         response.headers.get("x-correlation-id") ??
         "unknown";
 
-      if (recordA365Stats) {
-        recordDuration(endpointCategory, host, Date.now() - requestStart);
-        const kind = classifyStatusCode(response.status);
-        switch (kind) {
-          case "success":
-            recordSuccess(endpointCategory, host);
-            break;
-          case "retry":
-            recordRetry(endpointCategory, host, response.status);
-            break;
-          case "throttle":
-            recordThrottle(endpointCategory, host, response.status);
-            break;
-          case "failure":
-            recordFailure(endpointCategory, host, response.status);
-            break;
-          case "ignored":
-            break;
-        }
-      }
+      recordResponseStats(stats, response.status, requestStart);
 
       if (response.status >= 200 && response.status < 300) {
         return { kind: "success", correlationId };
       }
-      if ([408, 429].includes(response.status) || (response.status >= 500 && response.status < 600)) {
+      if (
+        [408, 429].includes(response.status) ||
+        (response.status >= 500 && response.status < 600)
+      ) {
         return {
           kind: "retryable",
           correlationId,
@@ -520,10 +537,7 @@ export class Agent365Exporter implements SpanExporter {
         reason: `HTTP ${response.status}`,
       };
     } catch (error) {
-      if (recordA365Stats) {
-        recordDuration(endpointCategory, host, Date.now() - requestStart);
-        recordException(endpointCategory, host, classifyExceptionType(error));
-      }
+      recordExceptionStats(stats, error, requestStart);
       this.logger.error("[Agent365Exporter] Request error:", error);
       return { kind: "retryable", correlationId };
     }
@@ -540,12 +554,7 @@ export class Agent365Exporter implements SpanExporter {
     // so each retry attempt records under the same key without re-parsing
     // the URL or re-checking env on every iteration. `endpoint` is the
     // category label per spec — A365 transmits report endpoint="a365".
-    const recordA365Stats = isSdkStatsEnabled();
-    const endpointCategory = A365_ENDPOINT_CATEGORY;
-    let host = url;
-    if (recordA365Stats) {
-      host = shortHost(url);
-    }
+    const stats = createRequestStats(url);
 
     for (let attempt = 0; attempt <= DEFAULT_MAX_RETRIES; attempt++) {
       const requestStart = Date.now();
@@ -563,26 +572,7 @@ export class Agent365Exporter implements SpanExporter {
           "unknown";
         lastCorrelationId = correlationId;
 
-        if (recordA365Stats) {
-          recordDuration(endpointCategory, host, Date.now() - requestStart);
-          const kind = classifyStatusCode(response.status);
-          switch (kind) {
-            case "success":
-              recordSuccess(endpointCategory, host);
-              break;
-            case "retry":
-              recordRetry(endpointCategory, host, response.status);
-              break;
-            case "throttle":
-              recordThrottle(endpointCategory, host, response.status);
-              break;
-            case "failure":
-              recordFailure(endpointCategory, host, response.status);
-              break;
-            case "ignored":
-              break;
-          }
-        }
+        recordResponseStats(stats, response.status, requestStart);
 
         if (response.status >= 200 && response.status < 300) {
           return { ok: true, correlationId };
@@ -611,10 +601,7 @@ export class Agent365Exporter implements SpanExporter {
         );
         return { ok: false, correlationId };
       } catch (error) {
-        if (recordA365Stats) {
-          recordDuration(endpointCategory, host, Date.now() - requestStart);
-          recordException(endpointCategory, host, classifyExceptionType(error));
-        }
+        recordExceptionStats(stats, error, requestStart);
         this.logger.error("[Agent365Exporter] Request error:", error);
         if (attempt < DEFAULT_MAX_RETRIES) {
           await sleep(200 * (attempt + 1));
@@ -748,6 +735,7 @@ export class Agent365Exporter implements SpanExporter {
   shutdown(): Promise<void> {
     if (!this.shutdownPromise) {
       this.closed = true;
+      this.durableManager?.beginShutdown();
       this.shutdownPromise = this.shutdownInternal();
     }
     return this.shutdownPromise;
@@ -758,19 +746,83 @@ export class Agent365Exporter implements SpanExporter {
    * delivery is enabled.
    */
   async forceFlush(): Promise<void> {
-    await Promise.allSettled([...this.activeExports]);
+    await this.waitForActiveExports();
     if (this.closed || !this.options.durableDelivery.enabled) {
       return;
     }
 
-    await (await this.getDurableManager()).forceFlush();
+    await this.startDurableInitialization();
+    if (this.durableInitializationFailed || !this.durableManager) {
+      return;
+    }
+
+    await this.durableManager.forceFlush();
   }
 
   private async shutdownInternal(): Promise<void> {
-    if (this.durableManagerPromise) {
-      await (await this.durableManagerPromise).shutdown();
+    const deadline = Date.now() + this.options.durableDelivery.shutdownTimeoutMilliseconds;
+
+    try {
+      await this.waitForWithinShutdownDeadline(this.startDurableInitialization(), deadline);
+      this.durableManager?.beginShutdown();
+      await this.waitForActiveExports(deadline);
+      if (this.durableManager) {
+        await this.waitForWithinShutdownDeadline(this.durableManager.shutdown(), deadline);
+      }
+    } finally {
+      this.shutdownFinalized = true;
+      if (this.durableManager) {
+        this.closeLateDurableManager(this.durableManager);
+      }
     }
-    await Promise.allSettled([...this.activeExports]);
+  }
+
+  private async waitForActiveExports(deadline = Number.POSITIVE_INFINITY): Promise<void> {
+    while (this.activeExports.size > 0) {
+      if (deadline === Number.POSITIVE_INFINITY) {
+        await Promise.allSettled([...this.activeExports]);
+        continue;
+      }
+
+      await this.waitForWithinShutdownDeadline(
+        Promise.allSettled([...this.activeExports]).then(() => undefined),
+        deadline,
+      );
+    }
+  }
+
+  private async waitForWithinShutdownDeadline<T>(
+    operation: Promise<T>,
+    deadline: number,
+  ): Promise<T> {
+    const remainingMilliseconds = deadline - Date.now();
+    if (remainingMilliseconds <= 0) {
+      throw new Error("Agent365 durable delivery shutdown timed out");
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        operation,
+        new Promise<T>((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Agent365 durable delivery shutdown timed out")),
+            remainingMilliseconds,
+          );
+          timer.unref?.();
+        }),
+      ]);
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  private closeLateDurableManager(manager: DurableDeliveryManager): void {
+    void manager.shutdown().catch((error) => {
+      this.logger.error("[Agent365Exporter] Durable delivery shutdown failed:", error);
+    });
   }
 
   private logExporterEvent(
@@ -797,6 +849,67 @@ export class Agent365Exporter implements SpanExporter {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type Agent365Endpoint = Pick<
+  DurableRecordV1,
+  "tenantId" | "agentId" | "clusterCategory" | "domainOverride" | "useS2SEndpoint"
+>;
+
+interface RequestStats {
+  host: string;
+}
+
+function buildAgent365Url(endpoint: Agent365Endpoint): string {
+  const servicePrefix = endpoint.useS2SEndpoint ? "/observabilityService" : "/observability";
+  const endpointPath = `${servicePrefix}/tenants/${encodeURIComponent(endpoint.tenantId)}/otlp/agents/${encodeURIComponent(endpoint.agentId)}/traces`;
+  const baseUrl = endpoint.domainOverride ?? resolveAgent365Endpoint(endpoint.clusterCategory);
+  return `${baseUrl}${endpointPath}?api-version=1`;
+}
+
+function createRequestStats(url: string): RequestStats | undefined {
+  return isSdkStatsEnabled() ? { host: shortHost(url) } : undefined;
+}
+
+function recordResponseStats(
+  stats: RequestStats | undefined,
+  statusCode: number,
+  requestStart: number,
+): void {
+  if (!stats) {
+    return;
+  }
+
+  recordDuration(A365_ENDPOINT_CATEGORY, stats.host, Date.now() - requestStart);
+  switch (classifyStatusCode(statusCode)) {
+    case "success":
+      recordSuccess(A365_ENDPOINT_CATEGORY, stats.host);
+      break;
+    case "retry":
+      recordRetry(A365_ENDPOINT_CATEGORY, stats.host, statusCode);
+      break;
+    case "throttle":
+      recordThrottle(A365_ENDPOINT_CATEGORY, stats.host, statusCode);
+      break;
+    case "failure":
+      recordFailure(A365_ENDPOINT_CATEGORY, stats.host, statusCode);
+      break;
+    case "ignored":
+      break;
+  }
+}
+
+function recordExceptionStats(
+  stats: RequestStats | undefined,
+  error: unknown,
+  requestStart: number,
+): void {
+  if (!stats) {
+    return;
+  }
+
+  recordDuration(A365_ENDPOINT_CATEGORY, stats.host, Date.now() - requestStart);
+  recordException(A365_ENDPOINT_CATEGORY, stats.host, classifyExceptionType(error));
 }
 
 /**
