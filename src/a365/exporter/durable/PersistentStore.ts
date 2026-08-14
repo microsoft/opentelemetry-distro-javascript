@@ -24,6 +24,16 @@ export interface ClaimedRecord {
   leasePath: string;
 }
 
+export interface ClaimBatchOptions {
+  /**
+   * Record ids to skip during this claim scan. Matching pending records are
+   * left in place (released back to pending if already leased for
+   * inspection) so callers can exclude records they already determined are
+   * temporarily unusable without starving unrelated records that sort later.
+   */
+  excludeRecordIds?: ReadonlySet<string>;
+}
+
 interface ManagedFile {
   path: string;
   size: number;
@@ -84,7 +94,7 @@ export class PersistentStore {
     }
   }
 
-  public async claimBatch(limit: number): Promise<ClaimedRecord[]> {
+  public async claimBatch(limit: number, options?: ClaimBatchOptions): Promise<ClaimedRecord[]> {
     return this.withClaimLock(async () => {
       if (limit <= 0) {
         return [];
@@ -92,6 +102,7 @@ export class PersistentStore {
 
       await this.recoverStaleLeases();
 
+      const excludeRecordIds = options?.excludeRecordIds;
       const claims: ClaimedRecord[] = [];
       const pendingFiles = await this.listManagedFilePaths((name) => name.endsWith(PENDING_SUFFIX));
       pendingFiles.sort();
@@ -122,15 +133,23 @@ export class PersistentStore {
           throw error;
         }
 
+        let record: DurableRecordV1;
         try {
-          claims.push({
-            record: parseDurableRecord(text),
-            leasePath,
-          });
+          record = parseDurableRecord(text);
         } catch (error) {
           await quarantineFile(leasePath);
           this.logger.warn("[PersistentStore] Quarantined malformed durable record", error);
+          continue;
         }
+
+        if (excludeRecordIds?.has(record.id)) {
+          // Leave this record for a later pass instead of starving records
+          // that sort after it: release it back to pending and keep scanning.
+          await this.release({ record, leasePath });
+          continue;
+        }
+
+        claims.push({ record, leasePath });
       }
 
       return claims;

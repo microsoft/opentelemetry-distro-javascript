@@ -24,6 +24,16 @@ type GateDecision =
   | { kind: "permanent" }
   | { kind: "retryable"; error?: unknown };
 
+/**
+ * Outcome of processing one claimed replay record:
+ * - "advance": completed (success/permanent); safe to claim the next record.
+ * - "exclude": token was unavailable; the claim was released and should be
+ *   skipped on later claims in this same pass so later records are not
+ *   starved by repeatedly reclaiming it.
+ * - "stop": a retryable failure or backed-off gate; stop this replay pass.
+ */
+type ReplayClaimOutcome = "advance" | "exclude" | "stop";
+
 export class DurableDeliveryManager {
   private readonly gate = new TransmissionGate();
   private readonly abortController = new AbortController();
@@ -171,10 +181,16 @@ export class DurableDeliveryManager {
   }
 
   private async runReplayPassInternal(): Promise<void> {
+    const skippedRecordIds = new Set<string>();
+
     for (let index = 0; index < this.options.maxReplayBatchSize; index++) {
+      if (this.closed || this.replayStopped) {
+        return;
+      }
+
       let claim: ClaimedRecord | undefined;
       try {
-        [claim] = await this.store.claimBatch(1);
+        [claim] = await this.store.claimBatch(1, { excludeRecordIds: skippedRecordIds });
       } catch (error) {
         this.logger.error("[DurableDeliveryManager] Failed to claim durable records", error);
         return;
@@ -184,17 +200,21 @@ export class DurableDeliveryManager {
         return;
       }
 
-      if (!(await this.processClaim(claim))) {
+      const outcome = await this.processClaim(claim);
+      if (outcome === "stop") {
         return;
+      }
+      if (outcome === "exclude") {
+        skippedRecordIds.add(claim.record.id);
       }
     }
   }
 
-  private async processClaim(claim: ClaimedRecord): Promise<boolean> {
+  private async processClaim(claim: ClaimedRecord): Promise<ReplayClaimOutcome> {
     const decision = await this.attemptSend(claim.record);
     if (decision.kind === "success" || decision.kind === "permanent") {
       await this.completeClaim(claim);
-      return true;
+      return "advance";
     }
     if (decision.kind === "tokenUnavailable") {
       if (decision.error !== undefined) {
@@ -205,7 +225,10 @@ export class DurableDeliveryManager {
       }
 
       await this.releaseClaim(claim);
-      return true;
+      // Exclude this record from later claims in the same pass instead of
+      // stopping outright, so unrelated records that sort after it are not
+      // starved by repeatedly reclaiming the same released record.
+      return "exclude";
     }
     if (decision.kind === "retryable" && decision.error !== undefined) {
       this.logger.warn(
@@ -215,7 +238,7 @@ export class DurableDeliveryManager {
     }
 
     await this.releaseClaim(claim);
-    return false;
+    return "stop";
   }
 
   private async persist(record: DurableRecordV1): Promise<boolean> {
@@ -333,6 +356,8 @@ export class DurableDeliveryManager {
     operationName: string,
   ): Promise<T> {
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    const signal = this.abortController.signal;
 
     try {
       return await Promise.race([
@@ -343,10 +368,26 @@ export class DurableDeliveryManager {
           }, timeoutMs);
           timeoutHandle.unref?.();
         }),
+        new Promise<T>((_resolve, reject) => {
+          // Abort a hung wait promptly on shutdown, even when timeoutMs
+          // exceeds the shutdown deadline; always remove the listener so
+          // repeated calls do not accumulate listeners on the shared signal.
+          const rejectAborted = () =>
+            reject(new Error(`Agent365 durable delivery ${operationName} aborted`));
+          if (signal.aborted) {
+            rejectAborted();
+            return;
+          }
+          onAbort = rejectAborted;
+          signal.addEventListener("abort", onAbort, { once: true });
+        }),
       ]);
     } finally {
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
+      }
+      if (onAbort) {
+        signal.removeEventListener("abort", onAbort);
       }
     }
   }

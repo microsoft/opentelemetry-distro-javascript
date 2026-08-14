@@ -13,7 +13,7 @@ export {
   ResolvedDurableDeliveryOptions,
 } from "./DurableDeliveryOptions.js";
 export type { DurableRecordV1 } from "./DurableRecord.js";
-export type { ClaimedRecord } from "./PersistentStore.js";
+export type { ClaimBatchOptions, ClaimedRecord } from "./PersistentStore.js";
 export type { DeliveryAttempt, DurableDeliveryDependencies } from "./DurableDeliveryManager.js";
 export {
   DURABLE_RECORD_VERSION,

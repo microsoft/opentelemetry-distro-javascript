@@ -141,8 +141,8 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
 | ------------------------------------ | ------------------------- | --------------------------------------------------------------------------------- |
 | `enabled`                            | `true`                    | Durable delivery stays on unless you explicitly disable it                         |
 | `storageDirectory`                   | auto                      | Uses the configured directory, or creates a secure platform-specific default root plus a stable per-application `app-<hash>` partition |
-| `maxStorageBytes`                    | `50 * 1024 * 1024`        | Bounds pending, quarantined, active leased, and non-stale temporary records       |
-| `maxRecordAgeMilliseconds`           | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction                               |
+| `maxStorageBytes`                    | `50 * 1024 * 1024`        | Bounds pending, quarantined, active leased, and non-stale temporary records within the current `app-<hash>` partition only |
+| `maxRecordAgeMilliseconds`           | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction, within the current `app-<hash>` partition only |
 | `replayIntervalMilliseconds`         | `2 * 60 * 1000`           | Scheduled replay cadence                                                          |
 | `maxReplayBatchSize`                 | `10`                      | Maximum records claimed per replay pass                                           |
 | `leaseDurationMilliseconds`          | `2 * 60 * 1000`           | Reclaims stale replay leases                                                      |
@@ -161,7 +161,12 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
   ACLs.
 - Every explicit or default durable root is partitioned again under a stable `app-<hash>` child
   derived from the process identity, so applications that share a base directory do not replay one
-  another's telemetry.
+  another's telemetry. All retention, capacity, and pruning behavior described below operates only
+  within the current process's own `app-<hash>` partition; the store never enumerates or reads
+  sibling partitions. If the process identity changes (for example, after a binary path or
+  executable upgrade), the previous partition becomes orphaned and is not age-pruned, capacity-
+  pruned, or otherwise cleaned up automatically. Operators who need to reclaim that space should
+  remove stale `app-<hash>` directories under the durable root out-of-band.
 - Durable delivery is enabled by default when the A365 HTTP exporter is active. Set
   `durableDelivery.enabled: false` to force legacy network-only delivery.
 - If durable storage initialization fails, the exporter logs the error and continues in network-only
@@ -176,10 +181,11 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
   metadata.
 - If token resolution returns no token, throws, or times out, live delivery attempts to persist the
   record for replay and replay releases the claim without extending the shared transmission backoff.
-- Storage is bounded by both age and capacity. The SDK sweeps stale temporary files, prunes expired
-  records, then evicts the oldest remaining pending or quarantined record until the new record fits
-  within `maxStorageBytes`; active temporary and leased files count against that bound and are not
-  evicted.
+- Storage is bounded by both age and capacity, scoped to the current process's own `app-<hash>`
+  partition (see above). The SDK sweeps stale temporary files, prunes expired records, then evicts
+  the oldest remaining pending or quarantined record until the new record fits within
+  `maxStorageBytes`; active temporary and leased files count against that bound and are not
+  evicted. `maxStorageBytes` is therefore a per-partition, not a global, limit.
 - Live delivery and replay share one `Retry-After` / exponential-backoff transmission gate. A
   retryable response pauses both immediate sends and replay probes until the gate reopens. The
   effective delay is capped at one hour.

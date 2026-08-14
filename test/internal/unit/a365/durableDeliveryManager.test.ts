@@ -2,11 +2,14 @@
 // Licensed under the MIT License.
 
 import { randomUUID } from "node:crypto";
+import * as fs from "node:fs/promises";
+import { join } from "node:path";
 import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import type { ILogger } from "../../../../src/a365/logging.js";
 import {
   DURABLE_RECORD_VERSION,
   DurableDeliveryManager,
+  PersistentStore,
   ResolvedDurableDeliveryOptions,
 } from "../../../../src/a365/exporter/durable/index.js";
 import type {
@@ -14,7 +17,6 @@ import type {
   ClaimedRecord,
   DeliveryAttempt,
   DurableRecordV1,
-  PersistentStore,
 } from "../../../../src/a365/exporter/durable/index.js";
 
 const managedInstances: DurableDeliveryManager[] = [];
@@ -241,14 +243,17 @@ describe("DurableDeliveryManager", () => {
     await firstSendStarted.promise;
 
     try {
-      assert.deepEqual(claimBatch.mock.calls, [[1]]);
+      assert.deepEqual(claimBatch.mock.calls, [[1, { excludeRecordIds: new Set() }]]);
       assert.deepEqual(pendingClaims, [second]);
     } finally {
       finishFirstSend.resolve({ kind: "success", correlationId: first.record.id });
       await flush;
     }
 
-    assert.deepEqual(claimBatch.mock.calls, [[1], [1]]);
+    assert.deepEqual(claimBatch.mock.calls, [
+      [1, { excludeRecordIds: new Set() }],
+      [1, { excludeRecordIds: new Set() }],
+    ]);
     assert.deepEqual(pendingClaims, []);
   });
 
@@ -267,11 +272,72 @@ describe("DurableDeliveryManager", () => {
 
     await manager.forceFlush();
 
-    assert.deepEqual(claimBatch.mock.calls, [[1]]);
+    assert.deepEqual(claimBatch.mock.calls, [[1, { excludeRecordIds: new Set() }]]);
     assert.deepEqual(
       release.mock.calls.map(([releasedClaim]) => releasedClaim),
       [claim],
     );
+  });
+
+  it("excludes a released token-unavailable record from later claims in the same real-store pass while later records are still delivered", async () => {
+    const root = join(
+      process.cwd(),
+      ".superpowers",
+      "sdd",
+      "durable-manager-test-artifacts",
+      randomUUID(),
+    );
+    await fs.mkdir(root, { recursive: true });
+
+    try {
+      const logger = makeLogger();
+      const store = await PersistentStore.create(
+        new ResolvedDurableDeliveryOptions({ enabled: true, storageDirectory: root }),
+        logger,
+      );
+
+      const now = Date.now();
+      const unavailable = makeRecord({ id: "token-unavailable-record", createdAt: now });
+      const deliverable = makeRecord({ id: "deliverable-record", createdAt: now + 1 });
+      await store.persist(unavailable);
+      await store.persist(deliverable);
+
+      const tokenCallCounts = new Map<string, number>();
+      const resolveToken = vi.fn(async (record: DurableRecordV1) => {
+        tokenCallCounts.set(record.id, (tokenCallCounts.get(record.id) ?? 0) + 1);
+        return record.id === unavailable.id ? null : "fresh-token";
+      });
+      const send = vi.fn(async (record: DurableRecordV1) => ({
+        kind: "success" as const,
+        correlationId: record.id,
+      }));
+
+      const manager = new DurableDeliveryManager(
+        new ResolvedDurableDeliveryOptions({
+          enabled: true,
+          maxReplayBatchSize: 5,
+          replayIntervalMilliseconds: 60_000,
+        }),
+        store,
+        logger,
+        { resolveToken, send },
+      );
+      managedInstances.push(manager);
+
+      await manager.forceFlush();
+
+      assert.strictEqual(tokenCallCounts.get(unavailable.id), 1);
+      assert.deepEqual(
+        send.mock.calls.map(([record]) => record.id),
+        [deliverable.id],
+      );
+
+      const remaining = await store.claimBatch(5);
+      assert.strictEqual(remaining.length, 1);
+      assert.strictEqual(remaining[0].record.id, unavailable.id);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("releases replay claims without sending while the transmission gate is backing off", async () => {
@@ -672,6 +738,42 @@ describe("DurableDeliveryManager", () => {
 
     assert.isDefined(capturedSignal);
     assert.isTrue(capturedSignal!.aborted);
+  });
+
+  it("aborts a hung replay token-resolution wait during shutdown, resolves within the shutdown deadline, releases the claim, and starts no later claim", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const { claimBatch, manager, release, resolveToken, send } = createManager({
+      options: {
+        tokenResolutionTimeoutMilliseconds: 60_000,
+        shutdownTimeoutMilliseconds: 25,
+      },
+    });
+    const claim = makeClaim(makeRecord({ id: "hung-replay-token" }));
+    const tokenResolutionStarted = deferred<void>();
+
+    claimBatch.mockResolvedValueOnce([claim]);
+    resolveToken.mockImplementationOnce(() => {
+      tokenResolutionStarted.resolve();
+      return new Promise<string | null>(() => undefined);
+    });
+
+    manager.startReplay();
+    await tokenResolutionStarted.promise;
+    await settle();
+
+    const shutdown = manager.shutdown();
+    await vi.advanceTimersByTimeAsync(25);
+
+    await expect(shutdown).resolves.toBeUndefined();
+
+    assert.strictEqual(claimBatch.mock.calls.length, 1);
+    assert.deepEqual(
+      release.mock.calls.map(([releasedClaim]) => releasedClaim),
+      [claim],
+    );
+    assert.strictEqual(send.mock.calls.length, 0);
   });
 });
 
