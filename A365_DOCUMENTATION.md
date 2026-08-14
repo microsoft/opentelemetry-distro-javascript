@@ -153,8 +153,8 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
 
 - Durable records are stored as plaintext JSON files. On POSIX, the SDK creates owner-only durable
   directories/files (`0700` / `0600`), rejects symlink roots, and requires the root to be owned by
-  the current user. Default POSIX storage probes `TMPDIR`, `/var/tmp`, and `os.tmpdir()` and
-  atomically creates one `a365-otel-durable-<uid>` leaf under each candidate; it does not create a
+  the current user. Default POSIX storage probes `TMPDIR`, `/var/tmp`, then `/tmp` and atomically
+  creates one `a365-otel-durable-<uid>` leaf under each candidate; it does not create a
   multi-directory SDK-owned tree under a shared temp directory. Windows defaults use the per-user
   `Microsoft/A365/otel-durable` location under the selected candidate and also reject a symlinked
   final root. On Windows, use a protected storage directory or persistent volume with owner-only
