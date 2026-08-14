@@ -65,27 +65,55 @@ describe("DurableDeliveryManager", () => {
     assert.strictEqual(persist.mock.calls.length, 2);
   });
 
-  it("treats missing live tokens as permanent but persists resolver exceptions", async () => {
-    const { manager, persist, resolveToken, send } = createManager();
-    resolveToken.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error("sts unavailable"));
+  it.each(["null", "throw", "timeout"] as const)(
+    "persists live records when token resolution %s without backing off later sends",
+    async (outcome) => {
+      if (outcome === "timeout") {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      }
 
-    assert.isFalse(await manager.deliver(makeRecord({ id: "missing-token" })));
-    assert.isTrue(await manager.deliver(makeRecord({ id: "resolver-error" })));
+      const { manager, persist, resolveToken, send } = createManager({
+        options: outcome === "timeout" ? { tokenResolutionTimeoutMilliseconds: 5 } : {},
+      });
 
-    assert.strictEqual(persist.mock.calls.length, 1);
-    assert.strictEqual(send.mock.calls.length, 0);
-  });
+      switch (outcome) {
+        case "null":
+          resolveToken.mockResolvedValueOnce(null);
+          break;
+        case "throw":
+          resolveToken.mockRejectedValueOnce(new Error("sts unavailable"));
+          break;
+        case "timeout":
+          resolveToken.mockImplementationOnce(() => new Promise<string | null>(() => undefined));
+          break;
+      }
 
-  it("persists live token resolution timeouts", async () => {
-    const { manager, persist, resolveToken, send } = createManager({
-      options: { tokenResolutionTimeoutMilliseconds: 5 },
-    });
-    resolveToken.mockImplementation(() => new Promise<string | null>(() => undefined));
+      const firstDelivery = manager.deliver(makeRecord({ id: `token-unavailable-${outcome}` }));
+      if (outcome === "timeout") {
+        await vi.advanceTimersByTimeAsync(5);
+      }
 
-    assert.isTrue(await manager.deliver(makeRecord({ id: "timeout" })));
-    assert.strictEqual(persist.mock.calls.length, 1);
-    assert.strictEqual(send.mock.calls.length, 0);
-  });
+      assert.isTrue(await firstDelivery);
+      assert.strictEqual(send.mock.calls.length, 0);
+      assert.strictEqual(persist.mock.calls.length, 1);
+
+      const persistedBeforeFollowUp = persist.mock.calls.length;
+      resolveToken.mockReset();
+      resolveToken.mockResolvedValueOnce("follow-up-token");
+      send.mockClear();
+      send.mockResolvedValueOnce({
+        kind: "success",
+        correlationId: `follow-up-${outcome}`,
+      });
+
+      assert.isTrue(await manager.deliver(makeRecord({ id: `follow-up-${outcome}` })));
+
+      assert.strictEqual(persist.mock.calls.length, persistedBeforeFollowUp);
+      assert.strictEqual(send.mock.calls.length, 1);
+      assert.strictEqual(send.mock.calls[0][0].id, `follow-up-${outcome}`);
+    },
+  );
 
   it("does not persist permanent live failures", async () => {
     const { manager, persist, send } = createManager();
@@ -272,7 +300,7 @@ describe("DurableDeliveryManager", () => {
     );
   });
 
-  it("allows only one half-open probe across live delivery and replay", async () => {
+  it("lets a live record take the half-open probe while replay token resolution is pending", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
 
@@ -309,20 +337,19 @@ describe("DurableDeliveryManager", () => {
 
     const flush = manager.forceFlush();
     await replayStarted.promise;
+    try {
+      const persistedBeforeLive = persist.mock.calls.length;
+      assert.isTrue(await manager.deliver(makeRecord({ id: "live-probe" })));
+      assert.strictEqual(persist.mock.calls.length, persistedBeforeLive);
+      assert.deepEqual(send.mock.calls.map(([record]) => record.id), ["live-probe"]);
+    } finally {
+      replayToken.resolve("replay-token");
+      await flush;
+    }
 
-    const persistedBeforeLive = persist.mock.calls.length;
-    const delivery = manager.deliver(makeRecord({ id: "live-probe" }));
-
-    assert.isTrue(await delivery);
-    assert.strictEqual(persist.mock.calls.length, persistedBeforeLive + 1);
-    assert.strictEqual(send.mock.calls.length, 0);
-
-    replayToken.resolve("replay-token");
-
-    await flush;
     assert.deepEqual(
       send.mock.calls.map(([record]) => record.id),
-      ["replay-probe"],
+      ["live-probe", "replay-probe"],
     );
   });
 
@@ -451,38 +478,79 @@ describe("DurableDeliveryManager", () => {
     ]);
   });
 
-  it("abandons half-open live probes when token resolution returns null", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+  it.each(["null", "throw", "timeout"] as const)(
+    "continues replay after token resolution %s without backing off later live delivery",
+    async (outcome) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
 
-    const { manager, persist, resolveToken, send } = createManager();
+      const { claimBatch, complete, manager, persist, release, resolveToken, send } =
+        createManager({
+          options: {
+            maxReplayBatchSize: 2,
+            ...(outcome === "timeout" ? { tokenResolutionTimeoutMilliseconds: 5 } : {}),
+          },
+        });
+      const first = makeClaim(makeRecord({ id: `${outcome}-first` }));
+      const second = makeClaim(makeRecord({ id: `${outcome}-second` }));
 
-    send.mockResolvedValueOnce({
-      kind: "retryable",
-      correlationId: "seed",
-      retryAfterMs: 60_000,
-    });
-    assert.isTrue(await manager.deliver(makeRecord({ id: "seed" })));
+      send.mockResolvedValueOnce({
+        kind: "retryable",
+        correlationId: "seed",
+        retryAfterMs: 60_000,
+      });
+      assert.isTrue(await manager.deliver(makeRecord({ id: "seed" })));
 
-    await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(60_000);
 
-    resolveToken.mockReset();
-    resolveToken.mockResolvedValueOnce(null).mockResolvedValueOnce("retry-token");
-    send.mockReset();
-    send.mockResolvedValueOnce({
-      kind: "success",
-      correlationId: "retry-token",
-    });
+      claimBatch.mockResolvedValueOnce([first]).mockResolvedValueOnce([second]);
+      resolveToken.mockReset();
+      switch (outcome) {
+        case "null":
+          resolveToken.mockResolvedValueOnce(null).mockResolvedValueOnce("second-token");
+          break;
+        case "throw":
+          resolveToken
+            .mockRejectedValueOnce(new Error("sts unavailable"))
+            .mockResolvedValueOnce("second-token");
+          break;
+        case "timeout":
+          resolveToken
+            .mockImplementationOnce(() => new Promise<string | null>(() => undefined))
+            .mockResolvedValueOnce("second-token");
+          break;
+      }
+      send.mockReset();
+      send.mockResolvedValue({
+        kind: "success",
+        correlationId: "success",
+      });
 
-    assert.isFalse(await manager.deliver(makeRecord({ id: "null-probe" })));
+      const flush = manager.forceFlush();
+      if (outcome === "timeout") {
+        await vi.advanceTimersByTimeAsync(5);
+      }
+      await flush;
 
-    const persistedBeforeRetry = persist.mock.calls.length;
-    assert.isTrue(await manager.deliver(makeRecord({ id: "retry-after-null" })));
+      assert.deepEqual(release.mock.calls.map(([claim]) => claim.record.id), [first.record.id]);
+      assert.deepEqual(complete.mock.calls.map(([claim]) => claim.record.id), [second.record.id]);
+      assert.deepEqual(send.mock.calls.map(([record]) => record.id), [second.record.id]);
 
-    assert.strictEqual(persist.mock.calls.length, persistedBeforeRetry);
-    assert.strictEqual(send.mock.calls.length, 1);
-    assert.strictEqual(send.mock.calls[0][0].id, "retry-after-null");
-  });
+      const persistedBeforeLive = persist.mock.calls.length;
+      resolveToken.mockReset();
+      resolveToken.mockResolvedValueOnce("live-token");
+      send.mockClear();
+      send.mockResolvedValueOnce({
+        kind: "success",
+        correlationId: `live-after-${outcome}`,
+      });
+
+      assert.isTrue(await manager.deliver(makeRecord({ id: `live-after-${outcome}` })));
+
+      assert.strictEqual(persist.mock.calls.length, persistedBeforeLive);
+      assert.deepEqual(send.mock.calls.map(([record]) => record.id), [`live-after-${outcome}`]);
+    },
+  );
 
   it("waits for active live work before forceFlush starts a replay pass", async () => {
     const { claimBatch, manager, send } = createManager();

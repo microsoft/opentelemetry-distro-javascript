@@ -385,6 +385,8 @@ Operational notes:
 - Durable delivery is at-least-once. If a retryable request succeeds immediately before a crash or
   after replay, duplicates are possible and receivers must be idempotent.
 - Every replay attempt and `forceFlush()` pass resolves a fresh token instead of reusing a stored one.
+- If token resolution returns no token, throws, or times out, live delivery attempts to persist the
+  record for replay and replay releases the claim without extending the shared transmission backoff.
 - Storage is bounded by both `maxStorageBytes` and `maxRecordAgeMilliseconds`; expired records are
   pruned first, then the oldest retained records are evicted until the new record fits.
 - Live delivery and replay share the same `Retry-After` / exponential-backoff transmission gate, so

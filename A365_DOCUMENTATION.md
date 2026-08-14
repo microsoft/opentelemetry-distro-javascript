@@ -162,6 +162,8 @@ set `enableObservabilityExporter: true` alongside `a365.enabled: true`.
   shutdown race, so downstream consumers must tolerate duplicates.
 - Replay and `forceFlush()` resolve a fresh token for each send attempt; durable files do not store
   bearer tokens.
+- If token resolution returns no token, throws, or times out, live delivery attempts to persist the
+  record for replay and replay releases the claim without extending the shared transmission backoff.
 - Storage is bounded by both age and capacity. The SDK sweeps stale temporary files, prunes expired
   records, then evicts the oldest remaining pending or quarantined record until the new record fits
   within `maxStorageBytes`; active temporary and leased files count against that bound and are not

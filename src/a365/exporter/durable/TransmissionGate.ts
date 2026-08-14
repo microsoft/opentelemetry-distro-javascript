@@ -22,6 +22,13 @@ export class TransmissionGate {
     } = {},
   ) {}
 
+  canAcquire(): boolean {
+    const currentTime = this.now();
+    if (currentTime < this.blockedUntil) return false;
+    if (this.blockedUntil > 0 && this.probeInFlight) return false;
+    return true;
+  }
+
   acquire(): TransmissionPermit | undefined {
     const currentTime = this.now();
     if (currentTime < this.blockedUntil) return undefined;

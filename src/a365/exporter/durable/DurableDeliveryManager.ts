@@ -19,7 +19,7 @@ export interface DurableDeliveryDependencies {
 
 type GateDecision =
   | { kind: "deferred" }
-  | { kind: "abandoned" }
+  | { kind: "tokenUnavailable"; error?: unknown }
   | { kind: "success" }
   | { kind: "permanent" }
   | { kind: "retryable"; error?: unknown };
@@ -118,8 +118,18 @@ export class DurableDeliveryManager {
     if (decision.kind === "success") {
       return true;
     }
-    if (decision.kind === "permanent" || decision.kind === "abandoned") {
+    if (decision.kind === "permanent") {
       return false;
+    }
+    if (decision.kind === "tokenUnavailable") {
+      if (decision.error !== undefined) {
+        this.logger.warn(
+          "[DurableDeliveryManager] Live token resolution failed; persisting durable record for replay",
+          decision.error,
+        );
+      }
+
+      return this.persist(record);
     }
     if (decision.kind === "retryable" && decision.error !== undefined) {
       this.logger.warn(
@@ -184,6 +194,17 @@ export class DurableDeliveryManager {
     const decision = await this.attemptSend(claim.record);
     if (decision.kind === "success" || decision.kind === "permanent") {
       await this.completeClaim(claim);
+      return true;
+    }
+    if (decision.kind === "tokenUnavailable") {
+      if (decision.error !== undefined) {
+        this.logger.warn(
+          "[DurableDeliveryManager] Replay token resolution failed; releasing durable record",
+          decision.error,
+        );
+      }
+
+      await this.releaseClaim(claim);
       return true;
     }
     if (decision.kind === "retryable" && decision.error !== undefined) {
@@ -259,22 +280,31 @@ export class DurableDeliveryManager {
   }
 
   private async attemptSend(record: DurableRecordV1): Promise<GateDecision> {
+    if (!this.gate.canAcquire()) {
+      return { kind: "deferred" };
+    }
+
+    let token: string | null;
+    try {
+      token = await this.withTimeout(
+        this.dependencies.resolveToken(record),
+        this.options.tokenResolutionTimeoutMilliseconds,
+        "token resolution",
+      );
+    } catch (error) {
+      return { kind: "tokenUnavailable", error };
+    }
+
+    if (!token) {
+      return { kind: "tokenUnavailable" };
+    }
+
     const permit = this.gate.acquire();
     if (!permit) {
       return { kind: "deferred" };
     }
 
     try {
-      const token = await this.withTimeout(
-        this.dependencies.resolveToken(record),
-        this.options.tokenResolutionTimeoutMilliseconds,
-        "token resolution",
-      );
-      if (!token) {
-        this.gate.abandon(permit);
-        return { kind: "abandoned" };
-      }
-
       const attempt = await this.dependencies.send(record, token, this.abortController.signal);
       return this.classifyAttempt(permit, attempt);
     } catch (error) {
