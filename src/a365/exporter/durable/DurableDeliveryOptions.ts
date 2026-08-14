@@ -33,7 +33,7 @@ export class ResolvedDurableDeliveryOptions {
   public readonly tokenResolutionTimeoutMilliseconds: number;
 
   constructor(options?: Agent365DurableDeliveryOptions) {
-    this.enabled = options?.enabled ?? false;
+    this.enabled = options?.enabled ?? true;
     this.storageDirectory = options?.storageDirectory;
     this.maxStorageBytes = positive(
       "maxStorageBytes",

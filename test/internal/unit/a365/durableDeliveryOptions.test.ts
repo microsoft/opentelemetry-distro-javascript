@@ -8,10 +8,10 @@ import {
 } from "../../../../src/a365/exporter/durable/index.js";
 
 describe("ResolvedDurableDeliveryOptions", () => {
-  it("is disabled by default and applies bounded defaults", () => {
+  it("is enabled by default and applies bounded defaults", () => {
     const options = new ResolvedDurableDeliveryOptions();
 
-    assert.isFalse(options.enabled);
+    assert.isTrue(options.enabled);
     assert.strictEqual(options.maxStorageBytes, DEFAULT_DURABLE_STORAGE_BYTES);
     assert.strictEqual(options.maxRecordAgeMilliseconds, 2 * 24 * 60 * 60 * 1000);
     assert.strictEqual(options.replayIntervalMilliseconds, 2 * 60 * 1000);
@@ -19,6 +19,10 @@ describe("ResolvedDurableDeliveryOptions", () => {
     assert.strictEqual(options.leaseDurationMilliseconds, 2 * 60 * 1000);
     assert.strictEqual(options.shutdownTimeoutMilliseconds, 10_000);
     assert.strictEqual(options.tokenResolutionTimeoutMilliseconds, 30_000);
+  });
+
+  it("supports explicit disable", () => {
+    assert.isFalse(new ResolvedDurableDeliveryOptions({ enabled: false }).enabled);
   });
 
   it("rejects non-positive limits", () => {

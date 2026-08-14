@@ -2,13 +2,14 @@
 // Licensed under the MIT License.
 
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ExportResultCode } from "@opentelemetry/core";
 import { SpanKind, SpanStatusCode, TraceFlags } from "@opentelemetry/api";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
 import { Agent365Exporter } from "../../../../src/a365/exporter/Agent365Exporter.js";
+import { PersistentStore } from "../../../../src/a365/exporter/durable/index.js";
 import {
   partitionByIdentity,
   parseIdentityKey,
@@ -63,12 +64,24 @@ function makeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
 }
 
 /** Helper: export a single span and return the parsed payload attributes. */
+function createTestExporter(
+  options: ConstructorParameters<typeof Agent365Exporter>[0] = {},
+): Agent365Exporter {
+  return new Agent365Exporter({
+    ...options,
+    durableDelivery: {
+      enabled: false,
+      ...options.durableDelivery,
+    },
+  });
+}
+
 async function exportAndGetPayload(
   fetchSpy: ReturnType<typeof vi.fn>,
   attrs: Record<string, unknown>,
   exporterOptions?: ConstructorParameters<typeof Agent365Exporter>[0],
 ) {
-  const exporter = new Agent365Exporter({
+  const exporter = createTestExporter({
     tokenResolver: () => "tok",
     ...exporterOptions,
   });
@@ -136,7 +149,7 @@ describe("Agent365Exporter", () => {
 
   describe("export", () => {
     it("should return success immediately with no spans", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -149,7 +162,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should export spans successfully", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -171,7 +184,7 @@ describe("Agent365Exporter", () => {
 
     it("should use provided token resolver and set authorization header", async () => {
       const token = "abc123";
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => token,
       });
 
@@ -201,7 +214,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should use async token resolver", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: async () => "async-token",
       });
 
@@ -215,7 +228,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should export to default prod endpoint", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok-prod",
       });
 
@@ -229,7 +242,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should use S2S endpoint when configured", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
         useS2SEndpoint: true,
       });
@@ -244,7 +257,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should use S2S endpoint with domain override", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok-s2s-custom",
         useS2SEndpoint: true,
         domainOverride: "https://custom.domain",
@@ -262,7 +275,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should use domain override when configured", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
         domainOverride: "https://custom.example.com",
       });
@@ -276,7 +289,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should skip export when no token resolver", async () => {
-      const exporter = new Agent365Exporter({});
+      const exporter = createTestExporter({});
 
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
@@ -287,7 +300,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should skip spans missing identity attributes", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -301,7 +314,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should skip spans missing only tenant ID", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -315,7 +328,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should skip spans missing only agent ID", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -329,7 +342,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should fail after shutdown", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -343,7 +356,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should be idempotent on multiple shutdown calls", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -358,7 +371,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should support forceFlush as a no-op", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
       // Should not throw
@@ -366,7 +379,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should build correct OTLP payload", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -435,7 +448,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should partition spans by identity and export separately", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -472,7 +485,7 @@ describe("Agent365Exporter", () => {
         ],
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       await new Promise<void>((resolve) => {
         exporter.export([span], () => resolve());
       });
@@ -498,7 +511,7 @@ describe("Agent365Exporter", () => {
         ],
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       await new Promise<void>((resolve) => {
         exporter.export([span], () => resolve());
       });
@@ -518,7 +531,7 @@ describe("Agent365Exporter", () => {
         },
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       await new Promise<void>((resolve) => {
         exporter.export([span], () => resolve());
       });
@@ -532,7 +545,7 @@ describe("Agent365Exporter", () => {
       const customTimeout = 12345;
       const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
 
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok",
         httpRequestTimeoutMilliseconds: customTimeout,
       });
@@ -553,7 +566,7 @@ describe("Agent365Exporter", () => {
       };
       configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       await new Promise<void>((resolve) => {
         exporter.export([makeSpan()], () => resolve());
       });
@@ -590,7 +603,7 @@ describe("Agent365Exporter", () => {
       };
       configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -616,7 +629,7 @@ describe("Agent365Exporter", () => {
 
   describe("late-configured logger", () => {
     it("should emit event logs when logger is configured after exporter construction", async () => {
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
 
       const customLogger = {
         info: vi.fn(),
@@ -666,7 +679,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -694,7 +707,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -719,7 +732,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -738,7 +751,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -757,7 +770,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -779,7 +792,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -796,7 +809,7 @@ describe("Agent365Exporter", () => {
         }),
       );
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -835,7 +848,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -877,7 +890,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -925,7 +938,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -965,7 +978,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -981,7 +994,7 @@ describe("Agent365Exporter", () => {
   });
 
   it("exports ApplyGuardrailScope span with all guardrail attributes and finding event", async () => {
-    const exporter = new Agent365Exporter({
+    const exporter = createTestExporter({
       tokenResolver: () => "tok-guardrail",
     });
 
@@ -1081,7 +1094,7 @@ describe("Agent365Exporter", () => {
 
   describe("getBufferConfig", () => {
     it("returns the A365 exporter defaults when no batching options are supplied", () => {
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       assert.deepStrictEqual(exporter.getBufferConfig(), {
         maxQueueSize: 2048,
         scheduledDelayMillis: 5000,
@@ -1091,7 +1104,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("honors caller-supplied values while keeping A365 defaults for the rest", () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok",
         maxQueueSize: 4096,
       });
@@ -1104,7 +1117,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("maps every supported A365 option to the corresponding BufferConfig key", () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok",
         maxQueueSize: 4096,
         scheduledDelayMilliseconds: 1234,
@@ -1120,7 +1133,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("returns an independent object on each call so callers cannot mutate internal state", () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok",
         maxQueueSize: 4096,
       });
@@ -1139,7 +1152,7 @@ describe("Agent365Exporter", () => {
       notifyRequestStarted!();
       return new Promise(() => undefined);
     });
-    const exporter = new Agent365Exporter({
+    const exporter = createTestExporter({
       tokenResolver: () => "token",
       durableDelivery: { enabled: false, shutdownTimeoutMilliseconds: 5 },
     });
@@ -1367,19 +1380,34 @@ describe("Agent365Exporter", () => {
       await expect(getDurableManager.call(exporter)).rejects.toThrow(/shut down/);
     });
 
-    it("surfaces durable store initialization failures without poisoning flush or shutdown", async () => {
-      const directory = await createStorageDirectory();
-      const invalidStoragePath = join(directory, "not-a-directory");
-      await writeFile(invalidStoragePath, "not a directory");
+    it("falls back to network delivery when durable initialization fails and the export succeeds", async () => {
+      vi.spyOn(PersistentStore, "create").mockRejectedValue(new Error("disk unavailable"));
       const exporter = new Agent365Exporter({
         tokenResolver: () => "token",
-        durableDelivery: { enabled: true, storageDirectory: invalidStoragePath },
+        durableDelivery: { enabled: true },
       });
 
       const result = exportResult(exporter, [makeSpan()]);
       await exporter.forceFlush();
 
-      assert.strictEqual(await result, ExportResultCode.FAILED);
+      assert.strictEqual(await result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      await exporter.shutdown();
+    });
+
+    it("fails retryable exports when durable initialization fails and records cannot be persisted", async () => {
+      vi.spyOn(PersistentStore, "create").mockRejectedValue(new Error("disk unavailable"));
+      fetchSpy.mockResolvedValue({
+        status: 503,
+        headers: new Headers(),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true },
+      });
+
+      assert.strictEqual(await exportResult(exporter, [makeSpan()]), ExportResultCode.FAILED);
+      assert.isAtLeast(fetchSpy.mock.calls.length, 1);
       await exporter.shutdown();
     });
 

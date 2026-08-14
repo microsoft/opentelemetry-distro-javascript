@@ -254,11 +254,31 @@ export class Agent365Exporter implements SpanExporter {
       );
     }
 
-    if (this.options.durableDelivery.enabled) {
-      await this.exportDurableGroup(tenantId, agentId, spans, chunks, resourceAttrs, start);
+    const durableManager = await this.getDurableManager();
+    if (durableManager) {
+      await this.exportDurableGroup(
+        durableManager,
+        tenantId,
+        agentId,
+        spans,
+        chunks,
+        resourceAttrs,
+        start,
+      );
       return;
     }
 
+    await this.exportNetworkGroup(tenantId, agentId, spans, chunks, resourceAttrs, start);
+  }
+
+  private async exportNetworkGroup(
+    tenantId: string,
+    agentId: string,
+    spans: ReadableSpan[],
+    chunks: MappedSpan[][],
+    resourceAttrs: Record<string, unknown>,
+    start: number,
+  ): Promise<void> {
     const url = buildAgent365Url({
       tenantId,
       agentId,
@@ -325,6 +345,7 @@ export class Agent365Exporter implements SpanExporter {
   }
 
   private async exportDurableGroup(
+    manager: DurableDeliveryManager,
     tenantId: string,
     agentId: string,
     spans: ReadableSpan[],
@@ -332,20 +353,6 @@ export class Agent365Exporter implements SpanExporter {
     resourceAttrs: Record<string, unknown>,
     start: number,
   ): Promise<void> {
-    let manager: DurableDeliveryManager;
-    try {
-      manager = await this.getDurableManager();
-    } catch (error) {
-      this.logExporterEvent(
-        ExporterEventNames.EXPORT_GROUP,
-        false,
-        Date.now() - start,
-        "durable delivery initialization failed",
-        { tenantId, agentId },
-      );
-      throw error;
-    }
-
     const agenticUserId = this.getAgenticUserId(spans);
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
@@ -426,9 +433,13 @@ export class Agent365Exporter implements SpanExporter {
       : undefined;
   }
 
-  private async getDurableManager(): Promise<DurableDeliveryManager> {
+  private async getDurableManager(): Promise<DurableDeliveryManager | undefined> {
     if (this.closed) {
       throw new Error("Agent365 durable delivery has shut down");
+    }
+
+    if (!this.options.durableDelivery.enabled) {
+      return undefined;
     }
 
     await this.startDurableInitialization();
@@ -437,9 +448,7 @@ export class Agent365Exporter implements SpanExporter {
     }
 
     if (this.durableInitializationFailed) {
-      throw new Error("Agent365 durable delivery initialization failed", {
-        cause: this.durableInitializationError,
-      });
+      return undefined;
     }
 
     throw new Error("Agent365 durable delivery initialization did not create a manager");
