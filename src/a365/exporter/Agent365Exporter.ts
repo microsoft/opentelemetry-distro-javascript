@@ -779,16 +779,24 @@ export class Agent365Exporter implements SpanExporter {
     const deadline = Date.now() + this.options.durableDelivery.shutdownTimeoutMilliseconds;
 
     try {
-      await this.waitForActiveExports(deadline);
+      await this.waitForActiveExports(deadline, "waiting for accepted exports to settle");
 
       if (!this.options.durableDelivery.enabled) {
         return;
       }
 
-      await this.waitForWithinShutdownDeadline(this.startDurableInitialization(), deadline);
+      await this.waitForWithinShutdownDeadline(
+        this.startDurableInitialization(),
+        deadline,
+        "starting durable delivery",
+      );
       this.durableManager?.beginShutdown();
       if (this.durableManager) {
-        await this.waitForWithinShutdownDeadline(this.durableManager.shutdown(), deadline);
+        await this.waitForWithinShutdownDeadline(
+          this.durableManager.shutdown(),
+          deadline,
+          "waiting for durable delivery manager shutdown",
+        );
       }
     } finally {
       this.shutdownFinalized = true;
@@ -798,7 +806,10 @@ export class Agent365Exporter implements SpanExporter {
     }
   }
 
-  private async waitForActiveExports(deadline = Number.POSITIVE_INFINITY): Promise<void> {
+  private async waitForActiveExports(
+    deadline = Number.POSITIVE_INFINITY,
+    operationName = "waiting for accepted exports to settle",
+  ): Promise<void> {
     while (this.activeExports.size > 0) {
       if (deadline === Number.POSITIVE_INFINITY) {
         await Promise.allSettled([...this.activeExports]);
@@ -808,6 +819,7 @@ export class Agent365Exporter implements SpanExporter {
       await this.waitForWithinShutdownDeadline(
         Promise.allSettled([...this.activeExports]).then(() => undefined),
         deadline,
+        operationName,
       );
     }
   }
@@ -815,10 +827,12 @@ export class Agent365Exporter implements SpanExporter {
   private async waitForWithinShutdownDeadline<T>(
     operation: Promise<T>,
     deadline: number,
+    operationName: string,
   ): Promise<T> {
+    const timeoutMessage = `Agent365 exporter shutdown timed out while ${operationName}`;
     const remainingMilliseconds = deadline - Date.now();
     if (remainingMilliseconds <= 0) {
-      throw new Error("Agent365 durable delivery shutdown timed out");
+      throw new Error(timeoutMessage);
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -827,7 +841,7 @@ export class Agent365Exporter implements SpanExporter {
         operation,
         new Promise<T>((_resolve, reject) => {
           timer = setTimeout(
-            () => reject(new Error("Agent365 durable delivery shutdown timed out")),
+            () => reject(new Error(timeoutMessage)),
             remainingMilliseconds,
           );
           timer.unref?.();

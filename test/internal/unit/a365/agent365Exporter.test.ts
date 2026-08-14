@@ -1230,11 +1230,21 @@ describe("Agent365Exporter", () => {
       const result = exportResult(exporter, [makeSpan()]);
       await requestStarted;
 
-      const shutdown = exporter.shutdown();
-      const shutdownRejection = expect(shutdown).rejects.toThrow(/shutdown timed out/);
+      const shutdown = exporter.shutdown().then(
+        () => ({ status: "resolved" as const }),
+        (error) => ({ status: "rejected" as const, error }),
+      );
       await vi.advanceTimersByTimeAsync(5);
 
-      await shutdownRejection;
+      const shutdownResult = await shutdown;
+      assert.strictEqual(shutdownResult.status, "rejected");
+      if (shutdownResult.status !== "rejected") {
+        assert.fail("Expected shutdown to reject");
+      }
+      assert.instanceOf(shutdownResult.error, Error);
+      assert.match(shutdownResult.error.message, /exporter shutdown timed out/i);
+      assert.match(shutdownResult.error.message, /accepted exports to settle/i);
+      assert.notInclude(shutdownResult.error.message, "durable delivery");
 
       resolveFetch!({ status: 200, headers: new Headers() });
       await expect(result).resolves.toBe(ExportResultCode.SUCCESS);
