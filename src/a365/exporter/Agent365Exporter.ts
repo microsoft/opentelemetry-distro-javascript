@@ -529,7 +529,7 @@ export class Agent365Exporter implements SpanExporter {
         return { kind: "success", correlationId };
       }
       if (
-        [408, 429].includes(response.status) ||
+        [401, 408, 429].includes(response.status) ||
         (response.status >= 500 && response.status < 600)
       ) {
         return {

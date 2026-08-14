@@ -53,8 +53,10 @@ export class TransmissionGate {
     this.consecutiveFailures++;
 
     const currentTime = this.now();
-    const fallback = this.computeFallbackDelay();
-    const delayMs = Math.min(MAX_FALLBACK_DELAY_MS, Math.max(retryAfterMs ?? 0, fallback));
+    const delayMs =
+      retryAfterMs !== undefined && retryAfterMs > 0
+        ? Math.min(MAX_FALLBACK_DELAY_MS, retryAfterMs)
+        : this.computeFallbackDelay();
     this.blockedUntil = currentTime + delayMs;
   }
 

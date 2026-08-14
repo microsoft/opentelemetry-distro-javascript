@@ -31,7 +31,7 @@ describe("DurableDeliveryManager", () => {
     vi.restoreAllMocks();
   });
 
-  it.each([408, 429, 500, 503])(
+  it.each([401, 408, 429, 500, 503])(
     "persists retryable live attempts for status %s",
     async (status) => {
       const { manager, persist, send } = createManager();

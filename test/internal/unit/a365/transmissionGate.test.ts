@@ -78,6 +78,22 @@ describe("TransmissionGate", () => {
     assert.isDefined(gate.acquire());
   });
 
+  it("honors a positive Retry-After shorter than the fallback", () => {
+    let now = 0;
+    const gate = new TransmissionGate({ now: () => now, random: () => 0 });
+    const permit = gate.acquire();
+
+    assert.isDefined(permit);
+
+    gate.recordRetryableFailure(permit!, 1_000);
+
+    now = 999;
+    assert.isUndefined(gate.acquire());
+
+    now = 1_000;
+    assert.isDefined(gate.acquire());
+  });
+
   it("always uses the injected clock when acquiring", () => {
     let now = 0;
     const gate = new TransmissionGate({ now: () => now, random: () => 0 });

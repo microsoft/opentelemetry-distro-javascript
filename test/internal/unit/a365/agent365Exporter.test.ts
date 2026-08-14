@@ -1185,6 +1185,26 @@ describe("Agent365Exporter", () => {
       await exporter.shutdown();
     });
 
+    it("persists a durable record after an HTTP 401 response", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValue({
+        status: 401,
+        headers: new Headers(),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "durable-token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+      const pending = (await readdir(directory)).filter((name) => name.endsWith(".pending"));
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      assert.strictEqual(pending.length, 1);
+      await exporter.shutdown();
+    });
+
     it("persists one durable record for each serialized chunk", async () => {
       const directory = await createStorageDirectory();
       fetchSpy.mockResolvedValue({
