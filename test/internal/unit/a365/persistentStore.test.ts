@@ -355,7 +355,10 @@ describe("PersistentStore", () => {
   it("tolerates consecutive disappeared file scans when storage has capacity", async () => {
     const root = join(scratchRoot, "disappearing-scan-store");
     const store = await createStore(root);
-    const disappearingPath = join(explicitStorageRoot(root), `${Date.now()}-${randomUUID()}.pending`);
+    const disappearingPath = join(
+      explicitStorageRoot(root),
+      `${Date.now()}-${randomUUID()}.pending`,
+    );
     await fs.writeFile(disappearingPath, "disappearing bytes", "utf8");
 
     disappearingFileScan.path = disappearingPath;
@@ -564,9 +567,7 @@ describe("PersistentStore", () => {
 
     const pendingFiles = (await listStoreFiles(root)).filter((file) => file.endsWith(".pending"));
     const retainedBytes = await Promise.all(
-      pendingFiles.map(
-        async (file) => (await fs.stat(join(explicitStorageRoot(root), file))).size,
-      ),
+      pendingFiles.map(async (file) => (await fs.stat(join(explicitStorageRoot(root), file))).size),
     );
     assert.strictEqual(pendingFiles.length, 1);
     assert.isAtMost(

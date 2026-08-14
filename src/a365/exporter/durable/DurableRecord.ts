@@ -37,9 +37,7 @@ type DurableRecordV1CreateInput = Omit<DurableRecordV1, "version" | "id" | "crea
   domainOverride?: string;
 };
 
-export function createDurableRecord(
-  input: DurableRecordV1CreateInput,
-): DurableRecordV1 {
+export function createDurableRecord(input: DurableRecordV1CreateInput): DurableRecordV1 {
   return {
     version: DURABLE_RECORD_VERSION,
     id: randomUUID(),

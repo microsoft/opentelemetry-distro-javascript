@@ -341,7 +341,10 @@ describe("DurableDeliveryManager", () => {
       const persistedBeforeLive = persist.mock.calls.length;
       assert.isTrue(await manager.deliver(makeRecord({ id: "live-probe" })));
       assert.strictEqual(persist.mock.calls.length, persistedBeforeLive);
-      assert.deepEqual(send.mock.calls.map(([record]) => record.id), ["live-probe"]);
+      assert.deepEqual(
+        send.mock.calls.map(([record]) => record.id),
+        ["live-probe"],
+      );
     } finally {
       replayToken.resolve("replay-token");
       await flush;
@@ -484,13 +487,14 @@ describe("DurableDeliveryManager", () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
 
-      const { claimBatch, complete, manager, persist, release, resolveToken, send } =
-        createManager({
+      const { claimBatch, complete, manager, persist, release, resolveToken, send } = createManager(
+        {
           options: {
             maxReplayBatchSize: 2,
             ...(outcome === "timeout" ? { tokenResolutionTimeoutMilliseconds: 5 } : {}),
           },
-        });
+        },
+      );
       const first = makeClaim(makeRecord({ id: `${outcome}-first` }));
       const second = makeClaim(makeRecord({ id: `${outcome}-second` }));
 
@@ -532,9 +536,18 @@ describe("DurableDeliveryManager", () => {
       }
       await flush;
 
-      assert.deepEqual(release.mock.calls.map(([claim]) => claim.record.id), [first.record.id]);
-      assert.deepEqual(complete.mock.calls.map(([claim]) => claim.record.id), [second.record.id]);
-      assert.deepEqual(send.mock.calls.map(([record]) => record.id), [second.record.id]);
+      assert.deepEqual(
+        release.mock.calls.map(([claim]) => claim.record.id),
+        [first.record.id],
+      );
+      assert.deepEqual(
+        complete.mock.calls.map(([claim]) => claim.record.id),
+        [second.record.id],
+      );
+      assert.deepEqual(
+        send.mock.calls.map(([record]) => record.id),
+        [second.record.id],
+      );
 
       const persistedBeforeLive = persist.mock.calls.length;
       resolveToken.mockReset();
@@ -548,7 +561,10 @@ describe("DurableDeliveryManager", () => {
       assert.isTrue(await manager.deliver(makeRecord({ id: `live-after-${outcome}` })));
 
       assert.strictEqual(persist.mock.calls.length, persistedBeforeLive);
-      assert.deepEqual(send.mock.calls.map(([record]) => record.id), [`live-after-${outcome}`]);
+      assert.deepEqual(
+        send.mock.calls.map(([record]) => record.id),
+        [`live-after-${outcome}`],
+      );
     },
   );
 

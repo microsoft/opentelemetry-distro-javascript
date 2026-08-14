@@ -840,10 +840,7 @@ export class Agent365Exporter implements SpanExporter {
       return await Promise.race([
         operation,
         new Promise<T>((_resolve, reject) => {
-          timer = setTimeout(
-            () => reject(new Error(timeoutMessage)),
-            remainingMilliseconds,
-          );
+          timer = setTimeout(() => reject(new Error(timeoutMessage)), remainingMilliseconds);
           timer.unref?.();
         }),
       ]);

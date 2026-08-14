@@ -120,7 +120,9 @@ function durableStorageRoot(directory: string): string {
 
 async function durablePendingFiles(directory: string): Promise<string[]> {
   try {
-    return (await readdir(durableStorageRoot(directory))).filter((name) => name.endsWith(".pending"));
+    return (await readdir(durableStorageRoot(directory))).filter((name) =>
+      name.endsWith(".pending"),
+    );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return [];
@@ -133,7 +135,11 @@ async function durablePendingCount(directory: string): Promise<number> {
   return (await durablePendingFiles(directory)).length;
 }
 
-async function seedDurablePendingRecord(directory: string, fileName: string, contents: string): Promise<void> {
+async function seedDurablePendingRecord(
+  directory: string,
+  fileName: string,
+  contents: string,
+): Promise<void> {
   await mkdir(durableStorageRoot(directory), { recursive: true });
   await writeFile(join(durableStorageRoot(directory), fileName), contents, "utf8");
 }
