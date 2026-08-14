@@ -90,6 +90,19 @@ describe("DurableRecord", () => {
     );
   });
 
+  it.each(["1e309", "9007199254740992", "1.5", "-1"])(
+    "rejects an invalid durable record timestamp: %s",
+    (createdAt) => {
+      assert.throws(
+        () =>
+          parseDurableRecord(
+            `{"version":${DURABLE_RECORD_VERSION},"id":"record-id","createdAt":${createdAt},"tenantId":"tenant","agentId":"agent","useS2SEndpoint":false,"body":"{}"}`,
+          ),
+        /Invalid durable record/,
+      );
+    },
+  );
+
   it("accepts an id at the safe length bound for the durable lease filename format", () => {
     const id = "a".repeat(128);
     const parsed = parseDurableRecord(

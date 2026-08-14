@@ -72,7 +72,7 @@ export function parseDurableRecord(text: string): DurableRecordV1 {
 
   if (
     !isSafeDurableRecordId(value.id) ||
-    typeof value.createdAt !== "number" ||
+    !isValidCreatedAt(value.createdAt) ||
     typeof value.tenantId !== "string" ||
     typeof value.agentId !== "string" ||
     typeof value.useS2SEndpoint !== "boolean" ||
@@ -115,6 +115,10 @@ function isSafeDurableRecordId(value: unknown): value is string {
     value.length <= MAX_DURABLE_RECORD_ID_LENGTH &&
     SAFE_DURABLE_RECORD_ID_PATTERN.test(value)
   );
+}
+
+function isValidCreatedAt(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isClusterCategory(value: unknown): value is ClusterCategory {
