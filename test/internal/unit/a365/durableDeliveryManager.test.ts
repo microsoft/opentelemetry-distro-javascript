@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { setMaxListeners } from "node:events";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
@@ -29,6 +30,7 @@ describe("DurableDeliveryManager", () => {
         .shutdown()
         .catch(() => undefined);
     }
+    vi.unstubAllGlobals();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -654,6 +656,49 @@ describe("DurableDeliveryManager", () => {
     assert.strictEqual(claimBatch.mock.calls.length, 1);
   });
 
+  it("does not emit MaxListenersExceededWarning when more than ten live token resolutions share the manager abort signal", async () => {
+    const emitWarning = vi.spyOn(process, "emitWarning");
+    const concurrency = 12;
+    vi.stubGlobal(
+      "AbortController",
+      class extends AbortController {
+        constructor() {
+          super();
+          setMaxListeners(10, this.signal);
+        }
+      },
+    );
+    const { manager, persist, resolveToken, send } = createManager({
+      options: {
+        tokenResolutionTimeoutMilliseconds: 60_000,
+        shutdownTimeoutMilliseconds: 250,
+      },
+    });
+    const allStarted = deferred<void>();
+    let startedCount = 0;
+
+    resolveToken.mockImplementation(() => {
+      startedCount += 1;
+      if (startedCount === concurrency) {
+        allStarted.resolve();
+      }
+      return new Promise<string | null>(() => undefined);
+    });
+
+    const deliveries = Array.from({ length: concurrency }, (_, index) =>
+      manager.deliver(makeRecord({ id: `fanout-${index}` })),
+    );
+
+    await allStarted.promise;
+    await settle();
+    await manager.shutdown();
+
+    assert.isFalse(emitWarning.mock.calls.some((call) => containsMaxListenersWarning(call)));
+    assert.strictEqual(send.mock.calls.length, 0);
+    assert.strictEqual(persist.mock.calls.length, concurrency);
+    assert.deepEqual(await Promise.all(deliveries), Array(concurrency).fill(true));
+  });
+
   it("schedules the replay timer with unref", async () => {
     const originalSetTimeout = globalThis.setTimeout;
     const unref = vi.fn();
@@ -866,4 +911,18 @@ function deferred<T>() {
 async function settle(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function containsMaxListenersWarning(args: unknown[]): boolean {
+  return args.some((arg) => {
+    if (arg instanceof Error) {
+      return arg.name === "MaxListenersExceededWarning";
+    }
+    return (
+      typeof arg === "string" &&
+      (arg.includes("MaxListenersExceededWarning") ||
+        arg.includes("Possible EventTarget memory leak detected") ||
+        arg.includes("Possible EventEmitter memory leak detected"))
+    );
+  });
 }

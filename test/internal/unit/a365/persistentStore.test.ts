@@ -3,7 +3,7 @@
 
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ILogger } from "../../../../src/a365/logging.js";
 import { applicationPartition } from "../../../../src/a365/exporter/durable/PersistentStore.js";
@@ -636,6 +636,27 @@ describe("PersistentStore", () => {
     assert.isTrue(files.some((file) => file.endsWith(".quarantine")));
   });
 
+  it("quarantines records with unsafe ids without creating files outside the storage root", async () => {
+    const root = join(scratchRoot, "unsafe-id-store");
+    const store = await createStore(root);
+    const pendingPath = join(explicitStorageRoot(root), `1-${randomUUID()}.pending`);
+    await fs.writeFile(
+      pendingPath,
+      JSON.stringify(makeRecord({ id: "../escape", createdAt: 1 })),
+      "utf8",
+    );
+
+    const claims = await store.claimBatch(1);
+    const quarantineName = basename(pendingPath).replace(/\.pending$/, ".quarantine");
+
+    assert.deepEqual(claims, []);
+    assert.deepEqual(await listFilesRecursively(root), [
+      join(applicationPartition(), quarantineName),
+    ]);
+    assert.isFalse(await pathExists(join(root, "escape.pending")));
+    assert.isFalse(await pathExists(join(root, "escape.quarantine")));
+  });
+
   it("does not prune active lease files during capacity eviction", async () => {
     const root = join(scratchRoot, "active-lease-prune-store");
     const template = makeRecord({ createdAt: 500, body: "a".repeat(80) });
@@ -819,6 +840,27 @@ async function storedBodies(root: string): Promise<string[]> {
 async function listStoreFiles(root: string): Promise<string[]> {
   try {
     return await fs.readdir(explicitStorageRoot(root));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function listFilesRecursively(root: string, current = root): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(current, { withFileTypes: true });
+    const files = await Promise.all(
+      entries.map(async (entry) => {
+        const fullPath = join(current, entry.name);
+        if (entry.isDirectory()) {
+          return listFilesRecursively(root, fullPath);
+        }
+        return [relative(root, fullPath)];
+      }),
+    );
+    return files.flat().sort();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return [];

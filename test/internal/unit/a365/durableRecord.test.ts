@@ -89,4 +89,26 @@ describe("DurableRecord", () => {
       /Invalid durable record/,
     );
   });
+
+  it.each(["../escape", "..\\escape", "", "a".repeat(181)])(
+    "rejects unsafe durable record ids: %j",
+    (id) => {
+      assert.throws(
+        () =>
+          parseDurableRecord(
+            JSON.stringify({
+              version: DURABLE_RECORD_VERSION,
+              id,
+              createdAt: Date.now(),
+              tenantId: "tenant",
+              agentId: "agent",
+              agenticUserId: "user",
+              useS2SEndpoint: false,
+              body: '{"resourceSpans":[]}',
+            }),
+          ),
+        /Invalid durable record/,
+      );
+    },
+  );
 });

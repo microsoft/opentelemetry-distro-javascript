@@ -5,6 +5,8 @@ import { randomUUID } from "node:crypto";
 import type { ClusterCategory } from "../../configuration/A365ConfigurationOptions.js";
 
 export const DURABLE_RECORD_VERSION = 1 as const;
+const MAX_DURABLE_RECORD_ID_LENGTH = 180;
+const SAFE_DURABLE_RECORD_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 const CLUSTER_CATEGORIES: readonly ClusterCategory[] = [
   "local",
@@ -57,7 +59,7 @@ export function parseDurableRecord(text: string): DurableRecordV1 {
   }
 
   if (
-    typeof value.id !== "string" ||
+    !isSafeDurableRecordId(value.id) ||
     typeof value.createdAt !== "number" ||
     typeof value.tenantId !== "string" ||
     typeof value.agentId !== "string" ||
@@ -92,6 +94,15 @@ function isOptionalString(value: unknown): value is string | undefined {
 
 function isOptionalClusterCategory(value: unknown): value is ClusterCategory | undefined {
   return value === undefined || isClusterCategory(value);
+}
+
+function isSafeDurableRecordId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_DURABLE_RECORD_ID_LENGTH &&
+    SAFE_DURABLE_RECORD_ID_PATTERN.test(value)
+  );
 }
 
 function isClusterCategory(value: unknown): value is ClusterCategory {

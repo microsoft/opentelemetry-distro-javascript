@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { setMaxListeners } from "node:events";
 import type { ILogger } from "../../logging.js";
 import { ResolvedDurableDeliveryOptions } from "./DurableDeliveryOptions.js";
 import type { DurableRecordV1 } from "./DurableRecord.js";
@@ -51,6 +52,7 @@ export class DurableDeliveryManager {
     private readonly logger: ILogger,
     private readonly dependencies: DurableDeliveryDependencies,
   ) {
+    setMaxListeners(0, this.abortController.signal);
     this.scheduleReplay();
   }
 
