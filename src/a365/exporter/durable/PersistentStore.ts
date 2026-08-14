@@ -14,6 +14,11 @@ const OWNER_FILE_MODE = 0o600;
 const PENDING_SUFFIX = ".pending";
 const QUARANTINE_SUFFIX = ".quarantine";
 const TEMPORARY_SUFFIX = ".tmp";
+// NAME_MAX: the largest single path component most filesystems (ext4, NTFS,
+// APFS, etc.) accept. Renaming a pending file to its lease name appends
+// lease metadata to the basename, so a pending basename that itself fits
+// can still overflow this limit once that metadata is appended.
+const MAX_FILENAME_COMPONENT_BYTES = 255;
 const WINDOWS_PROBE_DIRECTORY = ["Microsoft", "A365", "otel-durable"] as const;
 const POSIX_DEFAULT_LEAF_PREFIX = "a365-otel-durable";
 const APPLICATION_PARTITION_PREFIX = "app-";
@@ -113,9 +118,30 @@ export class PersistentStore {
         }
 
         const leasePath = this.leasePath(pendingPath);
+
+        // Preflight before ever attempting the pending -> lease rename:
+        // appending lease metadata to an already-near-limit pending
+        // basename can push it past the filesystem's per-component name
+        // limit, and that failure surfaces inconsistently across platforms
+        // (ENAMETOOLONG on POSIX; an unhelpful ENOENT on this Windows/NTFS
+        // setup that the benign-race handling below would otherwise
+        // swallow silently). Validating basename length and content here,
+        // before the rename, guarantees a poison pending file is always
+        // quarantined -- deterministically, regardless of OS-specific
+        // rename errno behavior -- instead of wedging replay or aborting
+        // the batch.
+        if (!isSafeLeaseBasename(leasePath)) {
+          await this.quarantinePendingFile(pendingPath);
+          this.logger.warn(
+            "[PersistentStore] Quarantined pending durable record with an oversized basename",
+            { path: pendingPath },
+          );
+          continue;
+        }
+
+        let preflightText: string;
         try {
-          await fs.rename(pendingPath, leasePath);
-          await syncDirectory(this.root);
+          preflightText = await fs.readFile(pendingPath, "utf8");
         } catch (error) {
           if (isEnoent(error)) {
             continue;
@@ -123,6 +149,41 @@ export class PersistentStore {
           throw error;
         }
 
+        try {
+          parseDurableRecord(preflightText);
+        } catch (error) {
+          await this.quarantinePendingFile(pendingPath);
+          this.logger.warn("[PersistentStore] Quarantined malformed pending durable record", error);
+          continue;
+        }
+
+        try {
+          await fs.rename(pendingPath, leasePath);
+          await syncDirectory(this.root);
+        } catch (error) {
+          if (isEnoent(error)) {
+            continue;
+          }
+          if (isEnametoolong(error)) {
+            // Defense in depth: the dynamic-length preflight above should
+            // make this unreachable, but an OS-specific errno must never be
+            // the only guard against aborting the batch.
+            await this.quarantinePendingFile(pendingPath);
+            this.logger.warn(
+              "[PersistentStore] Quarantined pending durable record after an unexpected ENAMETOOLONG",
+              error,
+            );
+            continue;
+          }
+          throw error;
+        }
+
+        // Re-read and re-parse from the claimed lease path rather than
+        // trusting the preflight-parsed content above: the preflight read
+        // and this rename are not atomic with each other, so a same-user
+        // actor could have replaced the pending file's content in between.
+        // The rename is the atomic claim boundary; only content observed
+        // after it succeeds is trustworthy.
         let text: string;
         try {
           text = await fs.readFile(leasePath, "utf8");
@@ -170,6 +231,24 @@ export class PersistentStore {
   public async release(claim: ClaimedRecord): Promise<void> {
     try {
       await fs.rename(claim.leasePath, this.pendingPath(claim.record, `release-${randomUUID()}`));
+      await syncDirectory(this.root);
+    } catch (error) {
+      if (!isEnoent(error)) {
+        throw error;
+      }
+    }
+  }
+
+  private async quarantinePendingFile(pendingPath: string): Promise<void> {
+    // The quarantine destination is always a short, fixed-shape name built
+    // only from the current timestamp/pid/a fresh UUID -- never derived
+    // from the poison file's basename or content -- so it can never exceed
+    // filesystem name limits and can never escape this.root, no matter how
+    // large or unsafe the source basename/id is. An ENOENT here means
+    // another process already claimed or quarantined this exact pending
+    // file first, which is a benign race, not a failure.
+    try {
+      await fs.rename(pendingPath, join(this.root, poisonQuarantineName()));
       await syncDirectory(this.root);
     } catch (error) {
       if (!isEnoent(error)) {
@@ -589,6 +668,18 @@ function isManagedFileName(name: string): boolean {
 
 function isEnoent(error: unknown): error is NodeJS.ErrnoException {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
+}
+
+function isEnametoolong(error: unknown): error is NodeJS.ErrnoException {
+  return (error as NodeJS.ErrnoException).code === "ENAMETOOLONG";
+}
+
+function isSafeLeaseBasename(candidateLeasePath: string): boolean {
+  return Buffer.byteLength(basename(candidateLeasePath), "utf8") <= MAX_FILENAME_COMPONENT_BYTES;
+}
+
+function poisonQuarantineName(): string {
+  return `${Date.now()}-quarantined-${process.pid}-${randomUUID()}${QUARANTINE_SUFFIX}`;
 }
 
 async function unlinkIfExists(path: string): Promise<boolean> {

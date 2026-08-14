@@ -90,7 +90,25 @@ describe("DurableRecord", () => {
     );
   });
 
-  it.each(["../escape", "..\\escape", "", "a".repeat(181)])(
+  it("accepts an id at the safe length bound for the durable lease filename format", () => {
+    const id = "a".repeat(128);
+    const parsed = parseDurableRecord(
+      JSON.stringify({
+        version: DURABLE_RECORD_VERSION,
+        id,
+        createdAt: Date.now(),
+        tenantId: "tenant",
+        agentId: "agent",
+        agenticUserId: "user",
+        useS2SEndpoint: false,
+        body: '{"resourceSpans":[]}',
+      }),
+    );
+
+    assert.strictEqual(parsed.id, id);
+  });
+
+  it.each(["../escape", "..\\escape", "", "a".repeat(129), "a".repeat(181)])(
     "rejects unsafe durable record ids: %j",
     (id) => {
       assert.throws(

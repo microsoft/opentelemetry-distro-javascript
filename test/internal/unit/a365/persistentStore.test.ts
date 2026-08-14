@@ -636,25 +636,140 @@ describe("PersistentStore", () => {
     assert.isTrue(files.some((file) => file.endsWith(".quarantine")));
   });
 
-  it("quarantines records with unsafe ids without creating files outside the storage root", async () => {
-    const root = join(scratchRoot, "unsafe-id-store");
+  it.each(["../escape", "..\\escape"])(
+    "quarantines records with unsafe ids (%j) to a short bounded name without creating files outside the storage root",
+    async (unsafeId) => {
+      const root = join(scratchRoot, "unsafe-id-store");
+      const store = await createStore(root);
+      const pendingPath = join(explicitStorageRoot(root), `1-${randomUUID()}.pending`);
+      await fs.writeFile(
+        pendingPath,
+        JSON.stringify(makeRecord({ id: unsafeId, createdAt: 1 })),
+        "utf8",
+      );
+
+      const claims = await store.claimBatch(1);
+      const filesAfter = await listFilesRecursively(root);
+
+      assert.deepEqual(claims, []);
+      assert.isFalse(await pathExists(pendingPath));
+      assert.isFalse(await pathExists(join(root, "escape.pending")));
+      assert.isFalse(await pathExists(join(root, "escape.quarantine")));
+      // Every surviving file must stay directly inside the partitioned root:
+      // the quarantine destination for a poison record must never be derived
+      // from (or escape into a path implied by) the unsafe id/basename.
+      assert.isTrue(filesAfter.every((file) => dirname(file) === applicationPartition()));
+      assert.strictEqual(filesAfter.length, 1);
+      const quarantineName = basename(filesAfter[0]);
+      assert.match(quarantineName, /^\d+-quarantined-\d+-[0-9a-f-]{36}\.quarantine$/);
+    },
+  );
+
+  it("quarantines a 181-character poison id to a short bounded name and still claims a later valid record in the same pass", async () => {
+    const root = join(scratchRoot, "poison-id-store");
     const store = await createStore(root);
-    const pendingPath = join(explicitStorageRoot(root), `1-${randomUUID()}.pending`);
-    await fs.writeFile(
-      pendingPath,
-      JSON.stringify(makeRecord({ id: "../escape", createdAt: 1 })),
-      "utf8",
-    );
 
-    const claims = await store.claimBatch(1);
-    const quarantineName = basename(pendingPath).replace(/\.pending$/, ".quarantine");
+    // A pending file with this id fits under the 255-byte filesystem
+    // component limit, but appending lease metadata (see leasePath()) would
+    // not: without a preflight, claimBatch's pending -> lease rename fails
+    // (ENAMETOOLONG on POSIX; an unrenameable/left-in-place pending file on
+    // some platforms) before the record is ever parsed/quarantined.
+    // createdAt values must be realistic (near "now"), not tiny sentinels
+    // such as 1/2: pruneForCapacity treats a filename-encoded createdAt far
+    // in the past as expired and unlinks it outright on the next persist(),
+    // which would hide the poison file before claimBatch ever inspects it.
+    const now = Date.now();
+    const poison = makeRecord({ id: "a".repeat(181), createdAt: now - 1 });
+    const poisonPath = await seedPendingRecord(root, poison);
 
-    assert.deepEqual(claims, []);
-    assert.deepEqual(await listFilesRecursively(root), [
-      join(applicationPartition(), quarantineName),
-    ]);
-    assert.isFalse(await pathExists(join(root, "escape.pending")));
-    assert.isFalse(await pathExists(join(root, "escape.quarantine")));
+    const valid = makeRecord({ createdAt: now });
+    await store.persist(valid);
+
+    const claims = await store.claimBatch(2);
+
+    assert.strictEqual(claims.length, 1);
+    assert.strictEqual(claims[0].record.id, valid.id);
+    assert.isTrue(await pathExists(claims[0].leasePath));
+    assert.isFalse(await pathExists(poisonPath));
+
+    const filesAfter = await listFilesRecursively(root);
+    assert.isTrue(filesAfter.every((file) => dirname(file) === applicationPartition()));
+    assert.isFalse(filesAfter.some((file) => file.includes(poison.id)));
+
+    const quarantineNames = filesAfter
+      .map((file) => basename(file))
+      .filter((file) => file.endsWith(".quarantine"));
+    assert.strictEqual(quarantineNames.length, 1);
+    assert.match(quarantineNames[0], /^\d+-quarantined-\d+-[0-9a-f-]{36}\.quarantine$/);
+    assert.isBelow(quarantineNames[0].length, 100);
+  });
+
+  it("quarantines a pending file whose basename would exceed the filesystem limit once lease metadata is appended, even though its content parses successfully", async () => {
+    const root = join(scratchRoot, "oversized-basename-store");
+    const store = await createStore(root);
+
+    // The id inside the content is short and otherwise perfectly valid; only
+    // the on-disk basename (which claimBatch derives the lease name from) is
+    // oversized. This proves the basename-length preflight is independent of
+    // (and not merely a side effect of) the durable-record id validator.
+    // createdAt values must be realistic (near "now"); see the comment in
+    // the 181-character-id test above for why tiny sentinels are unsafe here.
+    const now = Date.now();
+    const shortId = randomUUID();
+    const poison = makeRecord({ id: shortId, createdAt: now - 1 });
+    const oversizedPrefix = "z".repeat(230);
+    const poisonPath = join(explicitStorageRoot(root), `${now - 1}-${oversizedPrefix}.pending`);
+    await fs.writeFile(poisonPath, JSON.stringify(poison), "utf8");
+
+    const valid = makeRecord({ createdAt: now });
+    await store.persist(valid);
+
+    const claims = await store.claimBatch(2);
+
+    assert.strictEqual(claims.length, 1);
+    assert.strictEqual(claims[0].record.id, valid.id);
+    assert.isFalse(await pathExists(poisonPath));
+
+    const filesAfter = await listFilesRecursively(root);
+    assert.isTrue(filesAfter.every((file) => dirname(file) === applicationPartition()));
+    assert.isFalse(filesAfter.some((file) => file.includes(oversizedPrefix)));
+
+    const quarantineNames = filesAfter
+      .map((file) => basename(file))
+      .filter((file) => file.endsWith(".quarantine"));
+    assert.strictEqual(quarantineNames.length, 1);
+    assert.isBelow(quarantineNames[0].length, 100);
+  });
+
+  it("quarantines and keeps scanning instead of aborting the batch if a lease rename unexpectedly reports ENAMETOOLONG", async () => {
+    const root = join(scratchRoot, "enametoolong-store");
+    const store = await createStore(root);
+
+    const poisoned = makeRecord({ createdAt: 1 });
+    const poisonedPath = await seedPendingRecord(root, poisoned);
+    const valid = makeRecord({ createdAt: 2 });
+    await seedPendingRecord(root, valid);
+
+    // Only fail the pending -> lease rename, not the subsequent
+    // quarantine-fallback rename (also sourced from poisonedPath): a real
+    // ENAMETOOLONG is caused by the oversized lease destination, so it
+    // would not recur when quarantining to a short, fixed-shape name.
+    const actualRename = fs.rename.bind(fs);
+    vi.spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+      if (String(source) === poisonedPath && String(destination).includes(".lease-at-")) {
+        const error = new Error("simulated ENAMETOOLONG") as NodeJS.ErrnoException;
+        error.code = "ENAMETOOLONG";
+        throw error;
+      }
+      return actualRename(source as never, destination as never);
+    });
+
+    const claims = await store.claimBatch(2);
+
+    assert.strictEqual(claims.length, 1);
+    assert.strictEqual(claims[0].record.id, valid.id);
+    assert.isFalse(await pathExists(poisonedPath));
+    assert.isTrue((await listStoreFiles(root)).some((file) => file.endsWith(".quarantine")));
   });
 
   it("does not prune active lease files during capacity eviction", async () => {

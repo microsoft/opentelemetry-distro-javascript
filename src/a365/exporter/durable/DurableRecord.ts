@@ -5,7 +5,19 @@ import { randomUUID } from "node:crypto";
 import type { ClusterCategory } from "../../configuration/A365ConfigurationOptions.js";
 
 export const DURABLE_RECORD_VERSION = 1 as const;
-const MAX_DURABLE_RECORD_ID_LENGTH = 180;
+// PersistentStore's lease filename format is
+// `${createdAt}-${id}.lease-at-${Date.now()}-${pid}-${randomUUID()}`, and
+// filesystems commonly reject any single path component over 255 bytes
+// (NAME_MAX). Budgeting generously for every variable part -- createdAt and
+// the in-lease Date.now() at up to 21 digits each (the longest plain-decimal
+// string JS ever produces before switching to exponential notation),
+// process.pid at up to 10 digits (a full 32-bit value), and the fixed
+// 36-character UUID -- the literal overhead alone (".lease-at-", the
+// hyphens, ".pending"/etc.) plus those bounds consumes up to ~101 bytes,
+// leaving no more than ~154 bytes of headroom for the id. 128 is a
+// comfortably safe, round bound well under that worst case, while still far
+// exceeding the 36-character UUIDs createDurableRecord() actually generates.
+const MAX_DURABLE_RECORD_ID_LENGTH = 128;
 const SAFE_DURABLE_RECORD_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 const CLUSTER_CATEGORIES: readonly ClusterCategory[] = [
