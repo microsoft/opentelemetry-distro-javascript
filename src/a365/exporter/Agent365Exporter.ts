@@ -279,13 +279,14 @@ export class Agent365Exporter implements SpanExporter {
     resourceAttrs: Record<string, unknown>,
     start: number,
   ): Promise<void> {
-    const url = buildAgent365Url({
-      tenantId,
-      agentId,
-      clusterCategory: this.options.clusterCategory,
-      domainOverride: this.options.domainOverride,
-      useS2SEndpoint: this.options.useS2SEndpoint,
-    });
+    const url = buildAgent365Url(
+      {
+        tenantId,
+        agentId,
+        useS2SEndpoint: this.options.useS2SEndpoint,
+      },
+      this.options,
+    );
 
     const headers: Record<string, string> = {
       "content-type": "application/json",
@@ -361,8 +362,6 @@ export class Agent365Exporter implements SpanExporter {
         tenantId,
         agentId,
         agenticUserId,
-        clusterCategory: this.options.clusterCategory,
-        domainOverride: this.options.domainOverride,
         useS2SEndpoint: this.options.useS2SEndpoint,
         body,
       });
@@ -499,7 +498,14 @@ export class Agent365Exporter implements SpanExporter {
     token: string,
     signal: AbortSignal,
   ): Promise<DeliveryAttempt> {
-    const url = buildAgent365Url(record);
+    const url = buildAgent365Url(
+      {
+        tenantId: record.tenantId,
+        agentId: record.agentId,
+        useS2SEndpoint: record.useS2SEndpoint,
+      },
+      this.options,
+    );
     const stats = createRequestStats(url);
     const requestStart = Date.now();
     let correlationId = "unknown";
@@ -865,19 +871,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-type Agent365Endpoint = Pick<
-  DurableRecordV1,
-  "tenantId" | "agentId" | "clusterCategory" | "domainOverride" | "useS2SEndpoint"
->;
+type Agent365Endpoint = Pick<DurableRecordV1, "tenantId" | "agentId" | "useS2SEndpoint">;
+type Agent365Routing = Pick<ResolvedExporterOptions, "clusterCategory" | "domainOverride">;
 
 interface RequestStats {
   host: string;
 }
 
-function buildAgent365Url(endpoint: Agent365Endpoint): string {
+function buildAgent365Url(endpoint: Agent365Endpoint, routing: Agent365Routing): string {
   const servicePrefix = endpoint.useS2SEndpoint ? "/observabilityService" : "/observability";
   const endpointPath = `${servicePrefix}/tenants/${encodeURIComponent(endpoint.tenantId)}/otlp/agents/${encodeURIComponent(endpoint.agentId)}/traces`;
-  const baseUrl = endpoint.domainOverride ?? resolveAgent365Endpoint(endpoint.clusterCategory);
+  const baseUrl = routing.domainOverride ?? resolveAgent365Endpoint(routing.clusterCategory);
   return `${baseUrl}${endpointPath}?api-version=1`;
 }
 

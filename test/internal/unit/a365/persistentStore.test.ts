@@ -652,8 +652,6 @@ function makeRecord(overrides: Partial<DurableRecordV1> = {}): DurableRecordV1 {
     tenantId: overrides.tenantId ?? "tenant",
     agentId: overrides.agentId ?? "agent",
     agenticUserId: overrides.agenticUserId ?? "user",
-    clusterCategory: overrides.clusterCategory ?? "prod",
-    domainOverride: overrides.domainOverride,
     useS2SEndpoint: overrides.useS2SEndpoint ?? false,
     body: overrides.body ?? '{"resourceSpans":[]}',
   };

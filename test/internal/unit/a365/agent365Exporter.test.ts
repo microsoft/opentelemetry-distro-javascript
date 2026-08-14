@@ -2,14 +2,17 @@
 // Licensed under the MIT License.
 
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ExportResultCode } from "@opentelemetry/core";
 import { SpanKind, SpanStatusCode, TraceFlags } from "@opentelemetry/api";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
 import { Agent365Exporter } from "../../../../src/a365/exporter/Agent365Exporter.js";
-import { PersistentStore } from "../../../../src/a365/exporter/durable/index.js";
+import {
+  DURABLE_RECORD_VERSION,
+  PersistentStore,
+} from "../../../../src/a365/exporter/durable/index.js";
 import {
   partitionByIdentity,
   parseIdentityKey,
@@ -1265,7 +1268,7 @@ describe("Agent365Exporter", () => {
       await exporter.shutdown();
     });
 
-    it("fails without persisting when a durable export has no token", async () => {
+    it("persists for replay when a durable export has no token", async () => {
       const directory = await createStorageDirectory();
       const exporter = new Agent365Exporter({
         tokenResolver: () => null,
@@ -1274,9 +1277,12 @@ describe("Agent365Exporter", () => {
 
       const result = await exportResult(exporter, [makeSpan()]);
 
-      assert.strictEqual(result, ExportResultCode.FAILED);
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
       assert.strictEqual(fetchSpy.mock.calls.length, 0);
-      assert.isEmpty((await readdir(directory)).filter((name) => name.endsWith(".pending")));
+      assert.strictEqual(
+        (await readdir(directory)).filter((name) => name.endsWith(".pending")).length,
+        1,
+      );
       await exporter.shutdown();
     });
 
@@ -1340,6 +1346,51 @@ describe("Agent365Exporter", () => {
         fetchSpy.mock.calls[0][1].headers.authorization,
         ["Bearer", freshToken].join(" "),
       );
+      assert.isEmpty((await readdir(directory)).filter((name) => name.endsWith(".pending")));
+      await restartedExporter.shutdown();
+    });
+
+    it("replays legacy records with the current domain override", async () => {
+      const directory = await createStorageDirectory();
+      const legacyRecord = {
+        version: DURABLE_RECORD_VERSION,
+        id: "legacy-record",
+        createdAt: 1_725_000_000_000,
+        tenantId: TENANT_ID,
+        agentId: AGENT_ID,
+        agenticUserId: "legacy-user",
+        clusterCategory: "prod",
+        domainOverride: "https://legacy.example.com",
+        useS2SEndpoint: false,
+        body: '{"resourceSpans":[]}',
+      };
+      await writeFile(
+        join(directory, `${legacyRecord.createdAt}-${legacyRecord.id}.pending`),
+        JSON.stringify(legacyRecord),
+        "utf8",
+      );
+
+      fetchSpy.mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+      });
+      const freshToken = "fresh-token";
+      const restartedExporter = new Agent365Exporter({
+        tokenResolver: () => freshToken,
+        domainOverride: "https://current.example.com",
+        durableDelivery: {
+          enabled: true,
+          storageDirectory: directory,
+          replayIntervalMilliseconds: 5,
+        },
+      });
+
+      await waitFor(() => fetchSpy.mock.calls.length === 1);
+
+      const [url, options] = fetchSpy.mock.calls[0];
+      assert.ok(url.startsWith("https://current.example.com/observability/tenants/"));
+      assert.notInclude(url, "legacy.example.com");
+      assert.strictEqual(options.headers.authorization, ["Bearer", freshToken].join(" "));
       assert.isEmpty((await readdir(directory)).filter((name) => name.endsWith(".pending")));
       await restartedExporter.shutdown();
     });

@@ -21,6 +21,7 @@ describe("DurableRecord", () => {
       agentId: "agent",
       agenticUserId: "user",
       clusterCategory: "prod",
+      domainOverride: "https://legacy.example.com",
       useS2SEndpoint: false,
       body: '{"resourceSpans":[]}',
     });
@@ -28,10 +29,42 @@ describe("DurableRecord", () => {
     assert.strictEqual(record.version, DURABLE_RECORD_VERSION);
     assert.strictEqual(record.createdAt, 1_725_000_000_000);
     assert.match(record.id, /^[0-9a-f-]{36}$/i);
+    assert.isFalse(Object.hasOwn(record, "clusterCategory"));
+    assert.isFalse(Object.hasOwn(record, "domainOverride"));
 
     const parsed = parseDurableRecord(JSON.stringify(record));
     assert.deepEqual(parsed, record);
     assert.notInclude(JSON.stringify(record), "Bearer");
+  });
+
+  it("accepts legacy routing fields while parsing to a routing-independent record", () => {
+    const parsed = parseDurableRecord(
+      JSON.stringify({
+        version: DURABLE_RECORD_VERSION,
+        id: "record-id",
+        createdAt: 1_725_000_000_000,
+        tenantId: "tenant",
+        agentId: "agent",
+        agenticUserId: "user",
+        clusterCategory: "prod",
+        domainOverride: "https://legacy.example.com",
+        useS2SEndpoint: false,
+        body: '{"resourceSpans":[]}',
+      }),
+    );
+
+    assert.deepEqual(parsed, {
+      version: DURABLE_RECORD_VERSION,
+      id: "record-id",
+      createdAt: 1_725_000_000_000,
+      tenantId: "tenant",
+      agentId: "agent",
+      agenticUserId: "user",
+      useS2SEndpoint: false,
+      body: '{"resourceSpans":[]}',
+    });
+    assert.isFalse(Object.hasOwn(parsed, "clusterCategory"));
+    assert.isFalse(Object.hasOwn(parsed, "domainOverride"));
   });
 
   it("rejects unsupported versions", () => {

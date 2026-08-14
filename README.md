@@ -107,10 +107,11 @@ useMicrosoftOpenTelemetry({
 ```
 
 Durable delivery is disabled by default. When enabled, retryable A365 exporter payloads are
-stored as plaintext local files and replayed with a freshly resolved token. Delivery is
-at-least-once, so duplicates are possible. Use a protected persistent volume if records must
-survive container or host restarts; ephemeral container storage only survives process restarts and
-still counts against the container's ephemeral-storage quota.
+stored as plaintext local files and replayed with a freshly resolved token plus the exporter's
+current cluster/domain routing. Delivery is at-least-once, so duplicates are possible. Use a
+protected persistent volume if records must survive container or host restarts; ephemeral container
+storage only survives process restarts and still counts against the container's ephemeral-storage
+quota.
 
 For A365 scenarios, scope APIs, baggage, hosting middleware, and official terminology alignment, see [A365_DOCUMENTATION.md](./A365_DOCUMENTATION.md).
 
@@ -384,7 +385,8 @@ Operational notes:
   directory or persistent volume with owner-only ACLs.
 - Durable delivery is at-least-once. If a retryable request succeeds immediately before a crash or
   after replay, duplicates are possible and receivers must be idempotent.
-- Every replay attempt and `forceFlush()` pass resolves a fresh token instead of reusing a stored one.
+- Every replay attempt and `forceFlush()` pass resolves a fresh token and uses the exporter's
+  current cluster/domain routing instead of reusing stale durable-file metadata.
 - If token resolution returns no token, throws, or times out, live delivery attempts to persist the
   record for replay and replay releases the claim without extending the shared transmission backoff.
 - Storage is bounded by both `maxStorageBytes` and `maxRecordAgeMilliseconds`; expired records are

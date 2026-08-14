@@ -28,14 +28,17 @@ export interface DurableRecordV1 {
   tenantId: string;
   agentId: string;
   agenticUserId?: string;
-  clusterCategory: ClusterCategory;
-  domainOverride?: string;
   useS2SEndpoint: boolean;
   body: string;
 }
 
+type DurableRecordV1CreateInput = Omit<DurableRecordV1, "version" | "id" | "createdAt"> & {
+  clusterCategory?: ClusterCategory;
+  domainOverride?: string;
+};
+
 export function createDurableRecord(
-  input: Omit<DurableRecordV1, "version" | "id" | "createdAt">,
+  input: DurableRecordV1CreateInput,
 ): DurableRecordV1 {
   return {
     version: DURABLE_RECORD_VERSION,
@@ -44,8 +47,6 @@ export function createDurableRecord(
     tenantId: input.tenantId,
     agentId: input.agentId,
     agenticUserId: input.agenticUserId,
-    clusterCategory: input.clusterCategory,
-    domainOverride: input.domainOverride,
     useS2SEndpoint: input.useS2SEndpoint,
     body: input.body,
   };
@@ -62,10 +63,10 @@ export function parseDurableRecord(text: string): DurableRecordV1 {
     typeof value.createdAt !== "number" ||
     typeof value.tenantId !== "string" ||
     typeof value.agentId !== "string" ||
-    !isClusterCategory(value.clusterCategory) ||
     typeof value.useS2SEndpoint !== "boolean" ||
     typeof value.body !== "string" ||
     !isOptionalString(value.agenticUserId) ||
+    !isOptionalClusterCategory(value.clusterCategory) ||
     !isOptionalString(value.domainOverride)
   ) {
     throw new Error("Invalid durable record");
@@ -78,8 +79,6 @@ export function parseDurableRecord(text: string): DurableRecordV1 {
     tenantId: value.tenantId,
     agentId: value.agentId,
     agenticUserId: value.agenticUserId,
-    clusterCategory: value.clusterCategory,
-    domainOverride: value.domainOverride,
     useS2SEndpoint: value.useS2SEndpoint,
     body: value.body,
   };
@@ -91,6 +90,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
+}
+
+function isOptionalClusterCategory(value: unknown): value is ClusterCategory | undefined {
+  return value === undefined || isClusterCategory(value);
 }
 
 function isClusterCategory(value: unknown): value is ClusterCategory {
