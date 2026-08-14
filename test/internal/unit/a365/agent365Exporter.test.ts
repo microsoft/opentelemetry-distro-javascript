@@ -2,13 +2,14 @@
 // Licensed under the MIT License.
 
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ExportResultCode } from "@opentelemetry/core";
 import { SpanKind, SpanStatusCode, TraceFlags } from "@opentelemetry/api";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
 import { Agent365Exporter } from "../../../../src/a365/exporter/Agent365Exporter.js";
+import { applicationPartition } from "../../../../src/a365/exporter/durable/PersistentStore.js";
 import {
   DURABLE_RECORD_VERSION,
   PersistentStore,
@@ -111,6 +112,30 @@ async function createStorageDirectory(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "a365-exporter-"));
   temporaryDirectories.push(directory);
   return directory;
+}
+
+function durableStorageRoot(directory: string): string {
+  return join(directory, applicationPartition());
+}
+
+async function durablePendingFiles(directory: string): Promise<string[]> {
+  try {
+    return (await readdir(durableStorageRoot(directory))).filter((name) => name.endsWith(".pending"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function durablePendingCount(directory: string): Promise<number> {
+  return (await durablePendingFiles(directory)).length;
+}
+
+async function seedDurablePendingRecord(directory: string, fileName: string, contents: string): Promise<void> {
+  await mkdir(durableStorageRoot(directory), { recursive: true });
+  await writeFile(join(durableStorageRoot(directory), fileName), contents, "utf8");
 }
 
 async function exportResult(exporter: Agent365Exporter, spans: ReadableSpan[]): Promise<number> {
@@ -1179,12 +1204,15 @@ describe("Agent365Exporter", () => {
       });
 
       const result = await exportResult(exporter, [makeSpan()]);
-      const pending = (await readdir(directory)).filter((name) => name.endsWith(".pending"));
+      const pending = await durablePendingFiles(directory);
 
       assert.strictEqual(result, ExportResultCode.SUCCESS);
       assert.strictEqual(fetchSpy.mock.calls.length, 1);
       assert.strictEqual(pending.length, 1);
-      assert.notInclude(await readFile(join(directory, pending[0]), "utf8"), "durable-token");
+      assert.notInclude(
+        await readFile(join(durableStorageRoot(directory), pending[0]), "utf8"),
+        "durable-token",
+      );
       await exporter.shutdown();
     });
 
@@ -1200,7 +1228,7 @@ describe("Agent365Exporter", () => {
       });
 
       const result = await exportResult(exporter, [makeSpan()]);
-      const pending = (await readdir(directory)).filter((name) => name.endsWith(".pending"));
+      const pending = await durablePendingFiles(directory);
 
       assert.strictEqual(result, ExportResultCode.SUCCESS);
       assert.strictEqual(fetchSpy.mock.calls.length, 1);
@@ -1221,7 +1249,7 @@ describe("Agent365Exporter", () => {
       });
 
       const result = await exportResult(exporter, [makeSpan(), makeSpan({ name: "second-span" })]);
-      const pending = (await readdir(directory)).filter((name) => name.endsWith(".pending"));
+      const pending = await durablePendingFiles(directory);
 
       assert.strictEqual(result, ExportResultCode.SUCCESS);
       assert.strictEqual(fetchSpy.mock.calls.length, 1);
@@ -1260,7 +1288,7 @@ describe("Agent365Exporter", () => {
       });
 
       const result = await exportResult(exporter, [oversizedFirstIdentity, secondIdentity]);
-      const pending = (await readdir(directory)).filter((name) => name.endsWith(".pending"));
+      const pending = await durablePendingFiles(directory);
 
       assert.strictEqual(result, ExportResultCode.FAILED);
       assert.strictEqual(fetchSpy.mock.calls.length, 2);
@@ -1279,10 +1307,7 @@ describe("Agent365Exporter", () => {
 
       assert.strictEqual(result, ExportResultCode.SUCCESS);
       assert.strictEqual(fetchSpy.mock.calls.length, 0);
-      assert.strictEqual(
-        (await readdir(directory)).filter((name) => name.endsWith(".pending")).length,
-        1,
-      );
+      assert.strictEqual(await durablePendingCount(directory), 1);
       await exporter.shutdown();
     });
 
@@ -1301,7 +1326,7 @@ describe("Agent365Exporter", () => {
 
       assert.strictEqual(result, ExportResultCode.FAILED);
       assert.strictEqual(fetchSpy.mock.calls.length, 1);
-      assert.isEmpty((await readdir(directory)).filter((name) => name.endsWith(".pending")));
+      assert.isEmpty(await durablePendingFiles(directory));
       await exporter.shutdown();
     });
 
@@ -1346,7 +1371,7 @@ describe("Agent365Exporter", () => {
         fetchSpy.mock.calls[0][1].headers.authorization,
         ["Bearer", freshToken].join(" "),
       );
-      assert.isEmpty((await readdir(directory)).filter((name) => name.endsWith(".pending")));
+      assert.isEmpty(await durablePendingFiles(directory));
       await restartedExporter.shutdown();
     });
 
@@ -1364,10 +1389,10 @@ describe("Agent365Exporter", () => {
         useS2SEndpoint: false,
         body: '{"resourceSpans":[]}',
       };
-      await writeFile(
-        join(directory, `${legacyRecord.createdAt}-${legacyRecord.id}.pending`),
+      await seedDurablePendingRecord(
+        directory,
+        `${legacyRecord.createdAt}-${legacyRecord.id}.pending`,
         JSON.stringify(legacyRecord),
-        "utf8",
       );
 
       fetchSpy.mockResolvedValue({
@@ -1391,7 +1416,7 @@ describe("Agent365Exporter", () => {
       assert.ok(url.startsWith("https://current.example.com/observability/tenants/"));
       assert.notInclude(url, "legacy.example.com");
       assert.strictEqual(options.headers.authorization, ["Bearer", freshToken].join(" "));
-      assert.isEmpty((await readdir(directory)).filter((name) => name.endsWith(".pending")));
+      assert.isEmpty(await durablePendingFiles(directory));
       await restartedExporter.shutdown();
     });
 
@@ -1431,10 +1456,7 @@ describe("Agent365Exporter", () => {
 
       assert.isTrue(signal!.aborted);
       assert.strictEqual(await result, ExportResultCode.SUCCESS);
-      assert.strictEqual(
-        (await readdir(directory)).filter((name) => name.endsWith(".pending")).length,
-        2,
-      );
+      assert.strictEqual(await durablePendingCount(directory), 2);
     });
 
     it("does not initialize durable delivery after shutdown", async () => {
@@ -1511,10 +1533,7 @@ describe("Agent365Exporter", () => {
 
       assert.isTrue(signal!.aborted);
       assert.strictEqual(await result, ExportResultCode.SUCCESS);
-      assert.strictEqual(
-        (await readdir(directory)).filter((name) => name.endsWith(".pending")).length,
-        1,
-      );
+      assert.strictEqual(await durablePendingCount(directory), 1);
     });
 
     it("rejects shutdown after the durable deadline when an in-flight request ignores abort", async () => {

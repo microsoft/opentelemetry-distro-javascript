@@ -6,6 +6,7 @@ import * as fs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ILogger } from "../../../../src/a365/logging.js";
+import { applicationPartition } from "../../../../src/a365/exporter/durable/PersistentStore.js";
 import {
   DURABLE_RECORD_VERSION,
   PersistentStore,
@@ -21,6 +22,18 @@ const disappearingFileScan = vi.hoisted(() => ({
   path: undefined as string | undefined,
   count: 0,
 }));
+
+const tmpdirOverride = vi.hoisted(() => ({
+  value: undefined as string | undefined,
+}));
+
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return {
+    ...actual,
+    tmpdir: () => tmpdirOverride.value ?? actual.tmpdir(),
+  };
+});
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
@@ -47,12 +60,14 @@ describe("PersistentStore", () => {
     process.env = { ...originalEnv };
     disappearingFileScan.path = undefined;
     disappearingFileScan.count = 0;
+    tmpdirOverride.value = undefined;
     scratchRoot = join(process.cwd(), ".superpowers", "sdd", "task-2-test-artifacts", randomUUID());
     await fs.mkdir(scratchRoot, { recursive: true });
   });
 
   afterEach(async () => {
     process.env = { ...originalEnv };
+    tmpdirOverride.value = undefined;
     vi.restoreAllMocks();
     await fs.rm(scratchRoot, { recursive: true, force: true });
   });
@@ -63,15 +78,18 @@ describe("PersistentStore", () => {
     const record = makeRecord();
 
     const storedPath = await store.persist(record);
+    const storeRoot = dirname(storedPath);
 
     assert.isTrue(await pathExists(storedPath));
     assert.isFalse((await listStoreFiles(root)).some((file) => file.endsWith(".tmp")));
+    assert.strictEqual(dirname(storeRoot), root);
+    assert.match(basename(storeRoot), /^app-[0-9a-f]{16}$/);
 
     const persisted = parseDurableRecord(await fs.readFile(storedPath, "utf8"));
     assert.deepEqual(persisted, record);
 
     if (process.platform !== "win32") {
-      assert.strictEqual((await fs.stat(root)).mode & 0o777, 0o700);
+      assert.strictEqual((await fs.stat(storeRoot)).mode & 0o777, 0o700);
       assert.strictEqual((await fs.stat(storedPath)).mode & 0o777, 0o600);
     }
   });
@@ -100,6 +118,46 @@ describe("PersistentStore", () => {
     assert.isFalse(await pathExists(join(fallbackBase, "Microsoft", "A365", "otel-durable")));
   });
 
+  it("partitions explicit roots by stable application identity instead of the current cwd", async () => {
+    const explicitRoot = join(scratchRoot, "partitioned-explicit-root");
+    const firstCwd = join(scratchRoot, "cwd-one");
+    const secondCwd = join(scratchRoot, "cwd-two");
+    await fs.mkdir(firstCwd, { recursive: true });
+    await fs.mkdir(secondCwd, { recursive: true });
+
+    const originalArgv1 = process.argv[1];
+    const originalCwd = process.cwd();
+
+    try {
+      process.argv[1] = join(scratchRoot, "entry-a.mjs");
+
+      process.chdir(firstCwd);
+      const firstPath = await (await createStore(explicitRoot)).persist(makeRecord());
+
+      process.chdir(secondCwd);
+      const secondPath = await (await createStore(explicitRoot)).persist(makeRecord());
+
+      process.argv[1] = join(scratchRoot, "entry-b.mjs");
+      const thirdPath = await (await createStore(explicitRoot)).persist(makeRecord());
+
+      const firstRoot = dirname(firstPath);
+      const secondRoot = dirname(secondPath);
+      const thirdRoot = dirname(thirdPath);
+
+      assert.strictEqual(dirname(firstRoot), explicitRoot);
+      assert.match(basename(firstRoot), /^app-[0-9a-f]{16}$/);
+      assert.strictEqual(secondRoot, firstRoot);
+      assert.notStrictEqual(thirdRoot, firstRoot);
+    } finally {
+      if (originalArgv1 === undefined) {
+        process.argv.splice(1, 1);
+      } else {
+        process.argv[1] = originalArgv1;
+      }
+      process.chdir(originalCwd);
+    }
+  });
+
   it("probes default roots and falls back after failures", async () => {
     const firstCandidate = join(scratchRoot, "first-candidate.txt");
     const fallbackBase = join(scratchRoot, "fallback-base");
@@ -117,6 +175,54 @@ describe("PersistentStore", () => {
 
       assert.ok(storedPath.startsWith(expectedRoot));
       assert.isTrue(await pathExists(expectedRoot));
+    } finally {
+      restorePlatform();
+    }
+  });
+
+  it("uses POSIX fallback candidates in exact de-duplicated order", async () => {
+    const restorePlatform = usePosixDefaultCandidates(nativePlatform);
+    const logger = makeLogger();
+    const actualMkdir = fs.mkdir.bind(fs);
+    const expectedAttempts = [defaultStorageRoot("/tmp"), defaultStorageRoot("/var/tmp")];
+    const blockedBaseRoots = [defaultStorageBaseRoot("/tmp"), defaultStorageBaseRoot("/var/tmp")];
+
+    tmpdirOverride.value = "/tmp";
+    vi.spyOn(fs, "mkdir").mockImplementation(async (path, options) => {
+      const normalizedPath = String(path);
+      if (
+        blockedBaseRoots.some(
+          (baseRoot) =>
+            normalizedPath === baseRoot ||
+            normalizedPath.startsWith(`${baseRoot}\\`) ||
+            normalizedPath.startsWith(`${baseRoot}/`),
+        )
+      ) {
+        const error = new Error("blocked default root") as NodeJS.ErrnoException;
+        error.code = "EACCES";
+        throw error;
+      }
+
+      return actualMkdir(path, options as never);
+    });
+
+    try {
+      process.env.TMPDIR = "/tmp";
+
+      await expect(
+        PersistentStore.create(
+          new ResolvedDurableDeliveryOptions({
+            enabled: true,
+          }),
+          logger,
+        ),
+      ).rejects.toThrow(/blocked default root/);
+
+      assert.deepEqual(
+        logger.warn.mock.calls.map((call) => call[1]),
+        expectedAttempts,
+      );
+      assert.strictEqual(logger.warn.mock.calls.length, expectedAttempts.length);
     } finally {
       restorePlatform();
     }
@@ -157,10 +263,13 @@ describe("PersistentStore", () => {
 
     const storedPath = await (await createDefaultStore()).persist(makeRecord());
     const root = defaultStorageRoot(candidate);
+    const baseRoot = defaultStorageBaseRoot(candidate);
 
     assert.ok(storedPath.startsWith(root));
-    assert.strictEqual(dirname(root), candidate);
-    assert.match(basename(root), /^a365-otel-durable-\d+$/);
+    assert.strictEqual(dirname(root), baseRoot);
+    assert.strictEqual(dirname(baseRoot), candidate);
+    assert.match(basename(baseRoot), /^a365-otel-durable-\d+$/);
+    assert.match(basename(root), /^app-[0-9a-f]{16}$/);
     assert.strictEqual((await fs.stat(root)).mode & 0o777, 0o700);
     assert.strictEqual((await fs.stat(root)).uid, process.getuid!());
   });
@@ -246,7 +355,7 @@ describe("PersistentStore", () => {
   it("tolerates consecutive disappeared file scans when storage has capacity", async () => {
     const root = join(scratchRoot, "disappearing-scan-store");
     const store = await createStore(root);
-    const disappearingPath = join(root, `${Date.now()}-${randomUUID()}.pending`);
+    const disappearingPath = join(explicitStorageRoot(root), `${Date.now()}-${randomUUID()}.pending`);
     await fs.writeFile(disappearingPath, "disappearing bytes", "utf8");
 
     disappearingFileScan.path = disappearingPath;
@@ -364,7 +473,7 @@ describe("PersistentStore", () => {
       maxStorageBytes: 10_000,
     });
     const freshRecord = makeRecord({ createdAt: 1_000, body: "fresh" });
-    const freshPath = join(root, "fresh.pending");
+    const freshPath = join(explicitStorageRoot(root), "fresh.pending");
     await fs.writeFile(freshPath, JSON.stringify(freshRecord), "utf8");
     await fs.utimes(freshPath, new Date(1_000), new Date(1_000));
 
@@ -376,7 +485,7 @@ describe("PersistentStore", () => {
   it("removes a temporary file when writing it fails", async () => {
     const root = join(scratchRoot, "write-failure-store");
     const store = await createStore(root);
-    const probePath = join(root, "file-handle-prototype-probe");
+    const probePath = join(explicitStorageRoot(root), "file-handle-prototype-probe");
     const probeHandle = await fs.open(probePath, "w");
     const fileHandlePrototype = Object.getPrototypeOf(probeHandle) as typeof probeHandle;
     await probeHandle.close();
@@ -396,7 +505,7 @@ describe("PersistentStore", () => {
 
     const root = join(scratchRoot, "stale-temp-store");
     const store = await createStore(root, { maxRecordAgeMilliseconds: 50 });
-    const staleTemporary = join(root, `${now - 51}-${randomUUID()}.tmp`);
+    const staleTemporary = join(explicitStorageRoot(root), `${now - 51}-${randomUUID()}.tmp`);
     await fs.writeFile(staleTemporary, "stale temporary bytes", "utf8");
 
     await store.persist(makeRecord());
@@ -412,7 +521,7 @@ describe("PersistentStore", () => {
     const record = makeRecord({ createdAt: now, body: "record-body" });
     const recordBytes = Buffer.byteLength(JSON.stringify(record), "utf8");
     const store = await createStore(root, { maxStorageBytes: recordBytes + 1 });
-    const temporaryPath = join(root, `${now}-${randomUUID()}.tmp`);
+    const temporaryPath = join(explicitStorageRoot(root), `${now}-${randomUUID()}.tmp`);
     await fs.writeFile(temporaryPath, "x".repeat(recordBytes), "utf8");
 
     await expect(store.persist(record)).rejects.toThrow(/capacity/i);
@@ -455,7 +564,9 @@ describe("PersistentStore", () => {
 
     const pendingFiles = (await listStoreFiles(root)).filter((file) => file.endsWith(".pending"));
     const retainedBytes = await Promise.all(
-      pendingFiles.map(async (file) => (await fs.stat(join(root, file))).size),
+      pendingFiles.map(
+        async (file) => (await fs.stat(join(explicitStorageRoot(root), file))).size,
+      ),
     );
     assert.strictEqual(pendingFiles.length, 1);
     assert.isAtMost(
@@ -495,7 +606,7 @@ describe("PersistentStore", () => {
   it("keeps quarantined malformed records terminal after lease expiry", async () => {
     const root = join(scratchRoot, "quarantine-terminal-store");
     const store = await createStore(root, { leaseDurationMilliseconds: 50 });
-    const badPath = join(root, `1-${randomUUID()}.pending`);
+    const badPath = join(explicitStorageRoot(root), `1-${randomUUID()}.pending`);
     await fs.writeFile(badPath, '{"version":2}', "utf8");
 
     assert.deepEqual(await store.claimBatch(1), []);
@@ -504,7 +615,7 @@ describe("PersistentStore", () => {
     const quarantineFile = initialFiles.find((file) => file.endsWith(".quarantine"));
     assert.isDefined(quarantineFile);
 
-    await fs.utimes(join(root, quarantineFile), new Date(0), new Date(0));
+    await fs.utimes(join(explicitStorageRoot(root), quarantineFile), new Date(0), new Date(0));
 
     assert.deepEqual(await store.claimBatch(1), []);
     assert.deepEqual((await listStoreFiles(root)).sort(), initialFiles);
@@ -513,7 +624,7 @@ describe("PersistentStore", () => {
   it("quarantines malformed records", async () => {
     const root = join(scratchRoot, "malformed-store");
     const store = await createStore(root);
-    const badPath = join(root, `1-${randomUUID()}.pending`);
+    const badPath = join(explicitStorageRoot(root), `1-${randomUUID()}.pending`);
     await fs.writeFile(badPath, '{"version":2}', "utf8");
 
     const claims = await store.claimBatch(1);
@@ -685,7 +796,7 @@ async function createDefaultStore(
 }
 
 async function seedPendingRecord(root: string, record: DurableRecordV1): Promise<string> {
-  const filePath = join(root, `${record.createdAt}-${record.id}.pending`);
+  const filePath = join(explicitStorageRoot(root), `${record.createdAt}-${record.id}.pending`);
   await fs.writeFile(filePath, JSON.stringify(record), "utf8");
   return filePath;
 }
@@ -693,7 +804,7 @@ async function seedPendingRecord(root: string, record: DurableRecordV1): Promise
 async function storedBodies(root: string): Promise<string[]> {
   const bodies: string[] = [];
   for (const file of await listStoreFiles(root)) {
-    const fullPath = join(root, file);
+    const fullPath = join(explicitStorageRoot(root), file);
     try {
       const parsed = parseDurableRecord(await fs.readFile(fullPath, "utf8"));
       bodies.push(parsed.body);
@@ -706,7 +817,7 @@ async function storedBodies(root: string): Promise<string[]> {
 
 async function listStoreFiles(root: string): Promise<string[]> {
   try {
-    return await fs.readdir(root);
+    return await fs.readdir(explicitStorageRoot(root));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return [];
@@ -738,11 +849,19 @@ function setFallbackEnvironment(basePath: string): void {
 }
 
 function defaultStorageRoot(candidate: string): string {
+  return join(defaultStorageBaseRoot(candidate), applicationPartition());
+}
+
+function defaultStorageBaseRoot(candidate: string): string {
   if (process.platform === "win32") {
     return join(candidate, "Microsoft", "A365", "otel-durable");
   }
 
   return join(candidate, `a365-otel-durable-${process.getuid?.() ?? "unknown"}`);
+}
+
+function explicitStorageRoot(root: string): string {
+  return join(root, applicationPartition());
 }
 
 function useWindowsDefaultCandidates(nativePlatform: string): () => void {
@@ -756,5 +875,19 @@ function useWindowsDefaultCandidates(nativePlatform: string): () => void {
   }
 
   Object.defineProperty(process, "platform", { ...descriptor, value: "win32" });
+  return () => Object.defineProperty(process, "platform", descriptor);
+}
+
+function usePosixDefaultCandidates(nativePlatform: string): () => void {
+  if (nativePlatform !== "win32") {
+    return () => {};
+  }
+
+  const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
+  if (!descriptor) {
+    throw new Error("Unable to override process.platform for this test");
+  }
+
+  Object.defineProperty(process, "platform", { ...descriptor, value: "linux" });
   return () => Object.defineProperty(process, "platform", descriptor);
 }

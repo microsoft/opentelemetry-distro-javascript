@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { ILogger } from "../../logging.js";
 import { ResolvedDurableDeliveryOptions } from "./DurableDeliveryOptions.js";
 import { parseDurableRecord, type DurableRecordV1 } from "./DurableRecord.js";
@@ -16,6 +16,8 @@ const QUARANTINE_SUFFIX = ".quarantine";
 const TEMPORARY_SUFFIX = ".tmp";
 const WINDOWS_PROBE_DIRECTORY = ["Microsoft", "A365", "otel-durable"] as const;
 const POSIX_DEFAULT_LEAF_PREFIX = "a365-otel-durable";
+const APPLICATION_PARTITION_PREFIX = "app-";
+const PROCESS_START_CWD = process.cwd();
 
 export interface ClaimedRecord {
   record: DurableRecordV1;
@@ -371,23 +373,18 @@ async function resolveStorageRoot(
     return initializeExplicitRoot(options.storageDirectory);
   }
 
-  const candidates =
-    process.platform === "win32"
-      ? [process.env.LOCALAPPDATA, process.env.TEMP, os.tmpdir()]
-      : [process.env.TMPDIR, "/var/tmp", os.tmpdir()];
-
   let lastError: unknown;
-  for (const candidate of candidates) {
-    if (!candidate) {
-      continue;
-    }
-
-    const root = defaultStorageRoot(candidate);
+  for (const candidate of storageRootCandidates()) {
+    const root = defaultStorageBaseRoot(candidate);
     try {
       return await initializeDefaultRoot(root);
     } catch (error) {
       lastError = error;
-      logger.warn("[PersistentStore] Durable storage candidate unavailable", root, error);
+      logger.warn(
+        "[PersistentStore] Durable storage candidate unavailable",
+        partitionedStorageRoot(root),
+        error,
+      );
     }
   }
 
@@ -398,9 +395,9 @@ async function resolveStorageRoot(
   throw new Error("Unable to initialize durable storage root");
 }
 
-async function initializeRoot(root: string): Promise<string> {
+async function initializeRoot(root: string, recursive = true): Promise<string> {
   try {
-    await fs.mkdir(root, { recursive: true, mode: OWNER_DIRECTORY_MODE });
+    await fs.mkdir(root, { recursive, mode: OWNER_DIRECTORY_MODE });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
       throw error;
@@ -411,22 +408,13 @@ async function initializeRoot(root: string): Promise<string> {
 }
 
 async function initializeExplicitRoot(root: string): Promise<string> {
-  return initializeRoot(root);
+  const baseRoot = await initializeRoot(root);
+  return initializeRoot(partitionedStorageRoot(baseRoot), false);
 }
 
 async function initializeDefaultRoot(root: string): Promise<string> {
-  try {
-    await fs.mkdir(root, {
-      recursive: process.platform === "win32",
-      mode: OWNER_DIRECTORY_MODE,
-    });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-      throw error;
-    }
-  }
-
-  return verifyRoot(root);
+  const baseRoot = await initializeRoot(root, process.platform === "win32");
+  return initializeRoot(partitionedStorageRoot(baseRoot), false);
 }
 
 async function verifyRoot(root: string): Promise<string> {
@@ -458,12 +446,48 @@ async function verifyRoot(root: string): Promise<string> {
   return root;
 }
 
-function defaultStorageRoot(candidate: string): string {
+function defaultStorageBaseRoot(candidate: string): string {
   if (process.platform === "win32") {
     return join(candidate, ...WINDOWS_PROBE_DIRECTORY);
   }
 
   return join(candidate, `${POSIX_DEFAULT_LEAF_PREFIX}-${process.getuid?.() ?? "unknown"}`);
+}
+
+export function applicationPartition(): string {
+  const identity = [
+    process.getuid?.() ?? "unknown",
+    process.execPath,
+    stableApplicationIdentityBase(),
+  ].join("\0");
+  const partition = createHash("sha256").update(identity).digest("hex").slice(0, 16);
+  return `${APPLICATION_PARTITION_PREFIX}${partition}`;
+}
+
+function stableApplicationIdentityBase(): string {
+  const entryPoint = process.argv[1];
+  if (typeof entryPoint === "string" && entryPoint.length > 0) {
+    return isAbsolute(entryPoint) ? entryPoint : resolve(PROCESS_START_CWD, entryPoint);
+  }
+
+  return PROCESS_START_CWD;
+}
+
+function partitionedStorageRoot(root: string): string {
+  return join(root, applicationPartition());
+}
+
+function storageRootCandidates(): string[] {
+  const candidates =
+    process.platform === "win32"
+      ? [process.env.LOCALAPPDATA, process.env.TEMP, os.tmpdir()]
+      : [process.env.TMPDIR, "/var/tmp", "/tmp"];
+
+  return [...new Set(candidates.filter(isNonEmptyString))];
+}
+
+function isNonEmptyString(value: string | undefined): value is string {
+  return typeof value === "string" && value.length > 0;
 }
 
 async function probeRoot(root: string): Promise<void> {
