@@ -1171,24 +1171,76 @@ describe("Agent365Exporter", () => {
     });
   });
 
-  it("does not wait for a hanging export during non-durable shutdown", async () => {
+  it("waits for an accepted network-only export to settle during shutdown", async () => {
     let notifyRequestStarted: (() => void) | undefined;
     const requestStarted = new Promise<void>((resolve) => {
       notifyRequestStarted = resolve;
     });
+    let resolveFetch: ((value: { status: number; headers: Headers }) => void) | undefined;
     fetchSpy.mockImplementation(() => {
       notifyRequestStarted!();
-      return new Promise(() => undefined);
+      return new Promise((resolve) => {
+        resolveFetch = resolve;
+      });
     });
     const exporter = createTestExporter({
       tokenResolver: () => "token",
-      durableDelivery: { enabled: false, shutdownTimeoutMilliseconds: 5 },
+      durableDelivery: { enabled: false, shutdownTimeoutMilliseconds: 50 },
     });
 
-    void exportResult(exporter, [makeSpan()]);
+    const result = exportResult(exporter, [makeSpan()]);
     await requestStarted;
 
-    await expect(exporter.shutdown()).resolves.toBeUndefined();
+    let shutdownSettled = false;
+    const shutdown = exporter.shutdown().finally(() => {
+      shutdownSettled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.isFalse(shutdownSettled);
+
+    resolveFetch!({ status: 200, headers: new Headers() });
+
+    await expect(shutdown).resolves.toBeUndefined();
+    assert.isTrue(shutdownSettled);
+    assert.strictEqual(await result, ExportResultCode.SUCCESS);
+  });
+
+  it("rejects network-only shutdown after the shared deadline when an accepted export never settles", async () => {
+    vi.useFakeTimers();
+    try {
+      let notifyRequestStarted: (() => void) | undefined;
+      const requestStarted = new Promise<void>((resolve) => {
+        notifyRequestStarted = resolve;
+      });
+      let resolveFetch: ((value: { status: number; headers: Headers }) => void) | undefined;
+      fetchSpy.mockImplementation(() => {
+        notifyRequestStarted!();
+        return new Promise((resolve) => {
+          resolveFetch = resolve;
+        });
+      });
+      const exporter = createTestExporter({
+        tokenResolver: () => "token",
+        httpRequestTimeoutMilliseconds: 1,
+        durableDelivery: { enabled: false, shutdownTimeoutMilliseconds: 5 },
+      });
+
+      const result = exportResult(exporter, [makeSpan()]);
+      await requestStarted;
+
+      const shutdown = exporter.shutdown();
+      const shutdownRejection = expect(shutdown).rejects.toThrow(/shutdown timed out/);
+      await vi.advanceTimersByTimeAsync(5);
+
+      await shutdownRejection;
+
+      resolveFetch!({ status: 200, headers: new Headers() });
+      await expect(result).resolves.toBe(ExportResultCode.SUCCESS);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   describe("durable delivery", () => {

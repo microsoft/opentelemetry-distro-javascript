@@ -744,8 +744,9 @@ export class Agent365Exporter implements SpanExporter {
 
   /**
    * Shuts down the exporter. After this resolves, subsequent {@link export}
-   * calls fail immediately. In-flight exports settle before shutdown completes;
-   * durable delivery requests are aborted at their configured shutdown deadline.
+   * calls fail immediately. Accepted exports settle before shutdown completes
+   * when they finish before the configured shutdown deadline; durable delivery
+   * requests are aborted at that deadline.
    */
   shutdown(): Promise<void> {
     if (!this.shutdownPromise) {
@@ -775,17 +776,17 @@ export class Agent365Exporter implements SpanExporter {
   }
 
   private async shutdownInternal(): Promise<void> {
-    if (!this.options.durableDelivery.enabled) {
-      this.shutdownFinalized = true;
-      return;
-    }
-
     const deadline = Date.now() + this.options.durableDelivery.shutdownTimeoutMilliseconds;
 
     try {
+      await this.waitForActiveExports(deadline);
+
+      if (!this.options.durableDelivery.enabled) {
+        return;
+      }
+
       await this.waitForWithinShutdownDeadline(this.startDurableInitialization(), deadline);
       this.durableManager?.beginShutdown();
-      await this.waitForActiveExports(deadline);
       if (this.durableManager) {
         await this.waitForWithinShutdownDeadline(this.durableManager.shutdown(), deadline);
       }
