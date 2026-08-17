@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Features Added
-- Add enabled-by-default A365 durable store-and-forward delivery with explicit disable, network-only fallback when durable storage is unavailable, per-application bounded plaintext storage on protected volumes, replay with fresh tokens/current routing, retryable 401 handling, shared `Retry-After` backoff, token isolation, and bounded shutdown drain
+- Add enabled-by-default A365 durable store-and-forward delivery with explicit disable, network-only fallback when durable storage is unavailable, per-application bounded plaintext storage on protected volumes, replay with fresh tokens/current routing, retryable 401 handling, shared `Retry-After` backoff, token isolation, and bounded shutdown drain. [#226](https://github.com/microsoft/opentelemetry-distro-javascript/pull/226)
 - Emit `gen_ai.output.type` and available GenAI request parameters on LangChain chat spans. [#213](https://github.com/microsoft/opentelemetry-distro-javascript/pull/213)
 
 ### Bugs Fixed

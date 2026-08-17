@@ -14,12 +14,14 @@ export type DeliveryAttempt =
   | { kind: "permanent"; correlationId: string; status?: number; reason: string };
 
 export interface DurableDeliveryDependencies {
+  validateReplay?(record: DurableRecordV1): Promise<void> | void;
   resolveToken(record: DurableRecordV1): Promise<string | null>;
   send(record: DurableRecordV1, token: string, signal: AbortSignal): Promise<DeliveryAttempt>;
 }
 
 type GateDecision =
   | { kind: "deferred" }
+  | { kind: "endpointInvalid"; error: Error }
   | { kind: "tokenUnavailable"; error?: unknown }
   | { kind: "success" }
   | { kind: "permanent" }
@@ -126,7 +128,7 @@ export class DurableDeliveryManager {
   }
 
   private async deliverInternal(record: DurableRecordV1): Promise<boolean> {
-    const decision = await this.attemptSend(record);
+    const decision = await this.attemptSend(record, "live");
     if (decision.kind === "success") {
       return true;
     }
@@ -213,10 +215,18 @@ export class DurableDeliveryManager {
   }
 
   private async processClaim(claim: ClaimedRecord): Promise<ReplayClaimOutcome> {
-    const decision = await this.attemptSend(claim.record);
+    const decision = await this.attemptSend(claim.record, "replay");
     if (decision.kind === "success" || decision.kind === "permanent") {
       await this.completeClaim(claim);
       return "advance";
+    }
+    if (decision.kind === "endpointInvalid") {
+      this.logger.warn(
+        `[DurableDeliveryManager] Replay endpoint validation failed; releasing durable record: ${decision.error.message}`,
+        decision.error,
+      );
+      await this.releaseClaim(claim);
+      return "stop";
     }
     if (decision.kind === "tokenUnavailable") {
       if (decision.error !== undefined) {
@@ -304,9 +314,19 @@ export class DurableDeliveryManager {
     }
   }
 
-  private async attemptSend(record: DurableRecordV1): Promise<GateDecision> {
+  private async attemptSend(
+    record: DurableRecordV1,
+    mode: "live" | "replay",
+  ): Promise<GateDecision> {
     if (!this.gate.canAcquire()) {
       return { kind: "deferred" };
+    }
+
+    if (mode === "replay") {
+      const decision = await this.validateReplay(record);
+      if (decision) {
+        return decision;
+      }
     }
 
     let token: string | null;
@@ -350,6 +370,22 @@ export class DurableDeliveryManager {
 
     this.gate.recordRetryableFailure(permit, attempt.retryAfterMs);
     return { kind: "retryable" };
+  }
+
+  private async validateReplay(record: DurableRecordV1): Promise<GateDecision | undefined> {
+    if (!this.dependencies.validateReplay) {
+      return undefined;
+    }
+
+    try {
+      await this.dependencies.validateReplay(record);
+      return undefined;
+    } catch (error) {
+      if (isEndpointValidationError(error, "ReplayEndpointError")) {
+        return { kind: "endpointInvalid", error };
+      }
+      return { kind: "retryable", error };
+    }
   }
 
   private async withTimeout<T>(
@@ -400,4 +436,13 @@ function delay(ms: number): Promise<void> {
     const timer = setTimeout(resolve, ms);
     timer.unref?.();
   });
+}
+
+function isEndpointValidationError(error: unknown, name: string): error is Error {
+  return error instanceof Error
+    ? error.name === name
+    : typeof error === "object" &&
+        error !== null &&
+        "name" in error &&
+        (error as { name?: unknown }).name === name;
 }

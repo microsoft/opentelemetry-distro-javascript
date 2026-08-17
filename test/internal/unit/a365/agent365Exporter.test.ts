@@ -1379,6 +1379,37 @@ describe("Agent365Exporter", () => {
       await exporter.shutdown();
     });
 
+    it("warns and still sends durable live exports to a non-HTTPS endpoint", async () => {
+      const directory = await createStorageDirectory();
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        domainOverride: "http://plaintext.example.com",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      const [url, options] = fetchSpy.mock.calls[0];
+      assert.ok(url.startsWith("http://plaintext.example.com/observability/tenants/"));
+      assert.strictEqual(options.headers.authorization, "Bearer token");
+      assert.strictEqual(await durablePendingCount(directory), 0);
+      assert.ok(
+        customLogger.warn.mock.calls.some((call) =>
+          String(call[0]).includes("must use HTTPS before sending a bearer token"),
+        ),
+      );
+      await exporter.shutdown();
+    });
+
     it("fails without persisting after a durable permanent response", async () => {
       const directory = await createStorageDirectory();
       fetchSpy.mockResolvedValue({
@@ -1443,6 +1474,69 @@ describe("Agent365Exporter", () => {
       await restartedExporter.shutdown();
     });
 
+    it.each([
+      {
+        label: "a non-HTTPS current domain override",
+        domainOverride: "http://plaintext.example.com",
+        expectedWarning: "Replay endpoint must use HTTPS before resolving a bearer token",
+      },
+      {
+        label: "a malformed current domain override",
+        domainOverride: "not a url",
+        expectedWarning: "Replay endpoint is invalid or malformed before resolving a bearer token",
+      },
+    ])(
+      "retains replay records and skips token resolution for %s",
+      async ({ domainOverride, expectedWarning }) => {
+        const directory = await createStorageDirectory();
+        const customLogger = {
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+        };
+        configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+
+        const legacyRecord = {
+          version: DURABLE_RECORD_VERSION,
+          id: "legacy-record",
+          createdAt: 1_725_000_000_000,
+          tenantId: TENANT_ID,
+          agentId: AGENT_ID,
+          agenticUserId: "legacy-user",
+          clusterCategory: "prod",
+          domainOverride: "https://legacy.example.com",
+          useS2SEndpoint: false,
+          body: '{"resourceSpans":[]}',
+        };
+        await seedDurablePendingRecord(
+          directory,
+          `${legacyRecord.createdAt}-${legacyRecord.id}.pending`,
+          JSON.stringify(legacyRecord),
+        );
+
+        const resolver = vi.fn().mockResolvedValue("fresh-token");
+        const exporter = new Agent365Exporter({
+          tokenResolver: resolver,
+          domainOverride,
+          durableDelivery: {
+            enabled: true,
+            storageDirectory: directory,
+            replayIntervalMilliseconds: 60_000,
+          },
+        });
+
+        await exporter.forceFlush();
+
+        assert.strictEqual(resolver.mock.calls.length, 0);
+        assert.strictEqual(fetchSpy.mock.calls.length, 0);
+        assert.strictEqual(await durablePendingCount(directory), 1);
+        assert.ok(
+          customLogger.warn.mock.calls.some((call) => String(call[0]).includes(expectedWarning)),
+        );
+        await exporter.shutdown();
+      },
+    );
+
     it("replays legacy records with the current domain override", async () => {
       const directory = await createStorageDirectory();
       const legacyRecord = {
@@ -1486,6 +1580,34 @@ describe("Agent365Exporter", () => {
       assert.strictEqual(options.headers.authorization, ["Bearer", freshToken].join(" "));
       assert.isEmpty(await durablePendingFiles(directory));
       await restartedExporter.shutdown();
+    });
+
+    it("warns and still sends network-only live exports to a non-HTTPS endpoint", async () => {
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+
+      const exporter = createTestExporter({
+        tokenResolver: () => "token",
+        domainOverride: "http://plaintext.example.com",
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      const [url, options] = fetchSpy.mock.calls[0];
+      assert.ok(url.startsWith("http://plaintext.example.com/observability/tenants/"));
+      assert.strictEqual(options.headers.authorization, "Bearer token");
+      assert.ok(
+        customLogger.warn.mock.calls.some((call) =>
+          String(call[0]).includes("must use HTTPS before sending a bearer token"),
+        ),
+      );
+      await exporter.shutdown();
     });
 
     it("preserves every admitted chunk when shutdown aborts a multi-chunk export", async () => {

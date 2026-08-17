@@ -112,11 +112,13 @@ With durable delivery enabled, retryable A365 exporter payloads (including HTTP 
 and 5xx responses) are stored as plaintext local files in a stable per-application partition and
 replayed with a freshly resolved token plus the exporter's current cluster/domain routing; durable
 files never store bearer tokens or authoritative route metadata. Delivery is at-least-once, so
-duplicates are possible. Use a protected persistent volume if records must survive container or
-host restarts; ephemeral container storage only survives process restarts and still counts against
-the container's ephemeral-storage quota. If durable storage cannot initialize, the exporter logs
-the failure and degrades to network-only delivery; successful and non-retryable live sends still
-complete, but retryable results that cannot be persisted fail.
+duplicates are possible. The SDK restricts durable storage to the current user and Administrators
+on Windows and uses owner-only `0700` directories and `0600` files on POSIX. Use a protected
+persistent volume if records must survive container or host restarts; ephemeral container storage
+only survives process restarts and still counts against the container's ephemeral-storage quota.
+If durable storage permissions cannot be secured, the exporter logs the initialization failure and
+degrades to network-only delivery; successful and non-retryable live sends still complete, but
+retryable results that cannot be persisted fail.
 
 For A365 scenarios, scope APIs, baggage, hosting middleware, and official terminology alignment, see [A365_DOCUMENTATION.md](./A365_DOCUMENTATION.md).
 
@@ -386,8 +388,9 @@ set `durableDelivery.enabled: false` to force legacy network-only delivery.
 Operational notes:
 
 - Durable records are stored as plaintext JSON files. On POSIX, the SDK creates owner-only durable
-  directories/files (`0700` / `0600`). On Windows, place `storageDirectory` on a protected
-  directory or persistent volume with owner-only ACLs.
+  directories/files (`0700` / `0600`). On Windows, the SDK removes inherited ACLs and grants full
+  control only to the current Windows identity and built-in Administrators. ACL hardening failures
+  cause durable storage initialization to fail and the exporter to use network-only delivery.
 - Durable delivery is enabled by default when the A365 HTTP exporter is active. Set
   `durableDelivery.enabled: false` to force legacy network-only delivery.
 - Durable delivery is at-least-once. If a retryable request succeeds immediately before a crash or

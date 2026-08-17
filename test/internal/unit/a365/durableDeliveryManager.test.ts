@@ -17,6 +17,7 @@ import type {
   Agent365DurableDeliveryOptions,
   ClaimedRecord,
   DeliveryAttempt,
+  DurableDeliveryDependencies,
   DurableRecordV1,
 } from "../../../../src/a365/exporter/durable/index.js";
 
@@ -487,6 +488,28 @@ describe("DurableDeliveryManager", () => {
     assert.isFalse(send.mock.calls.some(([record]) => record.id === "timed-out-claim"));
   });
 
+  it("retains an invalid replay endpoint claim, skips token/send work, and stops the pass", async () => {
+    const { claimBatch, manager, release, resolveToken, send, validateReplay } = createManager();
+    const invalid = makeClaim(makeRecord({ id: "invalid-endpoint-claim" }));
+    const later = makeClaim(makeRecord({ id: "later-claim" }));
+
+    validateReplay.mockImplementation(() => {
+      throw replayEndpointError("invalid replay endpoint");
+    });
+    claimBatch.mockResolvedValueOnce([invalid]).mockResolvedValueOnce([later]);
+
+    await manager.forceFlush();
+
+    assert.strictEqual(validateReplay.mock.calls.length, 1);
+    assert.strictEqual(resolveToken.mock.calls.length, 0);
+    assert.strictEqual(send.mock.calls.length, 0);
+    assert.deepEqual(
+      release.mock.calls.map(([releasedClaim]) => releasedClaim),
+      [invalid],
+    );
+    assert.deepEqual(claimBatch.mock.calls, [[1, { excludeRecordIds: new Set() }]]);
+  });
+
   it("closes the transmission gate after a permanent replay probe response", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
@@ -732,12 +755,14 @@ describe("DurableDeliveryManager", () => {
   it("aborts in-flight sends during shutdown and persists the live record", async () => {
     const { manager, persist, send } = createManager();
     const aborted = deferred<void>();
+    const sendStarted = deferred<void>();
     let capturedSignal: AbortSignal | undefined;
 
     send.mockImplementation(
       (_record, _token, signal) =>
         new Promise<DeliveryAttempt>((_resolve, reject) => {
           capturedSignal = signal;
+          sendStarted.resolve();
           signal.addEventListener(
             "abort",
             () => {
@@ -750,7 +775,7 @@ describe("DurableDeliveryManager", () => {
     );
 
     const delivery = manager.deliver(makeRecord({ id: "abort-me" }));
-    await settle();
+    await sendStarted.promise;
 
     await manager.shutdown();
     await aborted.promise;
@@ -825,6 +850,7 @@ describe("DurableDeliveryManager", () => {
 function createManager(
   overrides: {
     options?: Partial<Agent365DurableDeliveryOptions>;
+    validateReplay?: () => void | Promise<void>;
   } = {},
 ) {
   const logger = makeLogger();
@@ -833,6 +859,7 @@ function createManager(
   const complete = vi.fn(async (_claim: ClaimedRecord) => undefined);
   const release = vi.fn(async (_claim: ClaimedRecord) => undefined);
   const resolveToken = vi.fn(async (_record: DurableRecordV1) => "token");
+  const validateReplay = vi.fn(overrides.validateReplay ?? (() => undefined));
   const send = vi.fn(
     async (
       _record: DurableRecordV1,
@@ -854,7 +881,7 @@ function createManager(
     }),
     { persist, claimBatch, complete, release } as unknown as PersistentStore,
     logger,
-    { resolveToken, send },
+    { resolveToken, send, validateReplay } as unknown as DurableDeliveryDependencies,
   );
   managedInstances.push(manager);
 
@@ -866,6 +893,7 @@ function createManager(
     complete,
     release,
     resolveToken,
+    validateReplay,
     send,
   };
 }
@@ -925,4 +953,8 @@ function containsMaxListenersWarning(args: unknown[]): boolean {
         arg.includes("Possible EventEmitter memory leak detected"))
     );
   });
+}
+
+function replayEndpointError(message: string): Error {
+  return Object.assign(new Error(message), { name: "ReplayEndpointError" });
 }

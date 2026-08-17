@@ -279,14 +279,11 @@ export class Agent365Exporter implements SpanExporter {
     resourceAttrs: Record<string, unknown>,
     start: number,
   ): Promise<void> {
-    const url = buildAgent365Url(
-      {
-        tenantId,
-        agentId,
-        useS2SEndpoint: this.options.useS2SEndpoint,
-      },
-      this.options,
-    );
+    const url = this.buildExportUrl({
+      tenantId,
+      agentId,
+      useS2SEndpoint: this.options.useS2SEndpoint,
+    });
 
     const headers: Record<string, string> = {
       "content-type": "application/json",
@@ -308,6 +305,7 @@ export class Agent365Exporter implements SpanExporter {
       );
       return;
     }
+    this.warnIfSendingBearerTokenToNonHttpsEndpoint(url);
     headers["authorization"] = `Bearer ${token}`;
 
     // Send each chunk (all-or-nothing: fail on first chunk failure)
@@ -426,6 +424,35 @@ export class Agent365Exporter implements SpanExporter {
     return result instanceof Promise ? result : result;
   }
 
+  private buildExportUrl(endpoint: Agent365Endpoint): string {
+    return buildAgent365Url(endpoint, this.options);
+  }
+
+  private buildReplayUrl(record: DurableRecordV1): string {
+    return this.buildExportUrl({
+      tenantId: record.tenantId,
+      agentId: record.agentId,
+      useS2SEndpoint: record.useS2SEndpoint,
+    });
+  }
+
+  private warnIfSendingBearerTokenToNonHttpsEndpoint(url: string): void {
+    if (endpointBearerTokenViolation(url) !== "non-https") {
+      return;
+    }
+
+    this.logger.warn(
+      `[Agent365Exporter] Live export endpoint must use HTTPS before sending a bearer token: ${url}`,
+    );
+  }
+
+  private validateReplayRecord(record: DurableRecordV1): void {
+    const error = createReplayEndpointError(this.buildReplayUrl(record));
+    if (error) {
+      throw error;
+    }
+  }
+
   private getAgenticUserId(spans: ReadableSpan[]): string | undefined {
     return spans.length > 0
       ? asStr(spans[0].attributes?.[OpenTelemetryConstants.GEN_AI_AGENT_AUID_KEY])
@@ -468,6 +495,7 @@ export class Agent365Exporter implements SpanExporter {
           store,
           this.logger,
           {
+            validateReplay: (record) => this.validateReplayRecord(record),
             resolveToken: (record) => this.resolveRecordToken(record),
             send: (record, token, signal) => this.postRecordOnce(record, token, signal),
           },
@@ -498,26 +526,21 @@ export class Agent365Exporter implements SpanExporter {
     token: string,
     signal: AbortSignal,
   ): Promise<DeliveryAttempt> {
-    const url = buildAgent365Url(
-      {
-        tenantId: record.tenantId,
-        agentId: record.agentId,
-        useS2SEndpoint: record.useS2SEndpoint,
-      },
-      this.options,
-    );
+    const url = this.buildReplayUrl(record);
     const stats = createRequestStats(url);
     const requestStart = Date.now();
     let correlationId = "unknown";
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      "x-ms-tenant-id": record.tenantId,
+    };
 
     try {
+      this.warnIfSendingBearerTokenToNonHttpsEndpoint(url);
+      headers["authorization"] = `Bearer ${token}`;
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-ms-tenant-id": record.tenantId,
-          authorization: `Bearer ${token}`,
-        },
+        headers,
         body: record.body,
         signal: AbortSignal.any([
           signal,
@@ -895,6 +918,40 @@ function buildAgent365Url(endpoint: Agent365Endpoint, routing: Agent365Routing):
   const endpointPath = `${servicePrefix}/tenants/${encodeURIComponent(endpoint.tenantId)}/otlp/agents/${encodeURIComponent(endpoint.agentId)}/traces`;
   const baseUrl = routing.domainOverride ?? resolveAgent365Endpoint(routing.clusterCategory);
   return `${baseUrl}${endpointPath}?api-version=1`;
+}
+
+function createReplayEndpointError(url: string): Error | undefined {
+  const violation = endpointBearerTokenViolation(url);
+  if (!violation) {
+    return undefined;
+  }
+
+  if (violation === "malformed") {
+    return createEndpointValidationError(
+      "ReplayEndpointError",
+      `Replay endpoint is invalid or malformed before resolving a bearer token: ${url}`,
+    );
+  }
+
+  return createEndpointValidationError(
+    "ReplayEndpointError",
+    `Replay endpoint must use HTTPS before resolving a bearer token: ${url}`,
+  );
+}
+
+function endpointBearerTokenViolation(url: string): "malformed" | "non-https" | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return "malformed";
+  }
+
+  return parsed.protocol === "https:" ? undefined : "non-https";
+}
+
+function createEndpointValidationError(name: string, message: string): Error {
+  return Object.assign(new Error(message), { name });
 }
 
 function createRequestStats(url: string): RequestStats | undefined {

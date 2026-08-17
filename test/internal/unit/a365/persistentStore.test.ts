@@ -274,6 +274,42 @@ describe("PersistentStore", () => {
     assert.strictEqual((await fs.stat(root)).uid, process.getuid!());
   });
 
+  it("applies Windows ACL hardening to explicit durable roots before persisting records", async () => {
+    const restorePlatform = useWindowsDefaultCandidates(nativePlatform);
+    const root = join(scratchRoot, "windows-acl-store");
+    const accessControl = {
+      hardenDirectory: vi.fn(async () => {}),
+    };
+
+    try {
+      const store = await createStore(root, {}, makeLogger(), accessControl);
+      const storedPath = await store.persist(makeRecord());
+
+      assert.deepEqual(accessControl.hardenDirectory.mock.calls, [[root], [dirname(storedPath)]]);
+    } finally {
+      restorePlatform();
+    }
+  });
+
+  it("rejects Windows store initialization when ACL hardening fails", async () => {
+    const restorePlatform = useWindowsDefaultCandidates(nativePlatform);
+    const root = join(scratchRoot, "windows-acl-failure");
+    const accessControl = {
+      hardenDirectory: vi.fn(async () => {
+        throw new Error("acl hardening failed");
+      }),
+    };
+
+    try {
+      await expect(createStore(root, {}, makeLogger(), accessControl)).rejects.toThrow(
+        /acl hardening failed/,
+      );
+      assert.deepEqual(accessControl.hardenDirectory.mock.calls, [[root]]);
+    } finally {
+      restorePlatform();
+    }
+  });
+
   it("rejects records larger than configured storage capacity", async () => {
     const root = join(scratchRoot, "oversize-store");
     const store = await createStore(root, { maxStorageBytes: 128 });
@@ -909,6 +945,9 @@ async function createStore(
   storageDirectory: string,
   overrides: Partial<Agent365DurableDeliveryOptions> = {},
   logger: ILogger = makeLogger(),
+  directoryAccessControl?: {
+    hardenDirectory(directory: string): Promise<void>;
+  },
 ): Promise<PersistentStore> {
   return PersistentStore.create(
     new ResolvedDurableDeliveryOptions({
@@ -917,11 +956,17 @@ async function createStore(
       ...overrides,
     }),
     logger,
+    directoryAccessControl === undefined
+      ? defaultCreateStoreDependencies()
+      : { directoryAccessControl },
   );
 }
 
 async function createDefaultStore(
   overrides: Partial<Agent365DurableDeliveryOptions> = {},
+  directoryAccessControl?: {
+    hardenDirectory(directory: string): Promise<void>;
+  },
 ): Promise<PersistentStore> {
   return PersistentStore.create(
     new ResolvedDurableDeliveryOptions({
@@ -929,6 +974,9 @@ async function createDefaultStore(
       ...overrides,
     }),
     makeLogger(),
+    directoryAccessControl === undefined
+      ? defaultCreateStoreDependencies()
+      : { directoryAccessControl },
   );
 }
 
@@ -1020,6 +1068,24 @@ function defaultStorageBaseRoot(candidate: string): string {
 
 function explicitStorageRoot(root: string): string {
   return join(root, applicationPartition());
+}
+
+function defaultCreateStoreDependencies():
+  | {
+      directoryAccessControl: {
+        hardenDirectory(directory: string): Promise<void>;
+      };
+    }
+  | undefined {
+  if (process.platform !== "win32") {
+    return undefined;
+  }
+
+  return {
+    directoryAccessControl: {
+      hardenDirectory: async () => {},
+    },
+  };
 }
 
 function useWindowsDefaultCandidates(nativePlatform: string): () => void {

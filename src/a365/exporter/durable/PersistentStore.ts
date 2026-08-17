@@ -8,6 +8,10 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { ILogger } from "../../logging.js";
 import { ResolvedDurableDeliveryOptions } from "./DurableDeliveryOptions.js";
 import { parseDurableRecord, type DurableRecordV1 } from "./DurableRecord.js";
+import {
+  type DirectoryAccessControl,
+  WindowsFileAccessControl,
+} from "./WindowsFileAccessControl.js";
 
 const OWNER_DIRECTORY_MODE = 0o700;
 const OWNER_FILE_MODE = 0o600;
@@ -47,6 +51,10 @@ interface ManagedFile {
   removableWhenExpired: boolean;
 }
 
+export interface PersistentStoreDependencies {
+  directoryAccessControl?: DirectoryAccessControl;
+}
+
 export class PersistentStore {
   private static readonly persistenceQueues = new Map<string, Promise<void>>();
   private claimQueue: Promise<void> = Promise.resolve();
@@ -60,8 +68,13 @@ export class PersistentStore {
   public static async create(
     options: ResolvedDurableDeliveryOptions,
     logger: ILogger,
+    dependencies: PersistentStoreDependencies = {},
   ): Promise<PersistentStore> {
-    const root = await resolveStorageRoot(options, logger);
+    const root = await resolveStorageRoot(
+      options,
+      logger,
+      resolveDirectoryAccessControl(dependencies.directoryAccessControl),
+    );
     return new PersistentStore(root, options, logger);
   }
 
@@ -466,16 +479,17 @@ export class PersistentStore {
 async function resolveStorageRoot(
   options: ResolvedDurableDeliveryOptions,
   logger: ILogger,
+  directoryAccessControl?: DirectoryAccessControl,
 ): Promise<string> {
   if (options.storageDirectory !== undefined) {
-    return initializeExplicitRoot(options.storageDirectory);
+    return initializeExplicitRoot(options.storageDirectory, directoryAccessControl);
   }
 
   let lastError: unknown;
   for (const candidate of storageRootCandidates()) {
     const root = defaultStorageBaseRoot(candidate);
     try {
-      return await initializeDefaultRoot(root);
+      return await initializeDefaultRoot(root, directoryAccessControl);
     } catch (error) {
       lastError = error;
       logger.warn(
@@ -493,7 +507,11 @@ async function resolveStorageRoot(
   throw new Error("Unable to initialize durable storage root");
 }
 
-async function initializeRoot(root: string, recursive = true): Promise<string> {
+async function initializeRoot(
+  root: string,
+  recursive = true,
+  directoryAccessControl?: DirectoryAccessControl,
+): Promise<string> {
   try {
     await fs.mkdir(root, { recursive, mode: OWNER_DIRECTORY_MODE });
   } catch (error) {
@@ -502,26 +520,41 @@ async function initializeRoot(root: string, recursive = true): Promise<string> {
     }
   }
 
-  return verifyRoot(root);
+  return verifyRoot(root, directoryAccessControl);
 }
 
-async function initializeExplicitRoot(root: string): Promise<string> {
-  const baseRoot = await initializeRoot(root);
-  return initializeRoot(partitionedStorageRoot(baseRoot), false);
+async function initializeExplicitRoot(
+  root: string,
+  directoryAccessControl?: DirectoryAccessControl,
+): Promise<string> {
+  const baseRoot = await initializeRoot(root, true, directoryAccessControl);
+  return initializeRoot(partitionedStorageRoot(baseRoot), false, directoryAccessControl);
 }
 
-async function initializeDefaultRoot(root: string): Promise<string> {
-  const baseRoot = await initializeRoot(root, process.platform === "win32");
-  return initializeRoot(partitionedStorageRoot(baseRoot), false);
+async function initializeDefaultRoot(
+  root: string,
+  directoryAccessControl?: DirectoryAccessControl,
+): Promise<string> {
+  const baseRoot = await initializeRoot(root, process.platform === "win32", directoryAccessControl);
+  return initializeRoot(partitionedStorageRoot(baseRoot), false, directoryAccessControl);
 }
 
-async function verifyRoot(root: string): Promise<string> {
+async function verifyRoot(
+  root: string,
+  directoryAccessControl?: DirectoryAccessControl,
+): Promise<string> {
   let stats = await fs.lstat(root);
   if (stats.isSymbolicLink() || !stats.isDirectory()) {
     throw new Error(`Durable storage root must be a real directory: ${root}`);
   }
 
-  if (process.platform !== "win32") {
+  if (process.platform === "win32") {
+    await directoryAccessControl?.hardenDirectory(root);
+    stats = await fs.lstat(root);
+    if (stats.isSymbolicLink() || !stats.isDirectory()) {
+      throw new Error(`Durable storage root must be a real directory: ${root}`);
+    }
+  } else {
     const uid = process.getuid?.();
     if (uid !== undefined && stats.uid !== uid) {
       throw new Error(`Durable storage root must be owned by the current user: ${root}`);
@@ -542,6 +575,23 @@ async function verifyRoot(root: string): Promise<string> {
 
   await probeRoot(root);
   return root;
+}
+
+let defaultDirectoryAccessControl: DirectoryAccessControl | undefined;
+
+function resolveDirectoryAccessControl(
+  directoryAccessControl?: DirectoryAccessControl,
+): DirectoryAccessControl | undefined {
+  if (directoryAccessControl !== undefined) {
+    return directoryAccessControl;
+  }
+
+  if (process.platform !== "win32") {
+    return undefined;
+  }
+
+  defaultDirectoryAccessControl ??= new WindowsFileAccessControl();
+  return defaultDirectoryAccessControl;
 }
 
 function defaultStorageBaseRoot(candidate: string): string {

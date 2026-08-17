@@ -21,8 +21,8 @@ dist-*/
 .DS_Store
 Thumbs.db
 
-# Generated docs
-docs/
+# Generated planning docs
+docs/superpowers/
 
 # Test coverage
 coverage/

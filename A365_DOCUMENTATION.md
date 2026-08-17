@@ -157,8 +157,9 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
   creates one `a365-otel-durable-<uid>` leaf under each candidate; it does not create a
   multi-directory SDK-owned tree under a shared temp directory. Windows defaults use the per-user
   `Microsoft/A365/otel-durable` location under the selected candidate and also reject a symlinked
-  final root. On Windows, use a protected storage directory or persistent volume with owner-only
-  ACLs.
+  final root. On Windows, the SDK removes inherited ACLs and grants full control only to the current
+  Windows identity and built-in Administrators. ACL hardening failures cause durable storage
+  initialization to fail and the exporter to use network-only delivery.
 - Every explicit or default durable root is partitioned again under a stable `app-<hash>` child
   derived from the process identity, so applications that share a base directory do not replay one
   another's telemetry. All retention, capacity, and pruning behavior described below operates only
