@@ -504,43 +504,13 @@ export function getModel(run: Run): string | undefined {
   return getRequestModel(run) ?? getResponseModel(run);
 }
 
-// Detects whether a LangChain run originated from `AzureChatOpenAI`. We look at
-// the serialized constructor id array (e.g. ["langchain", "chat_models",
-// "azure_openai", "AzureChatOpenAI"]) which LangChain JS surfaces alongside
-// every callback run. Used to scope the AzureChatOpenAI-specific request model
-// workaround in `setModelAttribute`.
-function isAzureChatOpenAIRun(run: Run): boolean {
-  if (!run.serialized || typeof run.serialized !== "object" || Array.isArray(run.serialized)) {
-    return false;
-  }
-  const id = (run.serialized as Record<string, unknown>).id;
-  return Array.isArray(id) && id.some((segment) => segment === "AzureChatOpenAI");
-}
-
-// Model - Set request and response model attributes on the span using only
+// Model - Set request and response model attributes independently using
 // LangChain-generic identifiers.
-//
-// Note on request-model priority: for `AzureChatOpenAI` runs we deliberately
-// prefer the response-side model for `gen_ai.request.model`. LangChain JS does
-// not surface the configured deployment for `AzureChatOpenAI` through
-// `getLsParams()` or `invocationParams()` — `extra.metadata.ls_model_name`
-// falls back to the `BaseChatOpenAI` default of `"gpt-3.5-turbo"`, which would
-// otherwise be emitted as the request model regardless of what the caller
-// actually configured. The server-reported model (e.g.
-// `gpt-4o-mini-2024-07-18`) is a much closer approximation of the requested
-// model than that hardcoded default. See
-// https://github.com/langchain-ai/langchainjs/issues/10874.
-//
-// For all other clients (notably plain `ChatOpenAI` / Foundry deployments) the
-// request-side identifier is correct and is preferred so the deployment alias
-// or `model` kwarg is reported as `gen_ai.request.model`.
 export function setModelAttribute(run: Run, span: Span) {
   const requestModel = getRequestModel(run);
   const responseModel = getResponseModel(run);
 
-  const effectiveRequestModel = isAzureChatOpenAIRun(run)
-    ? (responseModel ?? requestModel)
-    : (requestModel ?? responseModel);
+  const effectiveRequestModel = requestModel ?? responseModel;
 
   if (effectiveRequestModel) {
     span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, effectiveRequestModel);

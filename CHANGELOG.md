@@ -7,6 +7,7 @@
 - Emit `gen_ai.output.type` and available GenAI request parameters on LangChain chat spans. [#213](https://github.com/microsoft/opentelemetry-distro-javascript/pull/213)
 
 ### Bugs Fixed
+- Preserve the request model reported by LangChain for AzureChatOpenAI runs instead of replacing it with the response model. [#225](https://github.com/microsoft/opentelemetry-distro-javascript/pull/225)
 - Fix duplicate Bunyan logs, missing HTTP duration metrics, duplicate request filtering, and incorrect performance-counter values. [#212](https://github.com/microsoft/opentelemetry-distro-javascript/pull/212)
 
 ## [1.3.0] - 2026-08-03

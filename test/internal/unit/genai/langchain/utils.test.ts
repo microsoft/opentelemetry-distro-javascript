@@ -464,17 +464,19 @@ describe("setModelAttribute", () => {
     );
   });
 
-  it("prefers response model over request-side identifier for AzureChatOpenAI runs", () => {
-    // LangChain JS hardcodes ls_model_name to "gpt-3.5-turbo" for AzureChatOpenAI
-    // (https://github.com/langchain-ai/langchainjs/issues/10874), so for that
-    // client the server-reported model is a closer approximation of the
-    // requested model than the request-side identifier.
+  it("preserves the request model reported for AzureChatOpenAI", () => {
     const span = makeSpan();
     const run = makeRun({
       serialized: {
         id: ["langchain", "chat_models", "azure_openai", "AzureChatOpenAI"],
       },
-      extra: { invocation_params: { model: "gpt-4o" } },
+      extra: {
+        metadata: {
+          ls_provider: "azure",
+          ls_model_name: "deployment-gpt-4o",
+        },
+        invocation_params: { model: "deployment-gpt-4o" },
+      },
       outputs: {
         generations: [
           [{ message: { kwargs: { response_metadata: { model_name: "gpt-4o-2024-08-06" } } } }],
@@ -485,9 +487,9 @@ describe("setModelAttribute", () => {
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
       calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-2024-08-06",
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-gpt-4o",
       ),
-      "request model should prefer the response-side identifier for AzureChatOpenAI",
+      "request model should preserve LangChain's request-side identifier",
     );
     assert.ok(
       calls.some(
@@ -497,48 +499,7 @@ describe("setModelAttribute", () => {
     );
   });
 
-  it("avoids the AzureChatOpenAI ls_model_name=gpt-3.5-turbo regression", () => {
-    // Regression test: AzureChatOpenAI sets ls_model_name to the BaseChatOpenAI
-    // default ("gpt-3.5-turbo") regardless of the configured deployment. The
-    // response-side model_name carries the actual served model, which we should
-    // emit as gen_ai.request.model to avoid misattributing the request.
-    const span = makeSpan();
-    const run = makeRun({
-      serialized: {
-        id: ["langchain", "chat_models", "azure_openai", "AzureChatOpenAI"],
-      },
-      extra: { metadata: { ls_model_name: "gpt-3.5-turbo" } },
-      outputs: {
-        generations: [
-          [
-            {
-              message: {
-                kwargs: { response_metadata: { model_name: "gpt-4o-mini-2024-07-18" } },
-              },
-            },
-          ],
-        ],
-      },
-    });
-    setModelAttribute(run, span);
-    const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
-    assert.ok(
-      calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-mini-2024-07-18",
-      ),
-      "request model should use the server-reported model rather than the LangChain default",
-    );
-    assert.ok(
-      !calls.some((c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-3.5-turbo"),
-      "request model must not fall back to the hardcoded ls_model_name default",
-    );
-  });
-
-  it("keeps request and response model separate for non-Azure clients (e.g. ChatOpenAI)", () => {
-    // For plain ChatOpenAI / Foundry deployments the request-side identifier
-    // (deployment alias or `model` kwarg) is correct and must be used as-is for
-    // gen_ai.request.model. Only AzureChatOpenAI needs the response-model
-    // workaround.
+  it("keeps request and response model separate for ChatOpenAI", () => {
     const span = makeSpan();
     const run = makeRun({
       serialized: {
@@ -563,7 +524,7 @@ describe("setModelAttribute", () => {
       calls.some(
         (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-o4-mini",
       ),
-      "request model should come from invocation_params.model for non-Azure clients",
+      "request model should come from invocation_params.model",
     );
     assert.ok(
       calls.some(
@@ -720,18 +681,19 @@ describe("setModelAttribute", () => {
     );
   });
 
-  it("AzureChatOpenAI + RAPI: response_metadata.model still drives the workaround request model", () => {
-    // Combines the AzureChatOpenAI ls_model_name=gpt-3.5-turbo regression (see
-    // langchain-ai/langchainjs#10874) with the RAPI response shape. The
-    // response-side model must populate gen_ai.request.model (via the Azure
-    // workaround) AND gen_ai.response.model, even when LangChain only sets
-    // `model` (no `model_name` alias).
+  it("AzureChatOpenAI + RAPI: keeps request and response models separate", () => {
     const span = makeSpan();
     const run = makeRun({
       serialized: {
         id: ["langchain", "chat_models", "azure_openai", "AzureChatOpenAI"],
       },
-      extra: { metadata: { ls_model_name: "gpt-3.5-turbo" } },
+      extra: {
+        metadata: {
+          ls_provider: "azure",
+          ls_model_name: "deployment-gpt-4o-mini",
+        },
+        invocation_params: { model: "deployment-gpt-4o-mini" },
+      },
       outputs: {
         generations: [
           [
@@ -751,9 +713,9 @@ describe("setModelAttribute", () => {
     const calls = (span.setAttribute as ReturnType<typeof vi.fn>).mock.calls;
     assert.ok(
       calls.some(
-        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "gpt-4o-mini-2024-07-18",
+        (c: unknown[]) => c[0] === ATTR_GEN_AI_REQUEST_MODEL && c[1] === "deployment-gpt-4o-mini",
       ),
-      "AzureChatOpenAI request model should use response_metadata.model when model_name is absent",
+      "AzureChatOpenAI request model should preserve LangChain's request-side identifier",
     );
     assert.ok(
       calls.some(
