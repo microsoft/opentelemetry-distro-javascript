@@ -53,6 +53,18 @@ function makeSpan(): ReadableSpan {
   } as unknown as ReadableSpan;
 }
 
+function createNetworkOnlyExporter(
+  options: ConstructorParameters<typeof Agent365Exporter>[0] = {},
+): Agent365Exporter {
+  return new Agent365Exporter({
+    ...options,
+    durableDelivery: {
+      enabled: false,
+      ...options.durableDelivery,
+    },
+  });
+}
+
 function exportSpan(exporter: Agent365Exporter): Promise<number> {
   return new Promise((resolve) => exporter.export([makeSpan()], (r) => resolve(r.code)));
 }
@@ -74,13 +86,21 @@ describe("Agent365Exporter network SDKStats", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps SDKStats coverage on the legacy network-only path", () => {
+    const exporter = createNetworkOnlyExporter({ tokenResolver: () => "tok" });
+    const options = (exporter as unknown as { options: { durableDelivery: { enabled: boolean } } })
+      .options;
+
+    expect(options.durableDelivery.enabled).toBe(false);
+  });
+
   it("records request_success_count on a 2xx response", async () => {
     fetchSpy.mockResolvedValue({
       status: 200,
       headers: new Map([["x-ms-correlation-id", "c1"]]),
     });
 
-    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    const exporter = createNetworkOnlyExporter({ tokenResolver: () => "tok" });
     await exportSpan(exporter);
 
     expect(drain(REQUEST_SUCCESS_NAME).size).toBe(1);
@@ -94,7 +114,7 @@ describe("Agent365Exporter network SDKStats", () => {
       return 0 as unknown as NodeJS.Timeout;
     }) as typeof setTimeout);
 
-    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    const exporter = createNetworkOnlyExporter({ tokenResolver: () => "tok" });
     await exportSpan(exporter);
 
     expect(drain(REQUEST_SUCCESS_NAME).size).toBe(0);
@@ -107,7 +127,7 @@ describe("Agent365Exporter network SDKStats", () => {
       return 0 as unknown as NodeJS.Timeout;
     }) as typeof setTimeout);
 
-    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    const exporter = createNetworkOnlyExporter({ tokenResolver: () => "tok" });
     await exportSpan(exporter);
 
     expect(drain(REQUEST_SUCCESS_NAME).size).toBe(0);
@@ -120,7 +140,7 @@ describe("Agent365Exporter network SDKStats", () => {
       headers: new Map(),
     });
 
-    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    const exporter = createNetworkOnlyExporter({ tokenResolver: () => "tok" });
     await exportSpan(exporter);
 
     expect(drain(REQUEST_SUCCESS_NAME).size).toBe(0);
@@ -129,7 +149,7 @@ describe("Agent365Exporter network SDKStats", () => {
   it("records request_failure_count with statusCode on a non-retryable, non-throttle 4xx", async () => {
     fetchSpy.mockResolvedValue({ status: 404, headers: new Map() });
 
-    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    const exporter = createNetworkOnlyExporter({ tokenResolver: () => "tok" });
     await exportSpan(exporter);
 
     const failures = drain(REQUEST_FAILURE_NAME);
@@ -147,7 +167,7 @@ describe("Agent365Exporter network SDKStats", () => {
       return 0 as unknown as NodeJS.Timeout;
     }) as typeof setTimeout);
 
-    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    const exporter = createNetworkOnlyExporter({ tokenResolver: () => "tok" });
     await exportSpan(exporter);
 
     const retries = drain(RETRY_COUNT_NAME);
@@ -168,7 +188,7 @@ describe("Agent365Exporter network SDKStats", () => {
       return 0 as unknown as NodeJS.Timeout;
     }) as typeof setTimeout);
 
-    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    const exporter = createNetworkOnlyExporter({ tokenResolver: () => "tok" });
     await exportSpan(exporter);
 
     const throttles = drain(THROTTLE_COUNT_NAME);
@@ -184,7 +204,7 @@ describe("Agent365Exporter network SDKStats", () => {
       return 0 as unknown as NodeJS.Timeout;
     }) as typeof setTimeout);
 
-    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    const exporter = createNetworkOnlyExporter({ tokenResolver: () => "tok" });
     await exportSpan(exporter);
 
     const exceptions = drain(EXCEPTION_COUNT_NAME);
@@ -198,7 +218,7 @@ describe("Agent365Exporter network SDKStats", () => {
   it("records request_duration on each attempt regardless of outcome", async () => {
     fetchSpy.mockResolvedValue({ status: 200, headers: new Map() });
 
-    const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+    const exporter = createNetworkOnlyExporter({ tokenResolver: () => "tok" });
     await exportSpan(exporter);
 
     const durations = drain(REQUEST_DURATION_NAME);

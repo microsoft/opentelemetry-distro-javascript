@@ -1,11 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { afterEach, assert, beforeEach, describe, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ExportResultCode } from "@opentelemetry/core";
 import { SpanKind, SpanStatusCode, TraceFlags } from "@opentelemetry/api";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
 import { Agent365Exporter } from "../../../../src/a365/exporter/Agent365Exporter.js";
+import { applicationPartition } from "../../../../src/a365/exporter/durable/PersistentStore.js";
+import {
+  DURABLE_RECORD_VERSION,
+  PersistentStore,
+} from "../../../../src/a365/exporter/durable/index.js";
 import {
   partitionByIdentity,
   parseIdentityKey,
@@ -25,6 +33,7 @@ import { configureA365Logger, _resetA365LoggerForTest } from "../../../../src/a3
 
 const TENANT_ID = "tenant-11111111-1111-1111-1111-111111111111";
 const AGENT_ID = "agent-22222222-2222-2222-2222-222222222222";
+const temporaryDirectories: string[] = [];
 
 function makeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
   return {
@@ -59,12 +68,24 @@ function makeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
 }
 
 /** Helper: export a single span and return the parsed payload attributes. */
+function createTestExporter(
+  options: ConstructorParameters<typeof Agent365Exporter>[0] = {},
+): Agent365Exporter {
+  return new Agent365Exporter({
+    ...options,
+    durableDelivery: {
+      enabled: false,
+      ...options.durableDelivery,
+    },
+  });
+}
+
 async function exportAndGetPayload(
   fetchSpy: ReturnType<typeof vi.fn>,
   attrs: Record<string, unknown>,
   exporterOptions?: ConstructorParameters<typeof Agent365Exporter>[0],
 ) {
-  const exporter = new Agent365Exporter({
+  const exporter = createTestExporter({
     tokenResolver: () => "tok",
     ...exporterOptions,
   });
@@ -87,6 +108,58 @@ async function exportAndGetPayload(
   return { result, exportedSpan, span, body };
 }
 
+async function createStorageDirectory(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "a365-exporter-"));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+
+function durableStorageRoot(directory: string): string {
+  return join(directory, applicationPartition());
+}
+
+async function durablePendingFiles(directory: string): Promise<string[]> {
+  try {
+    return (await readdir(durableStorageRoot(directory))).filter((name) =>
+      name.endsWith(".pending"),
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function durablePendingCount(directory: string): Promise<number> {
+  return (await durablePendingFiles(directory)).length;
+}
+
+async function seedDurablePendingRecord(
+  directory: string,
+  fileName: string,
+  contents: string,
+): Promise<void> {
+  await mkdir(durableStorageRoot(directory), { recursive: true });
+  await writeFile(join(durableStorageRoot(directory), fileName), contents, "utf8");
+}
+
+async function exportResult(exporter: Agent365Exporter, spans: ReadableSpan[]): Promise<number> {
+  return new Promise<number>((resolve) => {
+    void exporter.export(spans, (result) => resolve(result.code));
+  });
+}
+
+async function waitFor(predicate: () => boolean, timeoutMilliseconds = 1_000): Promise<void> {
+  const deadline = Date.now() + timeoutMilliseconds;
+  while (!predicate()) {
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for condition");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 describe("Agent365Exporter", () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
 
@@ -98,14 +171,19 @@ describe("Agent365Exporter", () => {
     vi.stubGlobal("fetch", fetchSpy);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await Promise.all(
+      temporaryDirectories
+        .splice(0)
+        .map((directory) => rm(directory, { recursive: true, force: true })),
+    );
     _resetA365LoggerForTest();
     vi.restoreAllMocks();
   });
 
   describe("export", () => {
     it("should return success immediately with no spans", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -118,7 +196,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should export spans successfully", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -140,7 +218,7 @@ describe("Agent365Exporter", () => {
 
     it("should use provided token resolver and set authorization header", async () => {
       const token = "abc123";
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => token,
       });
 
@@ -170,7 +248,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should use async token resolver", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: async () => "async-token",
       });
 
@@ -184,7 +262,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should export to default prod endpoint", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok-prod",
       });
 
@@ -198,7 +276,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should use S2S endpoint when configured", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
         useS2SEndpoint: true,
       });
@@ -213,7 +291,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should use S2S endpoint with domain override", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok-s2s-custom",
         useS2SEndpoint: true,
         domainOverride: "https://custom.domain",
@@ -231,7 +309,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should use domain override when configured", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
         domainOverride: "https://custom.example.com",
       });
@@ -245,7 +323,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should skip export when no token resolver", async () => {
-      const exporter = new Agent365Exporter({});
+      const exporter = createTestExporter({});
 
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
@@ -256,7 +334,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should skip spans missing identity attributes", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -270,7 +348,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should skip spans missing only tenant ID", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -284,7 +362,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should skip spans missing only agent ID", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -298,7 +376,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should fail after shutdown", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -312,7 +390,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should be idempotent on multiple shutdown calls", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -327,7 +405,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should support forceFlush as a no-op", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
       // Should not throw
@@ -335,7 +413,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should build correct OTLP payload", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -404,7 +482,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("should partition spans by identity and export separately", async () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -441,7 +519,7 @@ describe("Agent365Exporter", () => {
         ],
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       await new Promise<void>((resolve) => {
         exporter.export([span], () => resolve());
       });
@@ -467,7 +545,7 @@ describe("Agent365Exporter", () => {
         ],
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       await new Promise<void>((resolve) => {
         exporter.export([span], () => resolve());
       });
@@ -487,7 +565,7 @@ describe("Agent365Exporter", () => {
         },
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       await new Promise<void>((resolve) => {
         exporter.export([span], () => resolve());
       });
@@ -501,7 +579,7 @@ describe("Agent365Exporter", () => {
       const customTimeout = 12345;
       const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
 
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok",
         httpRequestTimeoutMilliseconds: customTimeout,
       });
@@ -522,7 +600,7 @@ describe("Agent365Exporter", () => {
       };
       configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       await new Promise<void>((resolve) => {
         exporter.export([makeSpan()], () => resolve());
       });
@@ -559,7 +637,7 @@ describe("Agent365Exporter", () => {
       };
       configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -585,7 +663,7 @@ describe("Agent365Exporter", () => {
 
   describe("late-configured logger", () => {
     it("should emit event logs when logger is configured after exporter construction", async () => {
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
 
       const customLogger = {
         info: vi.fn(),
@@ -635,7 +713,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "test-token",
       });
 
@@ -663,7 +741,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -688,7 +766,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -707,7 +785,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -726,7 +804,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -748,7 +826,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -765,7 +843,7 @@ describe("Agent365Exporter", () => {
         }),
       );
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -804,7 +882,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -846,7 +924,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -894,7 +972,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -934,7 +1012,7 @@ describe("Agent365Exporter", () => {
         });
       });
 
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       const result = await new Promise<number>((resolve) => {
         exporter.export([makeSpan()], (r) => resolve(r.code));
       });
@@ -950,7 +1028,7 @@ describe("Agent365Exporter", () => {
   });
 
   it("exports ApplyGuardrailScope span with all guardrail attributes and finding event", async () => {
-    const exporter = new Agent365Exporter({
+    const exporter = createTestExporter({
       tokenResolver: () => "tok-guardrail",
     });
 
@@ -1050,7 +1128,7 @@ describe("Agent365Exporter", () => {
 
   describe("getBufferConfig", () => {
     it("returns the A365 exporter defaults when no batching options are supplied", () => {
-      const exporter = new Agent365Exporter({ tokenResolver: () => "tok" });
+      const exporter = createTestExporter({ tokenResolver: () => "tok" });
       assert.deepStrictEqual(exporter.getBufferConfig(), {
         maxQueueSize: 2048,
         scheduledDelayMillis: 5000,
@@ -1060,7 +1138,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("honors caller-supplied values while keeping A365 defaults for the rest", () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok",
         maxQueueSize: 4096,
       });
@@ -1073,7 +1151,7 @@ describe("Agent365Exporter", () => {
     });
 
     it("maps every supported A365 option to the corresponding BufferConfig key", () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok",
         maxQueueSize: 4096,
         scheduledDelayMilliseconds: 1234,
@@ -1089,13 +1167,609 @@ describe("Agent365Exporter", () => {
     });
 
     it("returns an independent object on each call so callers cannot mutate internal state", () => {
-      const exporter = new Agent365Exporter({
+      const exporter = createTestExporter({
         tokenResolver: () => "tok",
         maxQueueSize: 4096,
       });
       const first = exporter.getBufferConfig();
       first.maxQueueSize = 1;
       assert.strictEqual(exporter.getBufferConfig().maxQueueSize, 4096);
+    });
+  });
+
+  it("waits for an accepted network-only export to settle during shutdown", async () => {
+    let notifyRequestStarted: (() => void) | undefined;
+    const requestStarted = new Promise<void>((resolve) => {
+      notifyRequestStarted = resolve;
+    });
+    let resolveFetch: ((value: { status: number; headers: Headers }) => void) | undefined;
+    fetchSpy.mockImplementation(() => {
+      notifyRequestStarted!();
+      return new Promise((resolve) => {
+        resolveFetch = resolve;
+      });
+    });
+    const exporter = createTestExporter({
+      tokenResolver: () => "token",
+      durableDelivery: { enabled: false, shutdownTimeoutMilliseconds: 50 },
+    });
+
+    const result = exportResult(exporter, [makeSpan()]);
+    await requestStarted;
+
+    let shutdownSettled = false;
+    const shutdown = exporter.shutdown().finally(() => {
+      shutdownSettled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.isFalse(shutdownSettled);
+
+    resolveFetch!({ status: 200, headers: new Headers() });
+
+    await expect(shutdown).resolves.toBeUndefined();
+    assert.isTrue(shutdownSettled);
+    assert.strictEqual(await result, ExportResultCode.SUCCESS);
+  });
+
+  it("rejects network-only shutdown after the shared deadline when an accepted export never settles", async () => {
+    vi.useFakeTimers();
+    try {
+      let notifyRequestStarted: (() => void) | undefined;
+      const requestStarted = new Promise<void>((resolve) => {
+        notifyRequestStarted = resolve;
+      });
+      let resolveFetch: ((value: { status: number; headers: Headers }) => void) | undefined;
+      fetchSpy.mockImplementation(() => {
+        notifyRequestStarted!();
+        return new Promise((resolve) => {
+          resolveFetch = resolve;
+        });
+      });
+      const exporter = createTestExporter({
+        tokenResolver: () => "token",
+        httpRequestTimeoutMilliseconds: 1,
+        durableDelivery: { enabled: false, shutdownTimeoutMilliseconds: 5 },
+      });
+
+      const result = exportResult(exporter, [makeSpan()]);
+      await requestStarted;
+
+      const shutdown = exporter.shutdown().then(
+        () => ({ status: "resolved" as const }),
+        (error) => ({ status: "rejected" as const, error }),
+      );
+      await vi.advanceTimersByTimeAsync(5);
+
+      const shutdownResult = await shutdown;
+      assert.strictEqual(shutdownResult.status, "rejected");
+      if (shutdownResult.status !== "rejected") {
+        assert.fail("Expected shutdown to reject");
+      }
+      assert.instanceOf(shutdownResult.error, Error);
+      assert.match(shutdownResult.error.message, /exporter shutdown timed out/i);
+      assert.match(shutdownResult.error.message, /accepted exports to settle/i);
+      assert.notInclude(shutdownResult.error.message, "durable delivery");
+
+      resolveFetch!({ status: 200, headers: new Headers() });
+      await expect(result).resolves.toBe(ExportResultCode.SUCCESS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  describe("durable delivery", () => {
+    it("hands a retryable failure to durable storage after one attempt", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValue({
+        status: 503,
+        headers: new Headers({ "retry-after": "60" }),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "durable-token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+      const pending = await durablePendingFiles(directory);
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      assert.strictEqual(pending.length, 1);
+      assert.notInclude(
+        await readFile(join(durableStorageRoot(directory), pending[0]), "utf8"),
+        "durable-token",
+      );
+      await exporter.shutdown();
+    });
+
+    it("persists a durable record after an HTTP 401 response", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValue({
+        status: 401,
+        headers: new Headers(),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "durable-token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+      const pending = await durablePendingFiles(directory);
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      assert.strictEqual(pending.length, 1);
+      await exporter.shutdown();
+    });
+
+    it("persists one durable record for each serialized chunk", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValue({
+        status: 503,
+        headers: new Headers(),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        maxPayloadBytes: 1,
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan(), makeSpan({ name: "second-span" })]);
+      const pending = await durablePendingFiles(directory);
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      assert.strictEqual(pending.length, 2);
+      await exporter.shutdown();
+    });
+
+    it("fails when durable persistence fails but still handles another identity", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValue({
+        status: 503,
+        headers: new Headers(),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: {
+          enabled: true,
+          storageDirectory: directory,
+          maxStorageBytes: 4096,
+        },
+      });
+      const oversizedFirstIdentity = makeSpan({
+        attributes: {
+          "microsoft.tenant.id": "tenant-first",
+          "gen_ai.agent.id": "agent-first",
+          "gen_ai.operation.name": "invoke_agent",
+          oversized: "x".repeat(10_000),
+        },
+      });
+      const secondIdentity = makeSpan({
+        attributes: {
+          "microsoft.tenant.id": "tenant-second",
+          "gen_ai.agent.id": "agent-second",
+          "gen_ai.operation.name": "invoke_agent",
+        },
+      });
+
+      const result = await exportResult(exporter, [oversizedFirstIdentity, secondIdentity]);
+      const pending = await durablePendingFiles(directory);
+
+      assert.strictEqual(result, ExportResultCode.FAILED);
+      assert.strictEqual(fetchSpy.mock.calls.length, 2);
+      assert.strictEqual(pending.length, 1);
+      await exporter.shutdown();
+    });
+
+    it("persists for replay when a durable export has no token", async () => {
+      const directory = await createStorageDirectory();
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => null,
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 0);
+      assert.strictEqual(await durablePendingCount(directory), 1);
+      await exporter.shutdown();
+    });
+
+    it("warns and still sends durable live exports to a non-HTTPS endpoint", async () => {
+      const directory = await createStorageDirectory();
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        domainOverride: "http://plaintext.example.com",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      const [url, options] = fetchSpy.mock.calls[0];
+      assert.ok(url.startsWith("http://plaintext.example.com/observability/tenants/"));
+      assert.strictEqual(options.headers.authorization, "Bearer token");
+      assert.strictEqual(await durablePendingCount(directory), 0);
+      assert.ok(
+        customLogger.warn.mock.calls.some((call) =>
+          String(call[0]).includes("must use HTTPS before sending a bearer token"),
+        ),
+      );
+      await exporter.shutdown();
+    });
+
+    it("fails without persisting after a durable permanent response", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValue({
+        status: 400,
+        headers: new Headers(),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+
+      assert.strictEqual(result, ExportResultCode.FAILED);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      assert.isEmpty(await durablePendingFiles(directory));
+      await exporter.shutdown();
+    });
+
+    it("replays persisted records with a fresh token after exporter restart without forceFlush", async () => {
+      const directory = await createStorageDirectory();
+      fetchSpy.mockResolvedValueOnce({
+        status: 503,
+        headers: new Headers(),
+      });
+      const failingExporter = new Agent365Exporter({
+        tokenResolver: () => "initial-token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      assert.strictEqual(
+        await exportResult(failingExporter, [makeSpan()]),
+        ExportResultCode.SUCCESS,
+      );
+      await failingExporter.shutdown();
+
+      fetchSpy.mockClear();
+      fetchSpy.mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+      });
+      const freshToken = "fresh-token";
+      const resolver = vi.fn().mockResolvedValue(freshToken);
+      const restartedExporter = new Agent365Exporter({
+        tokenResolver: resolver,
+        durableDelivery: {
+          enabled: true,
+          storageDirectory: directory,
+          replayIntervalMilliseconds: 5,
+        },
+      });
+
+      await waitFor(() => fetchSpy.mock.calls.length === 1);
+
+      assert.strictEqual(resolver.mock.calls.length, 1);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      assert.strictEqual(
+        fetchSpy.mock.calls[0][1].headers.authorization,
+        ["Bearer", freshToken].join(" "),
+      );
+      assert.isEmpty(await durablePendingFiles(directory));
+      await restartedExporter.shutdown();
+    });
+
+    it.each([
+      {
+        label: "a non-HTTPS current domain override",
+        domainOverride: "http://plaintext.example.com",
+        expectedWarning: "Replay endpoint must use HTTPS before resolving a bearer token",
+      },
+      {
+        label: "a malformed current domain override",
+        domainOverride: "not a url",
+        expectedWarning: "Replay endpoint is invalid or malformed before resolving a bearer token",
+      },
+    ])(
+      "retains replay records and skips token resolution for %s",
+      async ({ domainOverride, expectedWarning }) => {
+        const directory = await createStorageDirectory();
+        const customLogger = {
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+        };
+        configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+
+        const legacyRecord = {
+          version: DURABLE_RECORD_VERSION,
+          id: "legacy-record",
+          createdAt: 1_725_000_000_000,
+          tenantId: TENANT_ID,
+          agentId: AGENT_ID,
+          agenticUserId: "legacy-user",
+          clusterCategory: "prod",
+          domainOverride: "https://legacy.example.com",
+          useS2SEndpoint: false,
+          body: '{"resourceSpans":[]}',
+        };
+        await seedDurablePendingRecord(
+          directory,
+          `${legacyRecord.createdAt}-${legacyRecord.id}.pending`,
+          JSON.stringify(legacyRecord),
+        );
+
+        const resolver = vi.fn().mockResolvedValue("fresh-token");
+        const exporter = new Agent365Exporter({
+          tokenResolver: resolver,
+          domainOverride,
+          durableDelivery: {
+            enabled: true,
+            storageDirectory: directory,
+            replayIntervalMilliseconds: 60_000,
+          },
+        });
+
+        await exporter.forceFlush();
+
+        assert.strictEqual(resolver.mock.calls.length, 0);
+        assert.strictEqual(fetchSpy.mock.calls.length, 0);
+        assert.strictEqual(await durablePendingCount(directory), 1);
+        assert.ok(
+          customLogger.warn.mock.calls.some((call) => String(call[0]).includes(expectedWarning)),
+        );
+        await exporter.shutdown();
+      },
+    );
+
+    it("replays legacy records with the current domain override", async () => {
+      const directory = await createStorageDirectory();
+      const legacyRecord = {
+        version: DURABLE_RECORD_VERSION,
+        id: "legacy-record",
+        createdAt: 1_725_000_000_000,
+        tenantId: TENANT_ID,
+        agentId: AGENT_ID,
+        agenticUserId: "legacy-user",
+        clusterCategory: "prod",
+        domainOverride: "https://legacy.example.com",
+        useS2SEndpoint: false,
+        body: '{"resourceSpans":[]}',
+      };
+      await seedDurablePendingRecord(
+        directory,
+        `${legacyRecord.createdAt}-${legacyRecord.id}.pending`,
+        JSON.stringify(legacyRecord),
+      );
+
+      fetchSpy.mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+      });
+      const freshToken = "fresh-token";
+      const restartedExporter = new Agent365Exporter({
+        tokenResolver: () => freshToken,
+        domainOverride: "https://current.example.com",
+        durableDelivery: {
+          enabled: true,
+          storageDirectory: directory,
+          replayIntervalMilliseconds: 5,
+        },
+      });
+
+      await waitFor(() => fetchSpy.mock.calls.length === 1);
+
+      const [url, options] = fetchSpy.mock.calls[0];
+      assert.ok(url.startsWith("https://current.example.com/observability/tenants/"));
+      assert.notInclude(url, "legacy.example.com");
+      assert.strictEqual(options.headers.authorization, ["Bearer", freshToken].join(" "));
+      assert.isEmpty(await durablePendingFiles(directory));
+      await restartedExporter.shutdown();
+    });
+
+    it("warns and still sends network-only live exports to a non-HTTPS endpoint", async () => {
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+
+      const exporter = createTestExporter({
+        tokenResolver: () => "token",
+        domainOverride: "http://plaintext.example.com",
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      const [url, options] = fetchSpy.mock.calls[0];
+      assert.ok(url.startsWith("http://plaintext.example.com/observability/tenants/"));
+      assert.strictEqual(options.headers.authorization, "Bearer token");
+      assert.ok(
+        customLogger.warn.mock.calls.some((call) =>
+          String(call[0]).includes("must use HTTPS before sending a bearer token"),
+        ),
+      );
+      await exporter.shutdown();
+    });
+
+    it("preserves every admitted chunk when shutdown aborts a multi-chunk export", async () => {
+      const directory = await createStorageDirectory();
+      let signal: AbortSignal | undefined;
+      let notifyRequestStarted: (() => void) | undefined;
+      const requestStarted = new Promise<void>((resolve) => {
+        notifyRequestStarted = resolve;
+      });
+      let requestCount = 0;
+      fetchSpy.mockImplementation((_url, request) => {
+        requestCount += 1;
+        if (requestCount > 1) {
+          return Promise.resolve({ status: 503, headers: new Headers() });
+        }
+
+        signal = request.signal as AbortSignal;
+        notifyRequestStarted!();
+        return new Promise((_resolve, reject) => {
+          signal!.addEventListener(
+            "abort",
+            () => reject(Object.assign(new Error("request aborted"), { name: "AbortError" })),
+            { once: true },
+          );
+        });
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        maxPayloadBytes: 1,
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+      const result = exportResult(exporter, [makeSpan(), makeSpan({ name: "second-span" })]);
+
+      await requestStarted;
+      await exporter.shutdown();
+
+      assert.isTrue(signal!.aborted);
+      assert.strictEqual(await result, ExportResultCode.SUCCESS);
+      assert.strictEqual(await durablePendingCount(directory), 2);
+    });
+
+    it("does not initialize durable delivery after shutdown", async () => {
+      const directory = await createStorageDirectory();
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      await exporter.shutdown();
+
+      const getDurableManager = (exporter as unknown as { getDurableManager(): Promise<unknown> })
+        .getDurableManager;
+      await expect(getDurableManager.call(exporter)).rejects.toThrow(/shut down/);
+    });
+
+    it("falls back to network delivery when durable initialization fails and the export succeeds", async () => {
+      vi.spyOn(PersistentStore, "create").mockRejectedValue(new Error("disk unavailable"));
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true },
+      });
+
+      const result = exportResult(exporter, [makeSpan()]);
+      await exporter.forceFlush();
+
+      assert.strictEqual(await result, ExportResultCode.SUCCESS);
+      assert.strictEqual(fetchSpy.mock.calls.length, 1);
+      await exporter.shutdown();
+    });
+
+    it("fails retryable exports when durable initialization fails and records cannot be persisted", async () => {
+      vi.spyOn(PersistentStore, "create").mockRejectedValue(new Error("disk unavailable"));
+      fetchSpy.mockResolvedValue({
+        status: 503,
+        headers: new Headers(),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true },
+      });
+
+      assert.strictEqual(await exportResult(exporter, [makeSpan()]), ExportResultCode.FAILED);
+      assert.isAtLeast(fetchSpy.mock.calls.length, 1);
+      await exporter.shutdown();
+    });
+
+    it("aborts an in-flight durable request during shutdown", async () => {
+      const directory = await createStorageDirectory();
+      let signal: AbortSignal | undefined;
+      let notifyRequestStarted: (() => void) | undefined;
+      const requestStarted = new Promise<void>((resolve) => {
+        notifyRequestStarted = resolve;
+      });
+      fetchSpy.mockImplementation((_url, request) => {
+        signal = request.signal as AbortSignal;
+        notifyRequestStarted!();
+        return new Promise((_resolve, reject) => {
+          signal!.addEventListener(
+            "abort",
+            () => reject(Object.assign(new Error("request aborted"), { name: "AbortError" })),
+            { once: true },
+          );
+        });
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+      const result = exportResult(exporter, [makeSpan()]);
+
+      await requestStarted;
+      await exporter.shutdown();
+
+      assert.isTrue(signal!.aborted);
+      assert.strictEqual(await result, ExportResultCode.SUCCESS);
+      assert.strictEqual(await durablePendingCount(directory), 1);
+    });
+
+    it("rejects shutdown after the durable deadline when an in-flight request ignores abort", async () => {
+      const directory = await createStorageDirectory();
+      let notifyRequestStarted: (() => void) | undefined;
+      const requestStarted = new Promise<void>((resolve) => {
+        notifyRequestStarted = resolve;
+      });
+      fetchSpy.mockImplementation(() => {
+        notifyRequestStarted!();
+        return new Promise(() => {});
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        httpRequestTimeoutMilliseconds: 1,
+        durableDelivery: {
+          enabled: true,
+          storageDirectory: directory,
+          shutdownTimeoutMilliseconds: 5,
+        },
+      });
+      void exportResult(exporter, [makeSpan()]);
+
+      await requestStarted;
+      let shutdownError: unknown;
+      try {
+        await exporter.shutdown();
+      } catch (error) {
+        shutdownError = error;
+      }
+
+      assert.instanceOf(shutdownError, Error);
+      assert.match((shutdownError as Error).message, /shutdown timed out/);
+    });
+
+    it("is idempotent after completed durable shutdown", async () => {
+      const directory = await createStorageDirectory();
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      await exporter.shutdown();
+      await exporter.shutdown();
+
+      assert.strictEqual(await exportResult(exporter, [makeSpan()]), ExportResultCode.FAILED);
     });
   });
 });

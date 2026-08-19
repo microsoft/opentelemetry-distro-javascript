@@ -109,6 +109,92 @@ useMicrosoftOpenTelemetry({
 
 When both `tokenResolver` and `contextualTokenResolver` are set, `contextualTokenResolver` takes precedence.
 
+## Durable Delivery
+
+Durable delivery is enabled by default for the A365 HTTP exporter when retryable A365 HTTP exports
+must survive process restarts.
+
+```typescript
+import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
+
+useMicrosoftOpenTelemetry({
+  a365: {
+    enabled: true,
+    enableObservabilityExporter: true,
+    tokenResolver: (agentId, tenantId, authScopes) => getToken(agentId, tenantId, authScopes),
+    durableDelivery: {
+      storageDirectory: process.env.A365_DURABLE_STORAGE_DIRECTORY,
+      maxStorageBytes: 50 * 1024 * 1024,
+      maxRecordAgeMilliseconds: 2 * 24 * 60 * 60 * 1000,
+    },
+  },
+});
+```
+
+Durable delivery is enabled by default. Set `durableDelivery.enabled: false` to force legacy
+network-only delivery. It applies only to the A365 HTTP exporter, so set
+`enableObservabilityExporter: true` alongside `a365.enabled: true`.
+
+### Durable Delivery Defaults
+
+| Option                               | Default                   | Notes                                                                             |
+| ------------------------------------ | ------------------------- | --------------------------------------------------------------------------------- |
+| `enabled`                            | `true`                    | Durable delivery stays on unless you explicitly disable it                         |
+| `storageDirectory`                   | auto                      | Uses the configured directory, or creates a secure platform-specific default root plus a stable per-application `app-<hash>` partition |
+| `maxStorageBytes`                    | `50 * 1024 * 1024`        | Bounds pending, quarantined, active leased, and non-stale temporary records within the current `app-<hash>` partition only |
+| `maxRecordAgeMilliseconds`           | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction, within the current `app-<hash>` partition only |
+| `replayIntervalMilliseconds`         | `2 * 60 * 1000`           | Scheduled replay cadence                                                          |
+| `maxReplayBatchSize`                 | `10`                      | Maximum records claimed per replay pass                                           |
+| `leaseDurationMilliseconds`          | `2 * 60 * 1000`           | Reclaims stale replay leases                                                      |
+| `shutdownTimeoutMilliseconds`        | `10_000`                  | Shared shutdown budget for accepted live exports and admitted durable handoff completion |
+| `tokenResolutionTimeoutMilliseconds` | `30_000`                  | Timeout per replay token-resolution attempt                                       |
+
+### Operational Notes
+
+- Durable records are stored as plaintext JSON files. On POSIX, the SDK creates owner-only durable
+  directories/files (`0700` / `0600`), rejects symlink roots, and requires the root to be owned by
+  the current user. Default POSIX storage probes `TMPDIR`, `/var/tmp`, then `/tmp` and atomically
+  creates one `a365-otel-durable-<uid>` leaf under each candidate; it does not create a
+  multi-directory SDK-owned tree under a shared temp directory. Windows defaults use the per-user
+  `Microsoft/A365/otel-durable` location under the selected candidate and also reject a symlinked
+  final root. On Windows, the SDK removes inherited ACLs and grants full control only to the current
+  Windows identity and built-in Administrators. ACL hardening failures cause durable storage
+  initialization to fail and the exporter to use network-only delivery.
+- Every explicit or default durable root is partitioned again under a stable `app-<hash>` child
+  derived from the process identity, so applications that share a base directory do not replay one
+  another's telemetry. All retention, capacity, and pruning behavior described below operates only
+  within the current process's own `app-<hash>` partition; the store never enumerates or reads
+  sibling partitions. If the process identity changes (for example, after a binary path or
+  executable upgrade), the previous partition becomes orphaned and is not age-pruned, capacity-
+  pruned, or otherwise cleaned up automatically. Operators who need to reclaim that space should
+  remove stale `app-<hash>` directories under the durable root out-of-band.
+- Durable delivery is enabled by default when the A365 HTTP exporter is active. Set
+  `durableDelivery.enabled: false` to force legacy network-only delivery.
+- If durable storage initialization fails, the exporter logs the error and continues in network-only
+  mode. Successful and non-retryable live sends still complete, but retryable responses that cannot
+  be persisted are reported as failures.
+- Delivery is at-least-once. A retryable request can be replayed after a crash, timeout, or
+  shutdown race, so downstream consumers must tolerate duplicates.
+- HTTP 401, 408, 429, and 5xx responses plus transport failures are retryable. Live delivery
+  persists them, and replay releases the claim while honoring the shared transmission gate.
+- Replay and `forceFlush()` resolve a fresh token for each send attempt and use the exporter's
+  current cluster/domain routing; durable files do not store bearer tokens or authoritative route
+  metadata.
+- If token resolution returns no token, throws, or times out, live delivery attempts to persist the
+  record for replay and replay releases the claim without extending the shared transmission backoff.
+- Storage is bounded by both age and capacity, scoped to the current process's own `app-<hash>`
+  partition (see above). The SDK sweeps stale temporary files, prunes expired records, then evicts
+  the oldest remaining pending or quarantined record until the new record fits within
+  `maxStorageBytes`; active temporary and leased files count against that bound and are not
+  evicted. `maxStorageBytes` is therefore a per-partition, not a global, limit.
+- Live delivery and replay share one `Retry-After` / exponential-backoff transmission gate. A
+  retryable response pauses both immediate sends and replay probes until the gate reopens. The
+  effective delay is capped at one hour.
+- If records must survive container restarts, rescheduling, or host restarts, point
+  `storageDirectory` at a protected persistent volume. Default temp directories and container
+  filesystems are convenient for process restarts, but ephemeral storage can be lost when a
+  container is replaced and still counts against container ephemeral-storage limits.
+
 ## Shutdown
 
 Call `shutdownMicrosoftOpenTelemetry()` during graceful shutdown to flush pending telemetry and release resources:
@@ -121,3 +207,14 @@ process.on("SIGTERM", async () => {
   process.exit(0);
 });
 ```
+
+Exporter shutdown waits up to `durableDelivery.shutdownTimeoutMilliseconds` for already accepted
+live exports to settle (10 seconds by default). With durable delivery enabled, shutdown also stops
+replay scheduling immediately, aborts in-flight durable HTTP, and uses the same deadline for
+already admitted durable handoff completion. Retryable aborted payloads stay on disk for replay on
+the next process or startup pass; shutdown does not drain the existing spool. If you use
+`Agent365Exporter` directly, you may call `forceFlush()` before shutdown for one bounded replay
+pass. The distro shutdown path does not call `exporter.forceFlush()`. With
+`durableDelivery.enabled: false`—or when durable storage never initialized and the exporter stayed
+network-only—shutdown still drains accepted live exports within the same deadline but does not
+replay or persist anything.

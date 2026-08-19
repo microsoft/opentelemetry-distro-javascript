@@ -45,6 +45,18 @@ function makeSpan(overrides: Partial<ReadableSpan> = {}): ReadableSpan {
   } as unknown as ReadableSpan;
 }
 
+function createNetworkOnlyExporter(
+  options: ConstructorParameters<typeof Agent365Exporter>[0] = {},
+): Agent365Exporter {
+  return new Agent365Exporter({
+    ...options,
+    durableDelivery: {
+      enabled: false,
+      ...options.durableDelivery,
+    },
+  });
+}
+
 describe("ContextualTokenResolver", () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
 
@@ -61,9 +73,19 @@ describe("ContextualTokenResolver", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps token-resolution coverage on the legacy network-only path", () => {
+    const exporter = createNetworkOnlyExporter({
+      contextualTokenResolver: () => "ctx-token",
+    });
+
+    const options = (exporter as unknown as { options: { durableDelivery: { enabled: boolean } } })
+      .options;
+    assert.strictEqual(options.durableDelivery.enabled, false);
+  });
+
   it("should call contextualTokenResolver with correct context", async () => {
     let captured: TokenResolverContext | undefined;
-    const exporter = new Agent365Exporter({
+    const exporter = createNetworkOnlyExporter({
       contextualTokenResolver: (ctx) => {
         captured = ctx;
         return "ctx-token";
@@ -95,7 +117,7 @@ describe("ContextualTokenResolver", () => {
 
   it("should pass undefined agenticUserId when not present on span", async () => {
     let captured: TokenResolverContext | undefined;
-    const exporter = new Agent365Exporter({
+    const exporter = createNetworkOnlyExporter({
       contextualTokenResolver: (ctx) => {
         captured = ctx;
         return "ctx-token";
@@ -116,7 +138,7 @@ describe("ContextualTokenResolver", () => {
     let vanillaCalled = false;
     let contextualCalled = false;
 
-    const exporter = new Agent365Exporter({
+    const exporter = createNetworkOnlyExporter({
       tokenResolver: () => {
         vanillaCalled = true;
         return "vanilla-token";
@@ -143,7 +165,7 @@ describe("ContextualTokenResolver", () => {
   it("should fall back to tokenResolver when contextualTokenResolver is not set", async () => {
     let vanillaCalled = false;
 
-    const exporter = new Agent365Exporter({
+    const exporter = createNetworkOnlyExporter({
       tokenResolver: (agentId, tenantId) => {
         vanillaCalled = true;
         assert.strictEqual(agentId, AGENT_ID);
@@ -165,7 +187,7 @@ describe("ContextualTokenResolver", () => {
   });
 
   it("should handle async contextualTokenResolver", async () => {
-    const exporter = new Agent365Exporter({
+    const exporter = createNetworkOnlyExporter({
       contextualTokenResolver: async (ctx) => {
         return `async-token-${ctx.identity.agentId}`;
       },
@@ -182,7 +204,7 @@ describe("ContextualTokenResolver", () => {
   });
 
   it("should skip export when contextualTokenResolver returns null", async () => {
-    const exporter = new Agent365Exporter({
+    const exporter = createNetworkOnlyExporter({
       contextualTokenResolver: () => null,
     });
 
@@ -196,7 +218,7 @@ describe("ContextualTokenResolver", () => {
   });
 
   it("should skip export when contextualTokenResolver returns undefined", async () => {
-    const exporter = new Agent365Exporter({
+    const exporter = createNetworkOnlyExporter({
       contextualTokenResolver: () => undefined,
     });
 
@@ -210,7 +232,7 @@ describe("ContextualTokenResolver", () => {
   });
 
   it("should handle contextualTokenResolver that throws", async () => {
-    const exporter = new Agent365Exporter({
+    const exporter = createNetworkOnlyExporter({
       contextualTokenResolver: () => {
         throw new Error("auth failed");
       },
@@ -227,7 +249,7 @@ describe("ContextualTokenResolver", () => {
 
   it("should not call contextualTokenResolver for spans without identity", async () => {
     let called = false;
-    const exporter = new Agent365Exporter({
+    const exporter = createNetworkOnlyExporter({
       contextualTokenResolver: () => {
         called = true;
         return "token";

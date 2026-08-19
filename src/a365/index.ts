@@ -9,6 +9,7 @@ export { configureA365Logger, getA365Logger } from "./logging.js";
 export { Agent365Exporter } from "./exporter/index.js";
 export type {
   Agent365ExporterOptions,
+  Agent365DurableDeliveryOptions,
   TokenResolver,
   ContextualTokenResolver,
   AgentIdentity,
