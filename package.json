@@ -123,7 +123,7 @@
     "@typescript-eslint/parser": "^8.65.0",
     "@vitest/coverage-istanbul": "^4.1.8",
     "dotenv": "^16.0.0",
-    "eslint": "https://codeload.github.com/eslint/eslint/tar.gz/23a58c78795933586e2d5857d3f147d6a9147612",
+    "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
