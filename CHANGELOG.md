@@ -11,6 +11,7 @@
 
 ### Other Changes
 - Align sample OpenTelemetry dependencies with the current release line. [#227](https://github.com/microsoft/opentelemetry-distro-javascript/pull/227)
+- Remove the vulnerable Keyv 4 dependency from the ESLint cache toolchain.
 
 ## [1.3.0] - 2026-08-03
 

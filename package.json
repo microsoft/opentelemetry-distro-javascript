@@ -134,5 +134,10 @@
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.8"
   },
+  "overrides": {
+    "eslint": {
+      "file-entry-cache": "11.1.5"
+    }
+  },
   "sideEffects": false
 }
