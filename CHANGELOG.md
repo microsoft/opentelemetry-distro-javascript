@@ -11,6 +11,7 @@
 
 ### Other Changes
 - Align sample OpenTelemetry dependencies with the current release line. [#227](https://github.com/microsoft/opentelemetry-distro-javascript/pull/227)
+- Omit registry URLs from npm lockfiles while retaining the pinned nanoid release commit.
 
 ## [1.3.0] - 2026-08-03
 
