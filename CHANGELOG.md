@@ -2,15 +2,24 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-08
+
 ### Features Added
 - Add enabled-by-default A365 durable store-and-forward delivery with explicit disable, network-only fallback when durable storage is unavailable, per-application bounded plaintext storage on protected volumes, replay with fresh tokens/current routing, retryable 401 handling, shared `Retry-After` backoff, token isolation, and bounded shutdown drain. [#226](https://github.com/microsoft/opentelemetry-distro-javascript/pull/226)
 - Emit `gen_ai.output.type` and available GenAI request parameters on LangChain chat spans. [#213](https://github.com/microsoft/opentelemetry-distro-javascript/pull/213)
+- Add an AKS LangChain auto-instrumentation sample with deployment instructions. [#219](https://github.com/microsoft/opentelemetry-distro-javascript/pull/219)
 
 ### Bugs Fixed
 - Fix duplicate Bunyan logs, missing HTTP duration metrics, duplicate request filtering, and incorrect performance-counter values. [#212](https://github.com/microsoft/opentelemetry-distro-javascript/pull/212)
+- Report the AKS resource detector SDKStats feature only when the current process detects valid AKS cluster metadata, not from customer-provided attributes or inherited feature flags. [#207](https://github.com/microsoft/opentelemetry-distro-javascript/pull/207)
 
 ### Other Changes
+- Align Azure Monitor dependencies with `@azure/monitor-opentelemetry` `1.20.0`: raise the `@azure/monitor-opentelemetry-exporter` floor to `1.0.0-beta.45` and update `@azure/opentelemetry-instrumentation-azure-sdk` to `^1.1.0-beta.1`.
+- Retain the matching OpenTelemetry core/SDK `2.10.0` / `0.221.0`, API `1.9.1`, semantic conventions `1.43.0`, and instrumentation dependency ranges used by the published Azure Monitor packages. The exporter update removes its older nested OpenTelemetry core/resources `2.9.0` and logs `0.220.0` copies.
 - Align sample OpenTelemetry dependencies with the current release line. [#227](https://github.com/microsoft/opentelemetry-distro-javascript/pull/227)
+- Update transitive dependencies flagged by Component Governance. [#223](https://github.com/microsoft/opentelemetry-distro-javascript/pull/223)
+- Add integration and performance test workflows and require changelog entries in PR validation. [#217](https://github.com/microsoft/opentelemetry-distro-javascript/pull/217), [#224](https://github.com/microsoft/opentelemetry-distro-javascript/pull/224)
+- Consolidate Dependabot updates, pin GitHub Actions to full-length commit SHAs, and update CI and sample dependencies. [#216](https://github.com/microsoft/opentelemetry-distro-javascript/pull/216), [#218](https://github.com/microsoft/opentelemetry-distro-javascript/pull/218), [#220](https://github.com/microsoft/opentelemetry-distro-javascript/pull/220), [#221](https://github.com/microsoft/opentelemetry-distro-javascript/pull/221), [#222](https://github.com/microsoft/opentelemetry-distro-javascript/pull/222)
 
 ## [1.3.0] - 2026-08-03
 
