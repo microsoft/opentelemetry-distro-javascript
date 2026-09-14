@@ -363,10 +363,56 @@ export interface ServiceEndpoint {
 // Scope detail types
 // ---------------------------------------------------------------------------
 
+/** Request-side GenAI parameters captured for agent invocation telemetry. */
+export interface GenAiRequestParameters {
+  /** Name of the requested model. */
+  model?: string;
+  /** Seed used to make sampling reproducible. */
+  seed?: number;
+  /** Number of response choices requested from the model. */
+  choiceCount?: number;
+  /** Frequency penalty applied during token sampling. */
+  frequencyPenalty?: number;
+  /** Maximum number of tokens requested for generation. */
+  maxTokens?: number;
+  /** Presence penalty applied during token sampling. */
+  presencePenalty?: number;
+  /** Stop sequences supplied with the request. */
+  stopSequences?: string[];
+  /** Sampling temperature for the request. */
+  temperature?: number;
+  /** Nucleus-sampling top-p value for the request. */
+  topP?: number;
+  /** Identifier of the external data source used to ground the request. */
+  dataSourceId?: string;
+  /** Requested output type (for example, `json`). */
+  outputType?: string;
+  /** System instructions provided to the model. */
+  systemInstructions?: string;
+}
+
+/** Response-side GenAI parameters captured for agent invocation telemetry. */
+export interface GenAiResponseParameters {
+  /** Finish reasons returned by the model. */
+  finishReasons?: string[];
+  /** Number of input (prompt) tokens consumed by the response. */
+  inputTokens?: number;
+  /** Number of output (completion) tokens produced by the response. */
+  outputTokens?: number;
+  /** Number of input tokens written into the cache. */
+  cacheCreationInputTokens?: number;
+  /** Number of input tokens read from the cache. */
+  cacheReadInputTokens?: number;
+}
+
 /** Details for invoking agent scope. */
 export interface InvokeAgentScopeDetails {
   /** Endpoint the agent is being invoked on. */
   endpoint?: ServiceEndpoint;
+  /** Request-side GenAI parameters associated with the invoke-agent span. */
+  requestParameters?: GenAiRequestParameters;
+  /** Response-side GenAI parameters associated with the invoke-agent span. */
+  responseParameters?: GenAiResponseParameters;
 }
 
 /** Details of a tool call made by an agent. */

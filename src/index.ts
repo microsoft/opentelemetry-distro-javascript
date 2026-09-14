@@ -70,6 +70,8 @@ export type {
   Request as A365Request,
   Channel,
   ServiceEndpoint,
+  GenAiRequestParameters,
+  GenAiResponseParameters,
   InvokeAgentScopeDetails,
   ToolCallDetails,
   InferenceDetails,
