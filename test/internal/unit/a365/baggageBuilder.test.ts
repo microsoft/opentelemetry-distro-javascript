@@ -126,7 +126,6 @@ describe("BaggageBuilder", () => {
     it("should preserve the public setPairs parameter compatibility", () => {
       type SetPairsArg = Parameters<BaggageBuilder["setPairs"]>[0];
 
-       
       expectTypeOf<SetPairsArg>().toEqualTypeOf<
         Record<string, any> | Iterable<[string, any]> | null | undefined
       >();
