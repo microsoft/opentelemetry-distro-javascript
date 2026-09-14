@@ -11,6 +11,13 @@ import {
   OpenTelemetryConstants,
 } from "../../../../src/a365/index.js";
 
+const INTERNAL_CUSTOM_KEYS_METADATA_KEY = "_internal.custom_keys";
+
+function getScopeBaggage(scope: BaggageScope) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return propagation.getBaggage((scope as any).contextWithBaggage);
+}
+
 describe("BaggageBuilder", () => {
   let contextManager: AsyncLocalStorageContextManager;
 
@@ -152,6 +159,90 @@ describe("BaggageBuilder", () => {
 
       const scope = builder.build();
       expect(scope).toBeInstanceOf(BaggageScope);
+    });
+
+    it("should not mark setPairs entries as custom metadata", () => {
+      const scope = new BaggageBuilder()
+        .setPairs({
+          custom_key: "custom-value",
+        })
+        .build();
+
+      const bag = getScopeBaggage(scope);
+      expect(bag?.getEntry("custom_key")?.value).toBe("custom-value");
+      expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)).toBeUndefined();
+    });
+  });
+
+  describe("custom attributes", () => {
+    it("should normalize and mark a custom attribute", () => {
+      const builder = new BaggageBuilder();
+      expect(typeof (builder as unknown as { customAttribute?: unknown }).customAttribute).toBe(
+        "function",
+      );
+
+      const scope = (
+        builder as unknown as {
+          customAttribute(key: string, value: string | null | undefined): BaggageBuilder;
+        }
+      )
+        .customAttribute("  custom.key  ", "  custom-value  ")
+        .build();
+
+      const bag = getScopeBaggage(scope);
+      expect(bag?.getEntry("custom.key")?.value).toBe("custom-value");
+      expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("custom.key");
+    });
+
+    it("should accept object inputs and stringify valid values", () => {
+      const scope = (
+        new BaggageBuilder() as unknown as {
+          customAttributes(
+            pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+          ): BaggageBuilder;
+        }
+      )
+        .customAttributes({
+          "  beta  ": "  two  ",
+          alpha: 1,
+          blank: "   ",
+          skipNull: null,
+        })
+        .build();
+
+      const bag = getScopeBaggage(scope);
+      expect(bag?.getEntry("alpha")?.value).toBe("1");
+      expect(bag?.getEntry("beta")?.value).toBe("two");
+      expect(bag?.getEntry("blank")).toBeUndefined();
+      expect(bag?.getEntry("skipNull")).toBeUndefined();
+      expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("alpha,beta");
+    });
+
+    it("should ignore invalid iterable keys and values", () => {
+      const scope = (
+        new BaggageBuilder() as unknown as {
+          customAttributes(
+            pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+          ): BaggageBuilder;
+        }
+      )
+        .customAttributes([
+          [" valid ", " kept "],
+          ["   ", "blank-key"],
+          ["bad,key", "comma-key"],
+          [INTERNAL_CUSTOM_KEYS_METADATA_KEY, "reserved-key"],
+          ["blank-value", "   "],
+          ["null-value", null],
+        ])
+        .build();
+
+      const bag = getScopeBaggage(scope);
+      expect(bag?.getEntry("valid")?.value).toBe("kept");
+      expect(bag?.getEntry("")).toBeUndefined();
+      expect(bag?.getEntry("bad,key")).toBeUndefined();
+      expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("valid");
+      expect(bag?.getEntry("blank-value")).toBeUndefined();
+      expect(bag?.getEntry("null-value")).toBeUndefined();
     });
   });
 
@@ -324,6 +415,67 @@ describe("BaggageScope", () => {
 
       const restoredContext = context.active();
       expect(restoredContext).toBeDefined();
+    });
+
+    it("should union custom metadata across nested scopes", () => {
+      const outerScope = (
+        new BaggageBuilder() as unknown as {
+          customAttributes(
+            pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+          ): BaggageBuilder;
+        }
+      )
+        .customAttributes({
+          beta: "two",
+          alpha: "one",
+        })
+        .build();
+
+      outerScope.run(() => {
+        const innerScope = (
+          new BaggageBuilder() as unknown as {
+            customAttributes(
+              pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+            ): BaggageBuilder;
+          }
+        )
+          .customAttributes([
+            ["gamma", "three"],
+            ["beta", "updated"],
+          ])
+          .build();
+
+        const bag = getScopeBaggage(innerScope);
+        expect(bag?.getEntry("alpha")?.value).toBe("one");
+        expect(bag?.getEntry("beta")?.value).toBe("updated");
+        expect(bag?.getEntry("gamma")?.value).toBe("three");
+        expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("alpha,beta,gamma");
+      });
+    });
+
+    it("should deduplicate ambient custom metadata deterministically", () => {
+      const ambientBaggage = propagation
+        .createBaggage({})
+        .setEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY, {
+          value: "beta, alpha ,beta",
+        })
+        .setEntry("alpha", { value: "one" });
+      const ambientContext = propagation.setBaggage(context.active(), ambientBaggage);
+
+      context.with(ambientContext, () => {
+        const scope = (
+          new BaggageBuilder() as unknown as {
+            customAttribute(key: string, value: string | null | undefined): BaggageBuilder;
+          }
+        )
+          .customAttribute(" gamma ", " three ")
+          .build();
+
+        const bag = getScopeBaggage(scope);
+        expect(bag?.getEntry("alpha")?.value).toBe("one");
+        expect(bag?.getEntry("gamma")?.value).toBe("three");
+        expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("alpha,beta,gamma");
+      });
     });
   });
 
