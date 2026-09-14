@@ -13,11 +13,15 @@ import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-ho
 
 import {
   ExecuteToolScope,
+  ExecuteToolCallArguments,
+  ExecuteToolCallResult,
   InvokeAgentScope,
   InferenceScope,
   OutputScope,
   OpenTelemetryScope,
   OpenTelemetryConstants,
+  ToolCallAction,
+  ToolCallOutcomeStatus,
 } from "../../../../src/a365/index.js";
 import type {
   AgentDetails,
@@ -521,6 +525,10 @@ describe("Scopes", () => {
             key: OpenTelemetryConstants.GEN_AI_CALLER_CLIENT_IP_KEY,
             val: "10.0.0.10",
           }),
+          expect.objectContaining({
+            key: OpenTelemetryConstants.GEN_AI_TOOL_ARGS_KEY,
+            val: '{"param": "value"}',
+          }),
         ]),
       );
 
@@ -557,6 +565,10 @@ describe("Scopes", () => {
           expect.objectContaining({
             key: OpenTelemetryConstants.CHANNEL_LINK_KEY,
             val: "https://web.link",
+          }),
+          expect.objectContaining({
+            key: OpenTelemetryConstants.GEN_AI_TOOL_CALL_RESULT_KEY,
+            val: '{"result":"Tool result"}',
           }),
         ]),
       );
@@ -1245,6 +1257,10 @@ describe("Request content and message serialization (span attributes)", () => {
   });
 
   describe("ExecuteToolScope – tool args and response serialization", () => {
+    const serializationError =
+      '{"serialization_error":"Failed to serialize execute tool payload."}';
+    const legacySerializationError = '{"error":"serialization failed"}';
+
     it("should serialize object arguments to span attribute", () => {
       const objArgs = { query: "GDPR", maxResults: 5 };
       const scope = ExecuteToolScope.start(
@@ -1267,6 +1283,182 @@ describe("Request content and message serialization (span attributes)", () => {
       const attributes = getLastSpan().attributes;
       expect(attributes[OpenTelemetryConstants.GEN_AI_TOOL_CALL_RESULT_KEY]).toBe(
         JSON.stringify(objResponse),
+      );
+    });
+
+    it("should serialize typed arguments with schema version, nested values, and extension fields", () => {
+      const typedArgs = new ExecuteToolCallArguments({
+        action: ToolCallAction.READ,
+        parameters: {
+          query: "GDPR",
+          filters: { sensitivity: "high", includeArchived: true },
+        },
+        resources: [
+          {
+            id: "doc-1",
+            type: "document",
+            provider: "sharepoint",
+            provider_resource_type: "page",
+          },
+        ],
+        request_context: { scenario: "enterprise-search" },
+      });
+
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        { toolName: "search", arguments: typedArgs },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const parsed = JSON.parse(
+        getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_TOOL_ARGS_KEY] as string,
+      );
+      expect(parsed.schema_version).toBe("1.0");
+      expect(parsed.action).toBe("read");
+      expect(parsed.parameters.filters).toEqual({
+        sensitivity: "high",
+        includeArchived: true,
+      });
+      expect(parsed.resources[0].provider_resource_type).toBe("page");
+      expect(parsed.request_context).toEqual({ scenario: "enterprise-search" });
+    });
+
+    it("should serialize typed results with nested outcome and extension fields", () => {
+      const typedResult = new ExecuteToolCallResult({
+        outcome: {
+          status: ToolCallOutcomeStatus.SUCCESS,
+          message: "Fetched 1 document",
+          provider_code: "OK",
+          retryable: false,
+        },
+        resources: [
+          {
+            id: "doc-1",
+            type: "document",
+            outcome: {
+              status: ToolCallOutcomeStatus.SUCCESS,
+              message: "available",
+              provider_status: "complete",
+            },
+            data: { title: "Doc A" },
+            relevance_score: 0.95,
+          },
+        ],
+        pagination: {
+          has_more: false,
+          total_count: 1,
+          request_charge: 3,
+        },
+        source_trace: { provider: "sharepoint" },
+      });
+
+      const scope = ExecuteToolScope.start(testRequest, { toolName: "tool" }, testAgentDetails);
+      scope.recordResponse(typedResult);
+      scope.dispose();
+
+      const parsed = JSON.parse(
+        getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_TOOL_CALL_RESULT_KEY] as string,
+      );
+      expect(parsed.schema_version).toBe("1.0");
+      expect(parsed.outcome).toEqual({
+        status: "success",
+        message: "Fetched 1 document",
+        provider_code: "OK",
+        retryable: false,
+      });
+      expect(parsed.resources[0].outcome.provider_status).toBe("complete");
+      expect(parsed.resources[0].relevance_score).toBe(0.95);
+      expect(parsed.pagination).toEqual({
+        has_more: false,
+        total_count: 1,
+        request_charge: 3,
+      });
+      expect(parsed.source_trace).toEqual({ provider: "sharepoint" });
+    });
+
+    it("should omit the typed result attribute when response is undefined", () => {
+      const scope = ExecuteToolScope.start(testRequest, { toolName: "tool" }, testAgentDetails);
+      scope.recordResponse(undefined);
+      scope.dispose();
+
+      expect(
+        getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_TOOL_CALL_RESULT_KEY],
+      ).toBeUndefined();
+    });
+
+    it("should omit the typed result attribute when response is null", () => {
+      const scope = ExecuteToolScope.start(testRequest, { toolName: "tool" }, testAgentDetails);
+      scope.recordResponse(null);
+      scope.dispose();
+
+      expect(
+        getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_TOOL_CALL_RESULT_KEY],
+      ).toBeUndefined();
+    });
+
+    it("should preserve the legacy fallback for circular object arguments", () => {
+      const circular: Record<string, unknown> = { query: "GDPR" };
+      circular.self = circular;
+
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        { toolName: "search", arguments: circular },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_TOOL_ARGS_KEY]).toBe(
+        legacySerializationError,
+      );
+    });
+
+    it("should use the typed fallback for circular ExecuteToolCallArguments instances", () => {
+      const typedArgs = new ExecuteToolCallArguments({
+        action: ToolCallAction.READ,
+        parameters: { query: "GDPR" },
+      });
+      typedArgs.self = typedArgs;
+
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        { toolName: "search", arguments: typedArgs },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_TOOL_ARGS_KEY]).toBe(
+        serializationError,
+      );
+    });
+
+    it("should preserve the legacy fallback for circular object responses", () => {
+      const circular: Record<string, unknown> = { results: ["Doc A"] };
+      circular.self = circular;
+
+      const scope = ExecuteToolScope.start(testRequest, { toolName: "tool" }, testAgentDetails);
+      scope.recordResponse(circular);
+      scope.dispose();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_TOOL_CALL_RESULT_KEY]).toBe(
+        legacySerializationError,
+      );
+    });
+
+    it("should use the typed fallback for circular ExecuteToolCallResult instances", () => {
+      const typedResult = new ExecuteToolCallResult({
+        outcome: {
+          status: ToolCallOutcomeStatus.SUCCESS,
+        },
+      });
+      typedResult.self = typedResult;
+
+      const scope = ExecuteToolScope.start(testRequest, { toolName: "tool" }, testAgentDetails);
+      scope.recordResponse(typedResult);
+      scope.dispose();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_TOOL_CALL_RESULT_KEY]).toBe(
+        serializationError,
       );
     });
   });

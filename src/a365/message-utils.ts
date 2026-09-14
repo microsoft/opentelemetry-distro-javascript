@@ -15,7 +15,21 @@ import type {
   InputMessagesParam,
   OutputMessagesParam,
 } from "./contracts.js";
-import { MessageRole, DEFAULT_FINISH_REASON } from "./contracts.js";
+import {
+  DEFAULT_FINISH_REASON,
+  ExecuteToolCallArguments,
+  ExecuteToolCallResult,
+  MessageRole,
+} from "./contracts.js";
+
+const EXECUTE_TOOL_SERIALIZATION_ERROR =
+  '{"serialization_error":"Failed to serialize execute tool payload."}';
+
+function isTypedExecuteToolPayload(
+  value: object,
+): value is ExecuteToolCallArguments | ExecuteToolCallResult {
+  return value instanceof ExecuteToolCallArguments || value instanceof ExecuteToolCallResult;
+}
 
 /**
  * Type guard that returns `true` when the input is a structured wrapper
@@ -102,6 +116,26 @@ export function serializeMessages(wrapper: InputMessages | OutputMessages): stri
         ],
       },
     ]);
+  }
+}
+
+/**
+ * Serializes execute-tool payload objects while keeping telemetry recording non-throwing.
+ * Returns `undefined` for nullish payloads so callers can omit the attribute.
+ */
+export function serializeToolPayload(value: object | null | undefined): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  if (!isTypedExecuteToolPayload(value)) {
+    return safeSerializeToJson(value as Record<string, unknown>, "payload");
+  }
+
+  try {
+    return JSON.stringify(value) ?? EXECUTE_TOOL_SERIALIZATION_ERROR;
+  } catch {
+    return EXECUTE_TOOL_SERIALIZATION_ERROR;
   }
 }
 
