@@ -14,11 +14,11 @@ import { propagation, context as otelContext } from "@opentelemetry/api";
 import type { Context } from "@opentelemetry/api";
 import { INTERNAL_CUSTOM_KEYS_METADATA_KEY, OpenTelemetryConstants } from "../constants.js";
 
-function getPairEntries(
-  pairs: Record<string, unknown> | Iterable<[string, unknown]>,
-): Iterable<[string, unknown]> {
+function getPairEntries<T>(
+  pairs: Record<string, T> | Iterable<[string, T]>,
+): Iterable<[string, T]> {
   if (Symbol.iterator in Object(pairs)) {
-    return pairs as Iterable<[string, unknown]>;
+    return pairs as Iterable<[string, T]>;
   }
 
   return Object.entries(pairs);
@@ -235,9 +235,9 @@ export class BaggageBuilder {
    * Set multiple baggage pairs from a dictionary or iterable.
    * @param pairs Dictionary or iterable of key-value pairs
    */
-
   setPairs(
-    pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- preserve source compatibility for interface/class-typed callers
+    pairs: Record<string, any> | Iterable<[string, any]> | null | undefined,
   ): BaggageBuilder {
     if (!pairs) {
       return this;

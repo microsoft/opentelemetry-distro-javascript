@@ -79,7 +79,9 @@ baggageScope.run(() => {
 ```
 
 - Baggage may cross process and service boundaries when you inject/extract context. Treat it like
-  outbound metadata: do not put secrets, access tokens, or PII in baggage values.
+  inbound and outbound metadata: `_internal.custom_keys` registration metadata can arrive through
+  inbound baggage headers, applications must reject or sanitize untrusted baggage headers at the
+  edge, and you must never put secrets, access tokens, or PII in baggage keys or values.
 - `customAttribute()` and `customAttributes()` trim keys and values before storing them. Blank
   keys/values are dropped, keys containing commas are rejected, and the reserved
   `_internal.custom_keys` metadata key cannot be set directly.

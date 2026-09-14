@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, expectTypeOf, beforeAll, afterAll } from "vitest";
 import { context, propagation } from "@opentelemetry/api";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 
@@ -12,6 +12,11 @@ import {
 } from "../../../../src/a365/index.js";
 
 const INTERNAL_CUSTOM_KEYS_METADATA_KEY = "_internal.custom_keys";
+
+interface InterfaceTypedBaggagePairs {
+  "microsoft.tenant.id": string;
+  "gen_ai.agent.id": string;
+}
 
 function getScopeBaggage(scope: BaggageScope) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -118,6 +123,15 @@ describe("BaggageBuilder", () => {
   });
 
   describe("setPairs", () => {
+    it("should preserve the public setPairs parameter compatibility", () => {
+      type SetPairsArg = Parameters<BaggageBuilder["setPairs"]>[0];
+
+       
+      expectTypeOf<SetPairsArg>().toEqualTypeOf<
+        Record<string, any> | Iterable<[string, any]> | null | undefined
+      >();
+    });
+
     it("should accept dictionary of pairs", () => {
       const builder = new BaggageBuilder();
       builder.setPairs({
@@ -127,6 +141,21 @@ describe("BaggageBuilder", () => {
 
       const scope = builder.build();
       expect(scope).toBeInstanceOf(BaggageScope);
+    });
+
+    it("should accept interface-typed object inputs", () => {
+      const builder = new BaggageBuilder();
+      const pairs: InterfaceTypedBaggagePairs = {
+        "microsoft.tenant.id": "tenant-123",
+        "gen_ai.agent.id": "agent-456",
+      };
+
+      const result: BaggageBuilder = builder.setPairs(pairs);
+      expect(result).toBe(builder);
+
+      const bag = getScopeBaggage(result.build());
+      expect(bag?.getEntry(OpenTelemetryConstants.TENANT_ID_KEY)?.value).toBe("tenant-123");
+      expect(bag?.getEntry(OpenTelemetryConstants.GEN_AI_AGENT_ID_KEY)?.value).toBe("agent-456");
     });
 
     it("should accept iterable of pairs", () => {
