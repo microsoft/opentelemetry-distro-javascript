@@ -61,6 +61,8 @@ export type {
   Request,
   Channel,
   ServiceEndpoint,
+  GenAiRequestParameters,
+  GenAiResponseParameters,
   InvokeAgentScopeDetails,
   ToolCallDetails,
   InferenceDetails,

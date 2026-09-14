@@ -21,6 +21,8 @@ import {
 } from "../../../../src/a365/index.js";
 import type {
   AgentDetails,
+  GenAiRequestParameters,
+  GenAiResponseParameters,
   InvokeAgentScopeDetails,
   ToolCallDetails,
   InferenceDetails,
@@ -1144,6 +1146,205 @@ describe("Request content and message serialization (span attributes)", () => {
       expect(parsed[0].role).toBe("assistant");
       expect(parsed[0].parts[0].content).toBe("single output");
       expect(parsed[0].finish_reason).toBe("stop");
+    });
+  });
+
+  describe("InvokeAgentScope – GenAI request and response parameters", () => {
+    it("should record all request attributes and response-at-start attributes", () => {
+      const requestParameters: GenAiRequestParameters = {
+        model: "gpt-4.1",
+        seed: 42,
+        choiceCount: 2,
+        frequencyPenalty: 0.25,
+        maxTokens: 512,
+        presencePenalty: -0.5,
+        stopSequences: ["DONE", "STOP"],
+        temperature: 0.2,
+        topP: 0.8,
+        dataSourceId: "sharepoint",
+        outputType: "json",
+        systemInstructions: "Answer with JSON only.",
+      };
+      const responseParameters: GenAiResponseParameters = {
+        finishReasons: ["stop"],
+        inputTokens: 120,
+        outputTokens: 48,
+        cacheCreationInputTokens: 12,
+        cacheReadInputTokens: 3,
+      };
+      const scope = InvokeAgentScope.start(
+        testRequest,
+        { requestParameters, responseParameters },
+        { ...testAgentDetails, providerName: "azure-openai" },
+      );
+      scope.dispose();
+
+      const attributes = getLastSpan().attributes;
+      expect(attributes[OpenTelemetryConstants.GEN_AI_PROVIDER_NAME_KEY]).toBe("azure-openai");
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_MODEL_KEY]).toBe("gpt-4.1");
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_SEED_KEY]).toBe(42);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_CHOICE_COUNT_KEY]).toBe(2);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_FREQUENCY_PENALTY_KEY]).toBe(0.25);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_MAX_TOKENS_KEY]).toBe(512);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_PRESENCE_PENALTY_KEY]).toBe(-0.5);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_STOP_SEQUENCES_KEY]).toEqual([
+        "DONE",
+        "STOP",
+      ]);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_TEMPERATURE_KEY]).toBe(0.2);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_TOP_P_KEY]).toBe(0.8);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_DATA_SOURCE_ID_KEY]).toBe("sharepoint");
+      expect(attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_TYPE_KEY]).toBe("json");
+      expect(attributes[OpenTelemetryConstants.GEN_AI_SYSTEM_INSTRUCTIONS_KEY]).toBe(
+        "Answer with JSON only.",
+      );
+      expect(attributes[OpenTelemetryConstants.GEN_AI_RESPONSE_FINISH_REASONS_KEY]).toEqual([
+        "stop",
+      ]);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]).toBe(120);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_OUTPUT_TOKENS_KEY]).toBe(48);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS_KEY]).toBe(
+        12,
+      );
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY]).toBe(3);
+    });
+
+    it("should record late response parameters without changing endpoint or message behavior", () => {
+      const details: InvokeAgentScopeDetails = {
+        endpoint: { host: "agent-api.contoso.com", port: 8443 },
+      };
+      const scope = InvokeAgentScope.start(
+        { ...testRequest, content: "Hello agent" },
+        details,
+        testAgentDetails,
+      );
+
+      scope.recordResponse("Done");
+      scope.recordResponseParameters({
+        finishReasons: ["stop"],
+        inputTokens: 0,
+        outputTokens: 24,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 2,
+      });
+      scope.dispose();
+
+      const attributes = getLastSpan().attributes;
+      expect(attributes[OpenTelemetryConstants.SERVER_ADDRESS_KEY]).toBe("agent-api.contoso.com");
+      expect(attributes[OpenTelemetryConstants.SERVER_PORT_KEY]).toBe(8443);
+      expect(
+        JSON.parse(attributes[OpenTelemetryConstants.GEN_AI_INPUT_MESSAGES_KEY] as string)[0]
+          .parts[0].content,
+      ).toBe("Hello agent");
+      expect(
+        JSON.parse(attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY] as string)[0]
+          .parts[0].content,
+      ).toBe("Done");
+      expect(attributes[OpenTelemetryConstants.GEN_AI_RESPONSE_FINISH_REASONS_KEY]).toEqual([
+        "stop",
+      ]);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]).toBe(0);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_OUTPUT_TOKENS_KEY]).toBe(24);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS_KEY]).toBe(
+        0,
+      );
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY]).toBe(2);
+    });
+
+    it("should omit absent request and response parameters", () => {
+      const scope = InvokeAgentScope.start(
+        testRequest,
+        {
+          requestParameters: {
+            model: undefined,
+            stopSequences: undefined,
+            outputType: undefined,
+          },
+          responseParameters: {
+            finishReasons: undefined,
+            inputTokens: undefined,
+          },
+        },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const attributes = getLastSpan().attributes;
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_MODEL_KEY]).toBeUndefined();
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_STOP_SEQUENCES_KEY]).toBeUndefined();
+      expect(attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_TYPE_KEY]).toBeUndefined();
+      expect(attributes[OpenTelemetryConstants.GEN_AI_RESPONSE_FINISH_REASONS_KEY]).toBeUndefined();
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]).toBeUndefined();
+    });
+
+    it("should emit zero-valued request and response numbers", () => {
+      const scope = InvokeAgentScope.start(
+        testRequest,
+        {
+          requestParameters: {
+            seed: 0,
+            choiceCount: 0,
+            frequencyPenalty: 0,
+            maxTokens: 0,
+            presencePenalty: 0,
+            temperature: 0,
+            topP: 0,
+          },
+          responseParameters: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheCreationInputTokens: 0,
+            cacheReadInputTokens: 0,
+          },
+        },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const attributes = getLastSpan().attributes;
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_SEED_KEY]).toBe(0);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_CHOICE_COUNT_KEY]).toBe(0);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_FREQUENCY_PENALTY_KEY]).toBe(0);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_MAX_TOKENS_KEY]).toBe(0);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_PRESENCE_PENALTY_KEY]).toBe(0);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_TEMPERATURE_KEY]).toBe(0);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_TOP_P_KEY]).toBe(0);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]).toBe(0);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_OUTPUT_TOKENS_KEY]).toBe(0);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS_KEY]).toBe(
+        0,
+      );
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY]).toBe(0);
+    });
+
+    it("should propagate the common agent provider name", () => {
+      const scope = InvokeAgentScope.start(
+        testRequest,
+        {},
+        { ...testAgentDetails, providerName: "copilot" },
+      );
+      scope.dispose();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_PROVIDER_NAME_KEY]).toBe(
+        "copilot",
+      );
+    });
+
+    it("should let inference details override the common agent provider name", () => {
+      const scope = InferenceScope.start(
+        testRequest,
+        {
+          operationName: InferenceOperationType.CHAT,
+          model: "gpt-4o",
+          providerName: "azure-openai",
+        },
+        { ...testAgentDetails, providerName: "copilot" },
+      );
+      scope.dispose();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_PROVIDER_NAME_KEY]).toBe(
+        "azure-openai",
+      );
     });
   });
 
