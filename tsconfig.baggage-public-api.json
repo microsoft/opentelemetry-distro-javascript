@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "rootDir": ".",
+    "noEmit": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@microsoft/opentelemetry": ["./src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/typecheck/baggageBuilder.public-api.typecheck.ts"],
+  "exclude": ["node_modules", "dist", "dist-test"]
+}

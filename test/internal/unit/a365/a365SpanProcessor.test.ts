@@ -16,6 +16,8 @@ import {
   INVOKE_AGENT_ATTRIBUTES,
 } from "../../../../src/a365/index.js";
 
+const INTERNAL_CUSTOM_KEYS_METADATA_KEY = "_internal.custom_keys";
+
 /**
  * Helper: creates a baggage instance with the given entries.
  */
@@ -36,6 +38,7 @@ function startGenAiSpan(
   operationName: string,
   baggage: Record<string, string> = {},
   spanName?: string,
+  attributes: Record<string, string> = {},
 ) {
   const bag = createBaggage(baggage);
   const ctx = propagation.setBaggage(context.active(), bag);
@@ -46,6 +49,7 @@ function startGenAiSpan(
       kind: SpanKind.CLIENT,
       attributes: {
         [OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]: operationName,
+        ...attributes,
       },
     },
     ctx,
@@ -184,7 +188,9 @@ describe("A365SpanProcessor", () => {
 
     it("should not mutate spans with an unknown gen_ai.operation.name value", () => {
       const bag = createBaggage({
+        [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: "custom.one",
         [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+        "custom.one": "value-1",
       });
       const ctx = propagation.setBaggage(context.active(), bag);
 
@@ -204,6 +210,7 @@ describe("A365SpanProcessor", () => {
       const spans = memoryExporter.getFinishedSpans();
       expect(spans).toHaveLength(1);
       const attrs = spans[0].attributes;
+      expect(attrs["custom.one"]).toBeUndefined();
       expect(attrs[OpenTelemetryConstants.TENANT_ID_KEY]).toBeUndefined();
       expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY]).toBeUndefined();
     });
@@ -358,6 +365,110 @@ describe("A365SpanProcessor", () => {
           OpenTelemetryConstants.TELEMETRY_SDK_NAME_VALUE,
         );
       }
+    });
+  });
+
+  describe("registered custom baggage propagation", () => {
+    it("should copy registered custom baggage attributes from metadata", () => {
+      const testSpan = startGenAiSpan(provider, "chat", {
+        [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: "custom.one,custom.two",
+        "custom.one": "value-1",
+        "custom.two": "value-2",
+        "custom.three": "value-3",
+      });
+      testSpan.end();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const attrs = spans[0].attributes;
+      expect(attrs["custom.one"]).toBe("value-1");
+      expect(attrs["custom.two"]).toBe("value-2");
+      expect(attrs["custom.three"]).toBeUndefined();
+      expect(attrs[INTERNAL_CUSTOM_KEYS_METADATA_KEY]).toBeUndefined();
+    });
+
+    it("should trim registered custom baggage metadata and ignore empty entries", () => {
+      const testSpan = startGenAiSpan(provider, "chat", {
+        [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: "  custom.one , , custom.two ,,  ",
+        "custom.one": "value-1",
+        "custom.two": "value-2",
+      });
+      testSpan.end();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const attrs = spans[0].attributes;
+      expect(attrs["custom.one"]).toBe("value-1");
+      expect(attrs["custom.two"]).toBe("value-2");
+    });
+
+    it("should not copy unmarked custom baggage attributes", () => {
+      const testSpan = startGenAiSpan(provider, "chat", {
+        "custom.one": "value-1",
+      });
+      testSpan.end();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0].attributes["custom.one"]).toBeUndefined();
+    });
+
+    it("should keep existing span attributes when registered custom baggage collides", () => {
+      const testSpan = startGenAiSpan(
+        provider,
+        "chat",
+        {
+          [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: "custom.one",
+          "custom.one": "value-from-baggage",
+        },
+        undefined,
+        {
+          "custom.one": "value-existing",
+        },
+      );
+      testSpan.end();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0].attributes["custom.one"]).toBe("value-existing");
+    });
+
+    it("should never copy the custom metadata attribute itself", () => {
+      const testSpan = startGenAiSpan(provider, "chat", {
+        [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: `custom.one,${INTERNAL_CUSTOM_KEYS_METADATA_KEY}`,
+        "custom.one": "value-1",
+      });
+      testSpan.end();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const attrs = spans[0].attributes;
+      expect(attrs["custom.one"]).toBe("value-1");
+      expect(attrs[INTERNAL_CUSTOM_KEYS_METADATA_KEY]).toBeUndefined();
+    });
+
+    it("should not allow registered custom baggage to overwrite telemetry SDK attributes", () => {
+      const testSpan = startGenAiSpan(provider, "chat", {
+        [INTERNAL_CUSTOM_KEYS_METADATA_KEY]:
+          "telemetry.sdk.name,telemetry.sdk.language,telemetry.sdk.version",
+        [OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY]: "spoofed-sdk",
+        [OpenTelemetryConstants.TELEMETRY_SDK_LANGUAGE_KEY]: "spoofed-language",
+        [OpenTelemetryConstants.TELEMETRY_SDK_VERSION_KEY]: "0.0.0",
+      });
+      testSpan.end();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const attrs = spans[0].attributes;
+      expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY]).toBe(
+        OpenTelemetryConstants.TELEMETRY_SDK_NAME_VALUE,
+      );
+      expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_LANGUAGE_KEY]).toBe(
+        OpenTelemetryConstants.TELEMETRY_SDK_LANGUAGE_VALUE,
+      );
+      expect(attrs[OpenTelemetryConstants.TELEMETRY_SDK_VERSION_KEY]).toBe(
+        OpenTelemetryConstants.TELEMETRY_SDK_VERSION_VALUE,
+      );
     });
   });
 

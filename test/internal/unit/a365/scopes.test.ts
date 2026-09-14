@@ -569,6 +569,7 @@ describe("Scopes", () => {
       const scope = ExecuteToolScope.start(
         {
           conversationId: "conv-tool-123",
+          sessionId: "session-tool-123",
           channel: { name: "ChannelTool", description: "https://channel/tool" },
         },
         { toolName: "test-tool" },
@@ -582,6 +583,10 @@ describe("Scopes", () => {
           expect.objectContaining({
             key: OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY,
             val: "conv-tool-123",
+          }),
+          expect.objectContaining({
+            key: OpenTelemetryConstants.SESSION_ID_KEY,
+            val: "session-tool-123",
           }),
           expect.objectContaining({
             key: OpenTelemetryConstants.CHANNEL_NAME_KEY,
@@ -828,6 +833,7 @@ describe("Scopes", () => {
       const scope = InferenceScope.start(
         {
           conversationId: "conv-inf-123",
+          sessionId: "session-inf-123",
           channel: { name: "ChannelInf", description: "https://channel/inf" },
         },
         inferenceDetails,
@@ -841,6 +847,10 @@ describe("Scopes", () => {
           expect.objectContaining({
             key: OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY,
             val: "conv-inf-123",
+          }),
+          expect.objectContaining({
+            key: OpenTelemetryConstants.SESSION_ID_KEY,
+            val: "session-inf-123",
           }),
           expect.objectContaining({
             key: OpenTelemetryConstants.CHANNEL_NAME_KEY,
@@ -1144,6 +1154,34 @@ describe("Request content and message serialization (span attributes)", () => {
       expect(parsed[0].role).toBe("assistant");
       expect(parsed[0].parts[0].content).toBe("single output");
       expect(parsed[0].finish_reason).toBe("stop");
+    });
+  });
+
+  describe("InferenceScope – session id span attribute", () => {
+    it("should write request.sessionId directly to the span", () => {
+      const scope = InferenceScope.start(
+        { ...testRequest, sessionId: "session-inf-123" },
+        { operationName: InferenceOperationType.CHAT, model: "gpt-4o" },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const attributes = getLastSpan().attributes;
+      expect(attributes[OpenTelemetryConstants.SESSION_ID_KEY]).toBe("session-inf-123");
+    });
+  });
+
+  describe("ExecuteToolScope – session id span attribute", () => {
+    it("should write request.sessionId directly to the span", () => {
+      const scope = ExecuteToolScope.start(
+        { ...testRequest, sessionId: "session-tool-123" },
+        { toolName: "lookup", toolCallId: "tool-call-1", toolType: "function" },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const attributes = getLastSpan().attributes;
+      expect(attributes[OpenTelemetryConstants.SESSION_ID_KEY]).toBe("session-tool-123");
     });
   });
 

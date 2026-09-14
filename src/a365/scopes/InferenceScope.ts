@@ -75,6 +75,7 @@ export class InferenceScope extends OpenTelemetryScope {
 
     // Conversation and channel
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY, request.conversationId);
+    this.setTagMaybe(OpenTelemetryConstants.SESSION_ID_KEY, request.sessionId);
     this.setTagMaybe(OpenTelemetryConstants.CHANNEL_NAME_KEY, request.channel?.name);
     this.setTagMaybe(OpenTelemetryConstants.CHANNEL_LINK_KEY, request.channel?.description);
 
