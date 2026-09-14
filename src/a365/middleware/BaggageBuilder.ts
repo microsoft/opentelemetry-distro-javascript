@@ -14,12 +14,6 @@ import { propagation, context as otelContext } from "@opentelemetry/api";
 import type { Context } from "@opentelemetry/api";
 import { INTERNAL_CUSTOM_KEYS_METADATA_KEY, OpenTelemetryConstants } from "../constants.js";
 
-type BaggagePairs =
-  | Record<string, unknown>
-  | Iterable<[string, unknown]>
-  | null
-  | undefined;
-
 function getPairEntries(
   pairs: Record<string, unknown> | Iterable<[string, unknown]>,
 ): Iterable<[string, unknown]> {
@@ -242,7 +236,9 @@ export class BaggageBuilder {
    * @param pairs Dictionary or iterable of key-value pairs
    */
 
-  setPairs(pairs: BaggagePairs): BaggageBuilder {
+  setPairs(
+    pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+  ): BaggageBuilder {
     if (!pairs) {
       return this;
     }
@@ -275,7 +271,9 @@ export class BaggageBuilder {
    * Set multiple custom baggage pairs and register their keys for metadata propagation.
    * @param pairs Dictionary or iterable of key-value pairs
    */
-  customAttributes(pairs: BaggagePairs): BaggageBuilder {
+  customAttributes(
+    pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+  ): BaggageBuilder {
     if (!pairs) {
       return this;
     }

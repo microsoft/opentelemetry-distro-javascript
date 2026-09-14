@@ -17,10 +17,7 @@ import type {
   SpanProcessor as BaseSpanProcessor,
   ReadableSpan,
 } from "@opentelemetry/sdk-trace-base";
-import {
-  INTERNAL_CUSTOM_KEYS_METADATA_KEY,
-  OpenTelemetryConstants,
-} from "../constants.js";
+import { INTERNAL_CUSTOM_KEYS_METADATA_KEY, OpenTelemetryConstants } from "../constants.js";
 import { GEN_AI_OPERATION_NAMES } from "../exporter/utils.js";
 import { GENERIC_ATTRIBUTES, INVOKE_AGENT_ATTRIBUTES } from "./util.js";
 

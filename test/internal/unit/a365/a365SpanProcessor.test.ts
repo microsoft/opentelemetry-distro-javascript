@@ -435,8 +435,7 @@ describe("A365SpanProcessor", () => {
 
     it("should never copy the custom metadata attribute itself", () => {
       const testSpan = startGenAiSpan(provider, "chat", {
-        [INTERNAL_CUSTOM_KEYS_METADATA_KEY]:
-          `custom.one,${INTERNAL_CUSTOM_KEYS_METADATA_KEY}`,
+        [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: `custom.one,${INTERNAL_CUSTOM_KEYS_METADATA_KEY}`,
         "custom.one": "value-1",
       });
       testSpan.end();

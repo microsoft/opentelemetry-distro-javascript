@@ -31,13 +31,13 @@ const invokeScope = InvokeAgentScope.start(
 
 invokeScope.run(async () => {
   const toolScope = ExecuteToolScope.start(
-    { conversationId: "conv-123" },
+    { conversationId: "conv-123", sessionId: "session-456" },
     { toolName: "Search", input: { query: "hello" } },
     { agentId: "agent-1", tenantId: "tenant-1" },
   );
 
   const inferenceScope = InferenceScope.start(
-    { conversationId: "conv-123" },
+    { conversationId: "conv-123", sessionId: "session-456" },
     { operationName: InferenceOperationType.ChatCompletion },
     { agentId: "agent-1", tenantId: "tenant-1" },
   );
@@ -48,6 +48,10 @@ invokeScope.run(async () => {
 
 invokeScope.dispose();
 ```
+
+Each manual scope accepts `request.sessionId`. When you provide it, the scope writes
+`microsoft.session.id` directly on the created span instead of relying on later baggage
+enrichment.
 
 ## Baggage And Context
 
@@ -61,6 +65,11 @@ const baggageScope = new BaggageBuilder()
   .agentId("agent-1")
   .conversationId("conv-123")
   .sessionId("session-456")
+  .customAttribute("deployment.ring", "firstrelease")
+  .customAttributes({
+    "feature.name": "grounded-chat",
+    "customer.segment": "internal",
+  })
   .build();
 
 baggageScope.run(() => {
@@ -68,6 +77,19 @@ baggageScope.run(() => {
   injectContextToHeaders(headers);
 });
 ```
+
+- Baggage may cross process and service boundaries when you inject/extract context. Treat it like
+  outbound metadata: do not put secrets, access tokens, or PII in baggage values.
+- `customAttribute()` and `customAttributes()` trim keys and values before storing them. Blank
+  keys/values are dropped, keys containing commas are rejected, and the reserved
+  `_internal.custom_keys` metadata key cannot be set directly.
+- Custom baggage enrichment is opt-in. Only keys registered through `customAttribute()` or
+  `customAttributes()` are copied from baggage onto spans; plain `setPairs()` entries stay in
+  baggage only.
+- Automatic baggage-to-span enrichment only runs for recognized GenAI spans
+  (`invoke_agent`, `execute_tool`, `chat`, and `output_messages`).
+- Explicit span attributes win over baggage. If a span already has a value for a registered custom
+  key, the span value is preserved.
 
 ## Hosting
 
