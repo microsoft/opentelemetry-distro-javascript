@@ -49,9 +49,10 @@ invokeScope.run(async () => {
 invokeScope.dispose();
 ```
 
-Each manual scope accepts `request.sessionId`. When you provide it, the scope writes
-`microsoft.session.id` directly on the created span instead of relying on later baggage
-enrichment.
+`InvokeAgentScope`, `InferenceScope`, and `ExecuteToolScope` accept `request.sessionId`.
+When you provide it, those scopes write `microsoft.session.id` directly on the created
+span instead of relying on later baggage enrichment. `OutputScope` does not currently
+propagate `request.sessionId` directly.
 
 ## Baggage And Context
 

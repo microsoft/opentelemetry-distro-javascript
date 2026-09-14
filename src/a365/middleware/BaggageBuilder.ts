@@ -272,7 +272,8 @@ export class BaggageBuilder {
    * @param pairs Dictionary or iterable of key-value pairs
    */
   customAttributes(
-    pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- preserve source compatibility for interface/class-typed callers
+    pairs: Record<string, any> | Iterable<[string, any]> | null | undefined,
   ): BaggageBuilder {
     if (!pairs) {
       return this;

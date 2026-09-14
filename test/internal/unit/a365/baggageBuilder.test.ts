@@ -18,6 +18,14 @@ interface InterfaceTypedBaggagePairs {
   "gen_ai.agent.id": string;
 }
 
+interface InterfaceTypedCustomAttributes {
+  alpha: number;
+  beta: string;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- match the source-compatible public API surface
+type PublicPairsArg = Record<string, any> | Iterable<[string, any]> | null | undefined;
+
 function getScopeBaggage(scope: BaggageScope) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return propagation.getBaggage((scope as any).contextWithBaggage);
@@ -126,9 +134,7 @@ describe("BaggageBuilder", () => {
     it("should preserve the public setPairs parameter compatibility", () => {
       type SetPairsArg = Parameters<BaggageBuilder["setPairs"]>[0];
 
-      expectTypeOf<SetPairsArg>().toEqualTypeOf<
-        Record<string, any> | Iterable<[string, any]> | null | undefined
-      >();
+      expectTypeOf<SetPairsArg>().toEqualTypeOf<PublicPairsArg>();
     });
 
     it("should accept dictionary of pairs", () => {
@@ -203,6 +209,12 @@ describe("BaggageBuilder", () => {
   });
 
   describe("custom attributes", () => {
+    it("should preserve the public customAttributes parameter compatibility", () => {
+      type CustomAttributesArg = Parameters<BaggageBuilder["customAttributes"]>[0];
+
+      expectTypeOf<CustomAttributesArg>().toEqualTypeOf<PublicPairsArg>();
+    });
+
     it("should normalize and mark a custom attribute", () => {
       const builder = new BaggageBuilder();
       expect(typeof (builder as unknown as { customAttribute?: unknown }).customAttribute).toBe(
@@ -243,6 +255,22 @@ describe("BaggageBuilder", () => {
       expect(bag?.getEntry("beta")?.value).toBe("two");
       expect(bag?.getEntry("blank")).toBeUndefined();
       expect(bag?.getEntry("skipNull")).toBeUndefined();
+      expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("alpha,beta");
+    });
+
+    it("should accept interface-typed object inputs and stringify valid values", () => {
+      const builder = new BaggageBuilder();
+      const pairs: InterfaceTypedCustomAttributes = {
+        alpha: 1,
+        beta: "  two  ",
+      };
+
+      const result: BaggageBuilder = builder.customAttributes(pairs);
+      expect(result).toBe(builder);
+
+      const bag = getScopeBaggage(result.build());
+      expect(bag?.getEntry("alpha")?.value).toBe("1");
+      expect(bag?.getEntry("beta")?.value).toBe("two");
       expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("alpha,beta");
     });
 

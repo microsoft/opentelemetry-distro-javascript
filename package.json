@@ -9,6 +9,7 @@
   "type": "module",
   "scripts": {
     "build": "npm run clean && tsc -p tsconfig.src.json && tsc -p tsconfig.src.cjs.json && npm run fixup-cjs",
+    "typecheck:baggage-public-api": "tsc -p tsconfig.baggage-public-api.json",
     "fixup-cjs": "node scripts/fixup-cjs.cjs",
     "clean": "rimraf dist",
     "lint": "eslint src test",
