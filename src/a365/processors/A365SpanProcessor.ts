@@ -17,9 +17,23 @@ import type {
   SpanProcessor as BaseSpanProcessor,
   ReadableSpan,
 } from "@opentelemetry/sdk-trace-base";
-import { OpenTelemetryConstants } from "../constants.js";
+import {
+  INTERNAL_CUSTOM_KEYS_METADATA_KEY,
+  OpenTelemetryConstants,
+} from "../constants.js";
 import { GEN_AI_OPERATION_NAMES } from "../exporter/utils.js";
 import { GENERIC_ATTRIBUTES, INVOKE_AGENT_ATTRIBUTES } from "./util.js";
+
+function getRegisteredCustomKeys(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((key) => key.trim())
+    .filter((key) => key && key !== INTERNAL_CUSTOM_KEYS_METADATA_KEY);
+}
 
 /**
  * Copies relevant baggage entries to span attributes on span start.
@@ -89,6 +103,9 @@ export class A365SpanProcessor implements BaseSpanProcessor {
     if (isInvokeAgent) {
       INVOKE_AGENT_ATTRIBUTES.forEach((key) => targetKeys.add(key));
     }
+    getRegisteredCustomKeys(baggageMap.get(INTERNAL_CUSTOM_KEYS_METADATA_KEY)).forEach((key) =>
+      targetKeys.add(key),
+    );
 
     // Set telemetry SDK attributes
     if (!existingAttrs.has(OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY)) {
@@ -96,18 +113,21 @@ export class A365SpanProcessor implements BaseSpanProcessor {
         OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY,
         OpenTelemetryConstants.TELEMETRY_SDK_NAME_VALUE,
       );
+      existingAttrs.add(OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY);
     }
     if (!existingAttrs.has(OpenTelemetryConstants.TELEMETRY_SDK_LANGUAGE_KEY)) {
       span.setAttribute(
         OpenTelemetryConstants.TELEMETRY_SDK_LANGUAGE_KEY,
         OpenTelemetryConstants.TELEMETRY_SDK_LANGUAGE_VALUE,
       );
+      existingAttrs.add(OpenTelemetryConstants.TELEMETRY_SDK_LANGUAGE_KEY);
     }
     if (!existingAttrs.has(OpenTelemetryConstants.TELEMETRY_SDK_VERSION_KEY)) {
       span.setAttribute(
         OpenTelemetryConstants.TELEMETRY_SDK_VERSION_KEY,
         OpenTelemetryConstants.TELEMETRY_SDK_VERSION_VALUE,
       );
+      existingAttrs.add(OpenTelemetryConstants.TELEMETRY_SDK_VERSION_KEY);
     }
 
     // Copy baggage to span attributes
