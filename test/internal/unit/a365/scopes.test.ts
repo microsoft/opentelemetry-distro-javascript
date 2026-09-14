@@ -1233,14 +1233,12 @@ describe("Request content and message serialization (span attributes)", () => {
       expect(attributes[OpenTelemetryConstants.SERVER_ADDRESS_KEY]).toBe("agent-api.contoso.com");
       expect(attributes[OpenTelemetryConstants.SERVER_PORT_KEY]).toBe(8443);
       expect(
-        JSON.parse(attributes[OpenTelemetryConstants.GEN_AI_INPUT_MESSAGES_KEY] as string)[0].parts[
-          0
-        ].content,
+        JSON.parse(attributes[OpenTelemetryConstants.GEN_AI_INPUT_MESSAGES_KEY] as string)[0]
+          .parts[0].content,
       ).toBe("Hello agent");
       expect(
-        JSON.parse(attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY] as string)[0].parts[
-          0
-        ].content,
+        JSON.parse(attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY] as string)[0]
+          .parts[0].content,
       ).toBe("Done");
       expect(attributes[OpenTelemetryConstants.GEN_AI_RESPONSE_FINISH_REASONS_KEY]).toEqual([
         "stop",

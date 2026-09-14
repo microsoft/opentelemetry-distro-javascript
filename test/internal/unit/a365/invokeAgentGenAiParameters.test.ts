@@ -16,12 +16,13 @@ import type {
 } from "../../../../src/a365/index.js";
 
 type Expect<T extends true> = T;
-type Equal<Left, Right> = (
-  <Candidate>() => Candidate extends Left ? 1 : 2
-) extends <Candidate>() => Candidate extends Right ? 1 : 2
-  ? true
-  : false;
-type IsOptional<T, K extends keyof T> = {} extends Pick<T, K> ? true : false;
+type Equal<Left, Right> =
+  (<Candidate>() => Candidate extends Left ? 1 : 2) extends <Candidate>() => Candidate extends Right
+    ? 1
+    : 2
+    ? true
+    : false;
+type IsOptional<T, K extends keyof T> = Omit<T, K> extends T ? true : false;
 
 type _RootRequestParametersExportMatchesA365 = Expect<
   Equal<RootGenAiRequestParameters, GenAiRequestParameters>
@@ -125,10 +126,7 @@ describe("InvokeAgent GenAI parameter contracts", () => {
   });
 
   it("defines invoke-agent GenAI semantic-convention constants", () => {
-    assert.strictEqual(
-      OpenTelemetryConstants.GEN_AI_DATA_SOURCE_ID_KEY,
-      "gen_ai.data_source.id",
-    );
+    assert.strictEqual(OpenTelemetryConstants.GEN_AI_DATA_SOURCE_ID_KEY, "gen_ai.data_source.id");
     assert.strictEqual(OpenTelemetryConstants.GEN_AI_OUTPUT_TYPE_KEY, "gen_ai.output.type");
     assert.strictEqual(
       OpenTelemetryConstants.GEN_AI_REQUEST_CHOICE_COUNT_KEY,

@@ -76,8 +76,7 @@ export class OpenTelemetryConstants {
   /** Attribute key for the requested number of choices (`gen_ai.request.choice.count`). */
   public static readonly GEN_AI_REQUEST_CHOICE_COUNT_KEY = "gen_ai.request.choice.count";
   /** Attribute key for the frequency penalty (`gen_ai.request.frequency_penalty`). */
-  public static readonly GEN_AI_REQUEST_FREQUENCY_PENALTY_KEY =
-    "gen_ai.request.frequency_penalty";
+  public static readonly GEN_AI_REQUEST_FREQUENCY_PENALTY_KEY = "gen_ai.request.frequency_penalty";
   /** Attribute key for the model that produced the response (`gen_ai.response.model`). */
   public static readonly GEN_AI_RESPONSE_MODEL_KEY = "gen_ai.response.model";
   /** Attribute key for the finish reasons returned by the model (`gen_ai.response.finish_reasons`). */
@@ -87,8 +86,7 @@ export class OpenTelemetryConstants {
   /** Attribute key for the requested maximum number of tokens (`gen_ai.request.max_tokens`). */
   public static readonly GEN_AI_REQUEST_MAX_TOKENS_KEY = "gen_ai.request.max_tokens";
   /** Attribute key for the presence penalty (`gen_ai.request.presence_penalty`). */
-  public static readonly GEN_AI_REQUEST_PRESENCE_PENALTY_KEY =
-    "gen_ai.request.presence_penalty";
+  public static readonly GEN_AI_REQUEST_PRESENCE_PENALTY_KEY = "gen_ai.request.presence_penalty";
   /** Attribute key for the request seed (`gen_ai.request.seed`). */
   public static readonly GEN_AI_REQUEST_SEED_KEY = "gen_ai.request.seed";
   /** Attribute key for the stop sequences (`gen_ai.request.stop_sequences`). */
