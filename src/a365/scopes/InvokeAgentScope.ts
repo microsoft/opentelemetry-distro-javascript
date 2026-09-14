@@ -25,7 +25,8 @@ export class InvokeAgentScope extends OpenTelemetryScope {
    * @param invokeScopeDetails Scope-level details (endpoint).
    * @param agentDetails The agent identity. `tenantId` is required.
    * @param callerDetails Optional caller information (human, agent, or both for A2A).
-   * @param spanDetails Optional span configuration.
+   * @param spanDetails Optional span configuration. Defaults the span kind to
+   * `SpanKind.INTERNAL` when omitted.
    */
   public static start(
     request: Request,
@@ -56,7 +57,7 @@ export class InvokeAgentScope extends OpenTelemetryScope {
 
     const resolvedSpanDetails: SpanDetails = {
       ...spanDetails,
-      spanKind: spanDetails?.spanKind ?? SpanKind.CLIENT,
+      spanKind: spanDetails?.spanKind ?? SpanKind.INTERNAL,
     };
 
     super(
