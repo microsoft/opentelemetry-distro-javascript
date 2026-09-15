@@ -55,16 +55,16 @@ export class S2STokenProvider {
       return entry.token.accessToken;
     }
 
-    if (!entry.inFlight) {
-      entry.inFlight = this.exchangeClient.exchange();
-    }
+    const inFlight = entry.inFlight ?? (entry.inFlight = this.exchangeClient.exchange());
 
     try {
-      const token = await entry.inFlight;
+      const token = await inFlight;
       entry.token = token;
       return token.accessToken;
     } finally {
-      entry.inFlight = undefined;
+      if (entry.inFlight === inFlight) {
+        entry.inFlight = undefined;
+      }
     }
   }
 }

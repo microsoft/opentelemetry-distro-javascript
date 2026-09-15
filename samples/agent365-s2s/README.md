@@ -103,3 +103,10 @@ Run the focused tests with:
 ```powershell
 npm test
 ```
+
+The sample also reuses the repository's root Prettier and ESLint configuration:
+
+```powershell
+npm run format
+npm run lint
+```

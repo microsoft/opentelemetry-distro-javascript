@@ -186,7 +186,7 @@ export class SdkStatsMetrics {
     // statusCode/exceptionType where applicable). `cikey` falls back to
     // "N/A" when unset.
     this.commonAttributes = {
-      rp: "unknown",
+      rp: "N/A",
       attach: "Manual",
       runtimeVersion: process.version,
       os: os.type(),

@@ -65,7 +65,7 @@ export async function main(configPath = "appsettings.json"): Promise<void> {
     await runScenario(config);
   } catch (error) {
     safeConsoleLogger.error(`[S2S sample] ${safeFailureMessage(error)}`);
-    throw new Error("Agent365 S2S sample failed.");
+    throw new Error("Agent365 S2S sample failed.", { cause: error });
   } finally {
     if (initialized) {
       await shutdownMicrosoftOpenTelemetry();
