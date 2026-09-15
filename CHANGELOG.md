@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Features Added
+- Add typed, extensible ExecuteTool argument and result schemas with default schema_version: "1.0". [#240](https://github.com/microsoft/opentelemetry-distro-javascript/pull/240)
+
 ### Other Changes
 - Consolidate Dependabot updates for Vitest 4.1.11, Hono 4.13.7, qs 6.16.0, fast-uri 3.1.7, actions/deploy-pages 5.0.1, and actions/checkout 7.0.1.
 

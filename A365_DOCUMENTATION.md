@@ -17,10 +17,15 @@ Use scopes when you want explicit spans for agent, tool, inference, or output wo
 
 ```typescript
 import {
+  ExecuteToolCallArguments,
+  ExecuteToolCallResult,
   ExecuteToolScope,
   InferenceOperationType,
   InferenceScope,
   InvokeAgentScope,
+  ToolCallAction,
+  ToolCallOutcomeStatus,
+  ToolPolicyDecision,
 } from "@microsoft/opentelemetry";
 
 const invokeScope = InvokeAgentScope.start(
@@ -30,9 +35,36 @@ const invokeScope = InvokeAgentScope.start(
 );
 
 invokeScope.run(async () => {
+  const toolArguments = new ExecuteToolCallArguments({
+    action: ToolCallAction.READ,
+    resources: [
+      {
+        id: "drive-item-1",
+        uri: "https://contoso.example/items/1",
+        name: "Quarterly plan",
+        type: "document",
+        provider: "sharepoint",
+        identifiers: [{ type: "driveItem", value: "1" }],
+        container: {
+          id: "folder-1",
+          uri: "https://contoso.example/folders/1",
+          type: "folder",
+        },
+        custom_resource_field: "kept",
+      },
+    ],
+    parameters: { query: "hello", includeArchived: false },
+    custom_argument_field: "kept",
+  });
+
   const toolScope = ExecuteToolScope.start(
     { conversationId: "conv-123" },
-    { toolName: "Search", input: { query: "hello" } },
+    {
+      toolName: "Search",
+      arguments: toolArguments,
+      toolCallId: "tool-call-123",
+      toolType: "function",
+    },
     { agentId: "agent-1", tenantId: "tenant-1" },
   );
 
@@ -42,12 +74,45 @@ invokeScope.run(async () => {
     { agentId: "agent-1", tenantId: "tenant-1" },
   );
 
+  toolScope.recordResponse(
+    new ExecuteToolCallResult({
+      outcome: {
+        status: ToolCallOutcomeStatus.SUCCESS,
+        code: "200",
+        message: "Completed",
+      },
+      resources: [
+        {
+          id: "drive-item-1",
+          name: "Quarterly plan",
+          type: "document",
+          outcome: {
+            status: ToolCallOutcomeStatus.SUCCESS,
+            code: "200",
+          },
+          policy: {
+            decision: ToolPolicyDecision.ALLOW,
+            id: "policy-1",
+            name: "AllowDocumentRead",
+          },
+          data: { snippetCount: 3 },
+          custom_result_field: "kept",
+        },
+      ],
+      pagination: { has_more: false, total_count: 1 },
+      custom_result_field: "kept",
+    }),
+  );
+
   toolScope.dispose();
   inferenceScope.dispose();
 });
 
 invokeScope.dispose();
 ```
+
+`ExecuteToolScope` serializes arguments to `gen_ai.tool.call.arguments` and results to
+`gen_ai.tool.call.result` as JSON span attributes, so they may contain sensitive data.
 
 ## Baggage And Context
 

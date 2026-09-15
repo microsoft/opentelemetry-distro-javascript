@@ -3,7 +3,14 @@
 
 import { describe, it, expect } from "vitest";
 
-import { MessageRole, Modality } from "../../../../src/a365/contracts.js";
+import {
+  ExecuteToolCallArguments,
+  ExecuteToolCallResult,
+  MessageRole,
+  Modality,
+  ToolCallAction,
+  ToolCallOutcomeStatus,
+} from "../../../../src/a365/contracts.js";
 import type { InputMessages, OutputMessages } from "../../../../src/a365/contracts.js";
 import {
   isWrappedMessages,
@@ -12,6 +19,7 @@ import {
   normalizeInputMessages,
   normalizeOutputMessages,
   serializeMessages,
+  serializeToolPayload,
 } from "../../../../src/a365/message-utils.js";
 
 describe("isWrappedMessages", () => {
@@ -316,5 +324,87 @@ describe("serializeMessages", () => {
     expect(parsed[0].parts[0].server_tool_call.endpoint).toBe("/api");
     expect(parsed[1].parts[0].server_tool_call_response.status).toBe("ok");
     expect(parsed[2].parts[0].type).toBe("custom_annotation");
+  });
+});
+
+describe("serializeToolPayload", () => {
+  const serializationError = '{"serialization_error":"Failed to serialize execute tool payload."}';
+  const legacySerializationError = '{"error":"serialization failed"}';
+
+  it("returns undefined for nullish payloads", () => {
+    expect(serializeToolPayload(undefined)).toBeUndefined();
+    expect(serializeToolPayload(null)).toBeUndefined();
+  });
+
+  it("serializes typed payloads with schema version, nested values, and extension fields", () => {
+    const payload = new ExecuteToolCallArguments({
+      action: ToolCallAction.READ,
+      parameters: {
+        query: "GDPR",
+        filters: { sensitivity: "high", includeArchived: true },
+      },
+      resources: [
+        {
+          id: "doc-1",
+          type: "document",
+          provider: "sharepoint",
+          provider_resource_type: "page",
+        },
+      ],
+      request_context: { scenario: "enterprise-search" },
+    });
+
+    const serialized = serializeToolPayload(payload);
+    const parsed = JSON.parse(serialized as string);
+
+    expect(parsed.schema_version).toBe("1.0");
+    expect(parsed.action).toBe("read");
+    expect(parsed.parameters.filters).toEqual({
+      sensitivity: "high",
+      includeArchived: true,
+    });
+    expect(parsed.resources[0].provider_resource_type).toBe("page");
+    expect(parsed.request_context).toEqual({ scenario: "enterprise-search" });
+  });
+
+  it("returns the legacy fallback for circular generic payloads", () => {
+    const payload: Record<string, unknown> = { a: 1 };
+    payload.self = payload;
+
+    expect(serializeToolPayload(payload)).toBe(legacySerializationError);
+  });
+
+  it("returns the exact fallback for circular ExecuteToolCallArguments payloads", () => {
+    const payload = new ExecuteToolCallArguments({ action: ToolCallAction.READ });
+    payload.self = payload;
+
+    expect(serializeToolPayload(payload)).toBe(serializationError);
+  });
+
+  it("returns the exact fallback for circular ExecuteToolCallResult payloads", () => {
+    const result = new ExecuteToolCallResult({
+      outcome: { status: ToolCallOutcomeStatus.SUCCESS },
+      data: { count: 1 },
+    });
+    result.self = result;
+
+    expect(serializeToolPayload(result)).toBe(serializationError);
+  });
+
+  it("returns the exact fallback for bigint payloads", () => {
+    expect(
+      serializeToolPayload(
+        new ExecuteToolCallArguments({ action: ToolCallAction.READ, count: BigInt(1) }),
+      ),
+    ).toBe(serializationError);
+  });
+
+  it("returns the exact fallback when payload serialization throws", () => {
+    const payload = new ExecuteToolCallArguments({ action: ToolCallAction.READ });
+    payload.toJSON = () => {
+      throw new Error("boom");
+    };
+
+    expect(serializeToolPayload(payload)).toBe(serializationError);
   });
 });
