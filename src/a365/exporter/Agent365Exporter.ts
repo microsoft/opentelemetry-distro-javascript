@@ -309,7 +309,7 @@ export class Agent365Exporter implements SpanExporter {
     headers["authorization"] = `Bearer ${token}`;
 
     // Send each chunk (all-or-nothing: fail on first chunk failure)
-    let lastCorrelationId = "unknown";
+    let lastCorrelationId = "N/A";
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       const payload = this.buildEnvelope(chunk, resourceAttrs);
