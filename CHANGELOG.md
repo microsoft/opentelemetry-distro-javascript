@@ -2,7 +2,11 @@
 
 ## [Unreleased]
 
+### Features Added
+- Add a self-contained Agent365 S2S sample with two-stage MSAL app-only authentication and expiry-aware token caching. [#244](https://github.com/microsoft/opentelemetry-distro-javascript/pull/244)
+
 ### Other Changes
+- Include successful Agent365 exporter HTTP status and correlation ID in safe diagnostics. [#244](https://github.com/microsoft/opentelemetry-distro-javascript/pull/244)
 - Consolidate Dependabot updates for Vitest 4.1.11, Hono 4.13.7, qs 6.16.0, fast-uri 3.1.7, actions/deploy-pages 5.0.1, and actions/checkout 7.0.1.
 
 ## [1.4.0] - 2026-09-08

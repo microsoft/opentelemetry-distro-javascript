@@ -309,7 +309,7 @@ export class Agent365Exporter implements SpanExporter {
     headers["authorization"] = `Bearer ${token}`;
 
     // Send each chunk (all-or-nothing: fail on first chunk failure)
-    let lastCorrelationId = "unknown";
+    let lastCorrelationId = "N/A";
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       const payload = this.buildEnvelope(chunk, resourceAttrs);
@@ -529,7 +529,7 @@ export class Agent365Exporter implements SpanExporter {
     const url = this.buildReplayUrl(record);
     const stats = createRequestStats(url);
     const requestStart = Date.now();
-    let correlationId = "unknown";
+    let correlationId = "N/A";
     const headers: Record<string, string> = {
       "content-type": "application/json",
       "x-ms-tenant-id": record.tenantId,
@@ -550,11 +550,14 @@ export class Agent365Exporter implements SpanExporter {
       correlationId =
         response.headers.get("x-ms-correlation-id") ??
         response.headers.get("x-correlation-id") ??
-        "unknown";
+        "N/A";
 
       recordResponseStats(stats, response.status, requestStart);
 
       if (response.status >= 200 && response.status < 300) {
+        this.logger.info(
+          `[Agent365Exporter] HTTP ${response.status} success. Correlation ID: ${correlationId}.`,
+        );
         return { kind: "success", correlationId };
       }
       if (
@@ -586,7 +589,7 @@ export class Agent365Exporter implements SpanExporter {
     body: string,
     headers: Record<string, string>,
   ): Promise<{ ok: boolean; correlationId: string }> {
-    let lastCorrelationId = "unknown";
+    let lastCorrelationId = "N/A";
 
     // Resolve the short host (and the SDKStats kill-switch) once per call
     // so each retry attempt records under the same key without re-parsing
@@ -607,12 +610,15 @@ export class Agent365Exporter implements SpanExporter {
         const correlationId =
           response.headers.get("x-ms-correlation-id") ??
           response.headers.get("x-correlation-id") ??
-          "unknown";
+          "N/A";
         lastCorrelationId = correlationId;
 
         recordResponseStats(stats, response.status, requestStart);
 
         if (response.status >= 200 && response.status < 300) {
+          this.logger.info(
+            `[Agent365Exporter] HTTP ${response.status} success. Correlation ID: ${correlationId}.`,
+          );
           return { ok: true, correlationId };
         }
 
