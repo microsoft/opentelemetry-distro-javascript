@@ -1,0 +1,4 @@
+appsettings.json
+dist/
+node_modules/
+.test-tmp/

@@ -1,0 +1,27 @@
+{
+  "name": "@microsoft/opentelemetry-agent365-s2s-sample",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent365 service-to-service observability sample",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true });\"",
+    "start": "node dist/src/index.js",
+    "test": "npm run build && node --test dist/test/sample.test.js"
+  },
+  "dependencies": {
+    "@azure/msal-node": "^6.0.0",
+    "@microsoft/opentelemetry": "file:../..",
+    "@opentelemetry/api": "^1.9.1"
+  },
+  "devDependencies": {
+    "@opentelemetry/sdk-trace-base": "^2.10.0",
+    "@opentelemetry/sdk-trace-node": "^2.10.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}
