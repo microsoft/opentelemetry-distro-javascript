@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Bugs Fixed
+- A365: prevent `recordAttributes()` from overwriting scope-owned attributes such as builder-populated tags and `gen_ai.operation.name`, while still allowing late writes for known keys that were never set and repeated last-write-wins custom attributes.
+
 ### Other Changes
 - Consolidate Dependabot updates for Vitest 4.1.11, Hono 4.13.7, qs 6.16.0, fast-uri 3.1.7, actions/deploy-pages 5.0.1, and actions/checkout 7.0.1.
 
