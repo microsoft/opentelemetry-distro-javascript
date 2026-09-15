@@ -263,6 +263,91 @@ describe("S2STokenProvider", () => {
     assert.equal(exchangeCount, 2);
   });
 
+  it("does not let a stale rejected awaiter clear a newer refresh", async () => {
+    let firstAwaiterRejected: ((reason?: unknown) => void) | undefined;
+    let secondAwaiterRejected: ((reason?: unknown) => void) | undefined;
+    let resolveSecondExchange:
+      | ((
+          value:
+            | { accessToken: string; expiresOn: Date }
+            | PromiseLike<{ accessToken: string; expiresOn: Date }>,
+        ) => void)
+      | undefined;
+    let exchangeCount = 0;
+    const firstExchange = {
+      then: (
+        _onFulfilled?: ((value: { accessToken: string; expiresOn: Date }) => unknown) | null,
+        onRejected?: ((reason: unknown) => unknown) | null,
+      ) => {
+        if (!onRejected) {
+          throw new Error("Missing rejection handler.");
+        }
+        if (!firstAwaiterRejected) {
+          firstAwaiterRejected = onRejected;
+        } else if (!secondAwaiterRejected) {
+          secondAwaiterRejected = onRejected;
+        } else {
+          throw new Error("Unexpected extra awaiter.");
+        }
+      },
+    } as unknown as Promise<{ accessToken: string; expiresOn: Date }>;
+    const client: TokenExchangeClient = {
+      exchange: () => {
+        exchangeCount++;
+        if (exchangeCount === 1) {
+          return firstExchange;
+        }
+        if (exchangeCount === 2) {
+          return new Promise((resolve) => {
+            resolveSecondExchange = resolve;
+          });
+        }
+        return Promise.resolve({
+          accessToken: `unexpected-token-${exchangeCount}`,
+          expiresOn: new Date(Date.now() + 120_000),
+        });
+      },
+    };
+    const config = parseSampleConfig(validConfigObject());
+    const provider = new S2STokenProvider(config, client);
+
+    const first = provider.resolve(AGENT_ID, TENANT_ID);
+    const second = provider.resolve(AGENT_ID, TENANT_ID);
+    const firstFailure = assert.rejects(first, /temporarily_unavailable/);
+    const secondFailure = assert.rejects(second, /temporarily_unavailable/);
+    await Promise.resolve();
+    assert.equal(exchangeCount, 1);
+    assert.ok(firstAwaiterRejected);
+    assert.ok(secondAwaiterRejected);
+
+    const staleFailure = new Error("Blueprint token exchange failed (temporarily_unavailable).");
+    firstAwaiterRejected(staleFailure);
+    await Promise.resolve();
+
+    const refresh = provider.resolve(AGENT_ID, TENANT_ID);
+    await Promise.resolve();
+    assert.equal(exchangeCount, 2);
+    assert.ok(resolveSecondExchange);
+
+    secondAwaiterRejected(staleFailure);
+    await Promise.resolve();
+
+    const follower = provider.resolve(AGENT_ID, TENANT_ID);
+    await Promise.resolve();
+    assert.equal(exchangeCount, 2);
+
+    resolveSecondExchange({
+      accessToken: "shared-refresh-token",
+      expiresOn: new Date(Date.now() + 120_000),
+    });
+
+    await firstFailure;
+    await secondFailure;
+    assert.equal(await refresh, "shared-refresh-token");
+    assert.equal(await follower, "shared-refresh-token");
+    assert.equal(exchangeCount, 2);
+  });
+
   for (const [agentId, tenantId, expectedKey] of [
     ["44444444-4444-4444-8444-444444444444", TENANT_ID, "agentId"],
     [AGENT_ID, "55555555-5555-4555-8555-555555555555", "tenantId"],

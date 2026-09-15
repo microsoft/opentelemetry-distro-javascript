@@ -10,6 +10,10 @@
   "scripts": {
     "build": "npm run clean && tsc -p tsconfig.json",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true });\"",
+    "format": "node ../../node_modules/prettier/bin/prettier.cjs --check --config ../../.prettierrc.json --ignore-path ../../.prettierignore \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\"",
+    "format:fix": "node ../../node_modules/prettier/bin/prettier.cjs --write --config ../../.prettierrc.json --ignore-path ../../.prettierignore \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\"",
+    "lint": "node ../../node_modules/eslint/bin/eslint.js --config ../../eslint.config.mjs src test",
+    "lint:fix": "node ../../node_modules/eslint/bin/eslint.js --config ../../eslint.config.mjs src test --fix",
     "start": "node dist/src/index.js",
     "test": "npm run build && node --test dist/test/sample.test.js"
   },
