@@ -236,7 +236,7 @@ describe("sdkstats/metrics", () => {
 
       // Common dimensions per spec.
       for (const dp of success) {
-        expect(dp.attributes.rp).toBe("N/A");
+        expect(dp.attributes.rp).toBe("unknown");
         expect(dp.attributes.attach).toBe("Manual");
         expect(dp.attributes.cikey).toBe("N/A");
         expect(dp.attributes.language).toBe("node");
