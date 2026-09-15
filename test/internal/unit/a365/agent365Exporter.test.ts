@@ -216,6 +216,46 @@ describe("Agent365Exporter", () => {
       assert.strictEqual(options.headers["content-type"], "application/json");
     });
 
+    it("logs successful HTTP status and correlation ID without unsafe response data", async () => {
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+      fetchSpy.mockResolvedValue({
+        status: 202,
+        headers: new Headers({ "x-ms-correlation-id": "corr-safe-123" }),
+        json: () => ({ accessToken: "must-not-be-logged" }),
+      });
+
+      const exporter = createTestExporter({ tokenResolver: () => "secret-token" });
+      const result = await exportResult(exporter, [makeSpan()]);
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      const output = customLogger.info.mock.calls.flat().map(String).join("\n");
+      assert.include(output, "[Agent365Exporter] HTTP 202 success. Correlation ID: corr-safe-123.");
+      assert.notInclude(output, "secret-token");
+      assert.notInclude(output, "must-not-be-logged");
+    });
+
+    it("logs N/A when a successful HTTP response has no correlation ID", async () => {
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+      fetchSpy.mockResolvedValue({ status: 204, headers: new Headers() });
+
+      const exporter = createTestExporter({ tokenResolver: () => "secret-token" });
+      const result = await exportResult(exporter, [makeSpan()]);
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      const output = customLogger.info.mock.calls.flat().map(String).join("\n");
+      assert.include(output, "[Agent365Exporter] HTTP 204 success. Correlation ID: N/A.");
+    });
+
     it("should use provided token resolver and set authorization header", async () => {
       const token = "abc123";
       const exporter = createTestExporter({
@@ -1260,6 +1300,35 @@ describe("Agent365Exporter", () => {
   });
 
   describe("durable delivery", () => {
+    it("logs successful durable HTTP status and correlation ID", async () => {
+      const directory = await createStorageDirectory();
+      const customLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+      fetchSpy.mockResolvedValue({
+        status: 201,
+        headers: new Headers({ "x-correlation-id": "durable-corr-123" }),
+      });
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "durable-secret-token",
+        durableDelivery: { enabled: true, storageDirectory: directory },
+      });
+
+      const result = await exportResult(exporter, [makeSpan()]);
+
+      assert.strictEqual(result, ExportResultCode.SUCCESS);
+      const output = customLogger.info.mock.calls.flat().map(String).join("\n");
+      assert.include(
+        output,
+        "[Agent365Exporter] HTTP 201 success. Correlation ID: durable-corr-123.",
+      );
+      assert.notInclude(output, "durable-secret-token");
+      await exporter.shutdown();
+    });
+
     it("hands a retryable failure to durable storage after one attempt", async () => {
       const directory = await createStorageDirectory();
       fetchSpy.mockResolvedValue({

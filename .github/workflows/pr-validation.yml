@@ -27,6 +27,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Install Agent365 S2S sample dependencies
+        run: npm ci --prefix samples/agent365-s2s
+
+      - name: Build Agent365 S2S sample
+        run: npm run --prefix samples/agent365-s2s build
+
+      - name: Test Agent365 S2S sample
+        run: npm test --prefix samples/agent365-s2s
+
       - name: Format check
         run: npm run format
 
