@@ -1272,6 +1272,118 @@ describe("Request content and message serialization (span attributes)", () => {
   });
 });
 
+describe("recordAttributes ownership and precedence", () => {
+  const testAgentDetails: AgentDetails = {
+    agentId: "test-agent",
+    agentName: "Test Agent",
+    tenantId: "test-tenant-456",
+  };
+
+  beforeEach(() => {
+    sharedExporter.reset();
+  });
+
+  const getLastSpan = (): ReadableSpan => {
+    const spans = sharedExporter.getFinishedSpans();
+    expect(spans.length).toBeGreaterThanOrEqual(1);
+    return spans[spans.length - 1];
+  };
+
+  it("should preserve builder-populated attributes when recordAttributes sees the same keys", () => {
+    const scope = InvokeAgentScope.start(
+      {
+        conversationId: "conv-owned",
+        channel: { name: "Teams", description: "https://teams.example" },
+      },
+      {},
+      testAgentDetails,
+    );
+
+    scope.recordAttributes({
+      [OpenTelemetryConstants.GEN_AI_AGENT_NAME_KEY]: "Override Agent",
+      [OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]: "override-conv",
+      "custom.attribute": "custom value",
+    });
+    scope.dispose();
+
+    const attributes = getLastSpan().attributes;
+    expect(attributes[OpenTelemetryConstants.GEN_AI_AGENT_NAME_KEY]).toBe("Test Agent");
+    expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe("conv-owned");
+    expect(attributes["custom.attribute"]).toBe("custom value");
+  });
+
+  it("should preserve the span builder operation name when recordAttributes provides another value", () => {
+    const scope = ExecuteToolScope.start(
+      { conversationId: "conv-op-name" },
+      { toolName: "search" },
+      testAgentDetails,
+    );
+
+    scope.recordAttributes({
+      [OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]:
+        OpenTelemetryConstants.CHAT_OPERATION_NAME,
+    });
+    scope.dispose();
+
+    expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]).toBe(
+      OpenTelemetryConstants.EXECUTE_TOOL_OPERATION_NAME,
+    );
+  });
+
+  it("should accept known keys that were absent when the scope was created", () => {
+    const scope = InferenceScope.start(
+      { conversationId: "conv-late-known", channel: { name: "Teams" } },
+      { operationName: InferenceOperationType.CHAT, model: "gpt-4" },
+      testAgentDetails,
+    );
+
+    scope.recordAttributes({
+      [OpenTelemetryConstants.CHANNEL_LINK_KEY]: "https://teams.example/deep-link",
+    });
+    scope.dispose();
+
+    expect(getLastSpan().attributes[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBe(
+      "https://teams.example/deep-link",
+    );
+  });
+
+  it("should keep custom recordAttributes keys last-write-wins across repeated calls", () => {
+    const scope = ExecuteToolScope.start(
+      { conversationId: "conv-custom-repeat" },
+      { toolName: "search" },
+      testAgentDetails,
+    );
+
+    scope.recordAttributes({ "custom.repeat": "first" });
+    scope.recordAttributes({ "custom.repeat": "second" });
+    scope.dispose();
+
+    expect(getLastSpan().attributes["custom.repeat"]).toBe("second");
+  });
+
+  it("should support iterable attributes while skipping owned and blank keys", () => {
+    const scope = InvokeAgentScope.start(
+      { conversationId: "conv-iterable", channel: { name: "Teams" } },
+      {},
+      testAgentDetails,
+    );
+
+    scope.recordAttributes([
+      [OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY, "override-conv"],
+      ["", "ignored"],
+      ["   ", "also ignored"],
+      ["custom.iterable", 42],
+    ]);
+    scope.dispose();
+
+    const attributes = getLastSpan().attributes;
+    expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe("conv-iterable");
+    expect(attributes["custom.iterable"]).toBe(42);
+    expect(attributes[""]).toBeUndefined();
+    expect(attributes["   "]).toBeUndefined();
+  });
+});
+
 // Validate attribute key constant values use the new schema namespace.
 describe("Attribute key schema values", () => {
   it("caller keys use user.* / client.* namespace", () => {

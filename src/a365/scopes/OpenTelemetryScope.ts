@@ -51,6 +51,7 @@ export abstract class OpenTelemetryScope {
   private customEndTime?: TimeInput;
   private errorType?: string;
   private hasEnded = false;
+  private readonly ownedAttributeKeys = new Set<string>();
   private readonly logger = Logger.getInstance();
 
   /**
@@ -94,6 +95,7 @@ export abstract class OpenTelemetryScope {
       },
       currentContext,
     );
+    this.ownedAttributeKeys.add(OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY);
 
     this.wallClockStartMs = Date.now();
     if (startTime !== undefined) {
@@ -164,7 +166,10 @@ export abstract class OpenTelemetryScope {
     this.span.recordException(error);
   }
 
-  /** Records multiple attribute key/value pairs. */
+  /**
+   * Records multiple attribute key/value pairs without overwriting values that
+   * the scope already populated through its typed setters or span builder.
+   */
   public recordAttributes(
     attributes:
       Iterable<[string, AttributeValue]> | Record<string, AttributeValue> | null | undefined,
@@ -172,17 +177,9 @@ export abstract class OpenTelemetryScope {
     if (!attributes) return;
 
     if (Symbol.iterator in Object(attributes) && typeof attributes !== "string") {
-      for (const [key, value] of attributes as Iterable<[string, AttributeValue]>) {
-        if (key && typeof key === "string" && key.trim()) {
-          this.span.setAttribute(key, value);
-        }
-      }
+      this.recordUnownedAttributes(attributes as Iterable<[string, AttributeValue]>);
     } else if (typeof attributes === "object") {
-      for (const key of Object.keys(attributes as Record<string, AttributeValue>)) {
-        if (key && key.trim()) {
-          this.span.setAttribute(key, (attributes as Record<string, AttributeValue>)[key]);
-        }
-      }
+      this.recordUnownedAttributes(Object.entries(attributes as Record<string, AttributeValue>));
     }
   }
 
@@ -198,7 +195,10 @@ export abstract class OpenTelemetryScope {
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY, serializeMessages(wrapper));
   }
 
-  /** Sets a tag on the span if the value is not null or undefined. */
+  /**
+   * Sets a tag on the span if the value is not null or undefined, and marks the
+   * key as owned by the scope so later generic attribute writes do not replace it.
+   */
   protected setTagMaybe<T extends string | number | boolean | string[] | number[]>(
     name: string,
     value: T | null | undefined,
@@ -207,7 +207,22 @@ export abstract class OpenTelemetryScope {
       this.span.setAttributes({
         [name]: value as string | number | boolean | string[] | number[],
       });
+      this.ownedAttributeKeys.add(name);
     }
+  }
+
+  private recordUnownedAttributes(attributes: Iterable<[string, AttributeValue]>): void {
+    for (const [key, value] of attributes) {
+      if (!OpenTelemetryScope.isNonBlankAttributeKey(key) || this.ownedAttributeKeys.has(key)) {
+        continue;
+      }
+
+      this.span.setAttribute(key, value);
+    }
+  }
+
+  private static isNonBlankAttributeKey(key: string): boolean {
+    return typeof key === "string" && key.trim().length > 0;
   }
 
   /**
