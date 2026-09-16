@@ -25,6 +25,22 @@ npm run lint
 npm test
 ```
 
+### Registry-neutral lockfile
+
+The root `.npmrc` sets `omit-lockfile-registry-resolved=true`. Use npm 10.9.2
+or later so normal `npm install` and dependency updates omit registry tarball
+URLs from `package-lock.json`, without overriding your configured registry.
+Commit the lockfile alongside intentional dependency changes.
+
+Omitting these URLs preserves locked versions and integrity hashes; it does not
+change the dependency graph or remove non-registry resolutions such as Git,
+file, or direct tarball URLs. Use `npm ci` to install the locked dependencies
+through your configured registry. If a locked version is unavailable there
+(for example, while quarantined), installation fails rather than downgrading.
+Wait for availability or follow your registry's approved process; this option
+does not bypass quarantine. Published-library consumers resolve `package.json`
+ranges independently of this repository's lockfile.
+
 ## Pull Requests
 
 - Describe the problem and the approach clearly.
