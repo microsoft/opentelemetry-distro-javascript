@@ -25,21 +25,37 @@ npm run lint
 npm test
 ```
 
-### Registry-neutral lockfile
+### Using package-lock.json
 
-The root `.npmrc` sets `omit-lockfile-registry-resolved=true`. Use npm 10.9.2
-or later so normal `npm install` and dependency updates omit registry tarball
-URLs from `package-lock.json`, without overriding your configured registry.
-Commit the lockfile alongside intentional dependency changes.
+The committed `package-lock.json` is generated through Microsoft's package proxy.
+Microsoft contributors are required to use this proxy so dependencies undergo
+the required security and vulnerability policies. The lockfile can contain
+registry and tarball URLs that are inaccessible outside Microsoft.
 
-Omitting these URLs preserves locked versions and integrity hashes; it does not
-change the dependency graph or remove non-registry resolutions such as Git,
-file, or direct tarball URLs. Use `npm ci` to install the locked dependencies
-through your configured registry. If a locked version is unavailable there
-(for example, while quarantined), installation fails rather than downgrading.
-Wait for availability or follow your registry's approved process; this option
-does not bypass quarantine. Published-library consumers resolve `package.json`
-ranges independently of this repository's lockfile.
+If you cannot access the proxy, generate a replacement lockfile for local use
+with an accessible npm registry. Changing `--registry` alone on the existing
+lockfile does not reliably replace recorded custom-registry tarball URLs; regenerate
+the lockfile rather than manually editing those URLs.
+
+Start in a fresh checkout without `node_modules`, or move the existing root
+`node_modules` directory outside the checkout first. This prevents reuse of
+installed packages and the hidden `node_modules/.package-lock.json`. Back up any
+local lockfile changes, then remove only the root `package-lock.json` (using your
+file manager or shell). From the repository root, generate and use a local
+lockfile, for example with the public npm registry:
+
+```bash
+npm install --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org/
+npm ci --registry=https://registry.npmjs.org/
+```
+
+The first command resolves dependencies from `package.json` without installing
+them; the second installs the generated lockfile normally. Scoped registry
+settings, if configured, must also point to registries you can access.
+Resolved versions may differ from the committed lockfile because of dependency
+ranges and registry availability, including quarantine policies; this does not
+guarantee the same dependency tree. Microsoft contributors must continue using
+the required proxy rather than using this workflow to bypass its restrictions.
 
 ## Pull Requests
 
