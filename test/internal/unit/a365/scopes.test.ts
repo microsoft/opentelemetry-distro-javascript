@@ -28,6 +28,7 @@ import type {
   InferenceDetails,
   UserDetails,
   OutputResponse,
+  SystemInstructionPart,
 } from "../../../../src/a365/index.js";
 import { InferenceOperationType, MessageRole } from "../../../../src/a365/index.js";
 import { safeSerializeToJson } from "../../../../src/a365/message-utils.js";
@@ -1163,13 +1164,13 @@ describe("Request content and message serialization (span attributes)", () => {
         topP: 0.8,
         dataSourceId: "sharepoint",
         outputType: "json",
-        systemInstructions: "Answer with JSON only.",
+        systemInstructions: [{ type: "text", content: "Answer with JSON only." }],
       };
       const responseParameters: GenAiResponseParameters = {
         finishReasons: ["stop"],
         inputTokens: 120,
         outputTokens: 48,
-        cacheCreationInputTokens: 12,
+        cacheWriteInputTokens: 12,
         cacheReadInputTokens: 3,
       };
       const scope = InvokeAgentScope.start(
@@ -1195,17 +1196,15 @@ describe("Request content and message serialization (span attributes)", () => {
       expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_TOP_P_KEY]).toBe(0.8);
       expect(attributes[OpenTelemetryConstants.GEN_AI_DATA_SOURCE_ID_KEY]).toBe("sharepoint");
       expect(attributes[OpenTelemetryConstants.GEN_AI_OUTPUT_TYPE_KEY]).toBe("json");
-      expect(attributes[OpenTelemetryConstants.GEN_AI_SYSTEM_INSTRUCTIONS_KEY]).toBe(
-        "Answer with JSON only.",
-      );
+      expect(
+        JSON.parse(attributes[OpenTelemetryConstants.GEN_AI_SYSTEM_INSTRUCTIONS_KEY] as string),
+      ).toEqual([{ type: "text", content: "Answer with JSON only." }]);
       expect(attributes[OpenTelemetryConstants.GEN_AI_RESPONSE_FINISH_REASONS_KEY]).toEqual([
         "stop",
       ]);
       expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]).toBe(120);
       expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_OUTPUT_TOKENS_KEY]).toBe(48);
-      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS_KEY]).toBe(
-        12,
-      );
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY]).toBe(12);
       expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY]).toBe(3);
     });
 
@@ -1224,7 +1223,7 @@ describe("Request content and message serialization (span attributes)", () => {
         finishReasons: ["stop"],
         inputTokens: 0,
         outputTokens: 24,
-        cacheCreationInputTokens: 0,
+        cacheWriteInputTokens: 0,
         cacheReadInputTokens: 2,
       });
       scope.dispose();
@@ -1245,9 +1244,7 @@ describe("Request content and message serialization (span attributes)", () => {
       ]);
       expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]).toBe(0);
       expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_OUTPUT_TOKENS_KEY]).toBe(24);
-      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS_KEY]).toBe(
-        0,
-      );
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY]).toBe(0);
       expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY]).toBe(2);
     });
 
@@ -1293,7 +1290,7 @@ describe("Request content and message serialization (span attributes)", () => {
           responseParameters: {
             inputTokens: 0,
             outputTokens: 0,
-            cacheCreationInputTokens: 0,
+            cacheWriteInputTokens: 0,
             cacheReadInputTokens: 0,
           },
         },
@@ -1311,10 +1308,36 @@ describe("Request content and message serialization (span attributes)", () => {
       expect(attributes[OpenTelemetryConstants.GEN_AI_REQUEST_TOP_P_KEY]).toBe(0);
       expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]).toBe(0);
       expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_OUTPUT_TOKENS_KEY]).toBe(0);
-      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS_KEY]).toBe(
-        0,
-      );
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY]).toBe(0);
       expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY]).toBe(0);
+    });
+
+    it("should emit a deterministic fallback for circular system instructions", () => {
+      const circularInstruction: SystemInstructionPart = { type: "custom" };
+      circularInstruction.circular = circularInstruction;
+
+      expect(() => {
+        const scope = InvokeAgentScope.start(
+          testRequest,
+          {
+            requestParameters: {
+              systemInstructions: [circularInstruction],
+            },
+          },
+          testAgentDetails,
+        );
+        scope.dispose();
+      }).not.toThrow();
+
+      const attributes = getLastSpan().attributes;
+      expect(
+        JSON.parse(attributes[OpenTelemetryConstants.GEN_AI_SYSTEM_INSTRUCTIONS_KEY] as string),
+      ).toEqual([
+        {
+          type: "text",
+          content: "[serialization failed: 1 instruction]",
+        },
+      ]);
     });
 
     it("should propagate the common agent provider name", () => {

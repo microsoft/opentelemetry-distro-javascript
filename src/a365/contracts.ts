@@ -203,6 +203,9 @@ export interface GenericPart {
   [key: string]: unknown;
 }
 
+/** Content part accepted for system instructions. */
+export type SystemInstructionPart = TextPart | GenericPart;
+
 /** Union of all message part types per OTEL gen-ai semantic conventions. */
 export type MessagePart =
   | TextPart
@@ -387,8 +390,8 @@ export interface GenAiRequestParameters {
   dataSourceId?: string;
   /** Requested output type (for example, `json`). */
   outputType?: string;
-  /** System instructions provided to the model. */
-  systemInstructions?: string;
+  /** Structured system instructions provided to the model. */
+  systemInstructions?: SystemInstructionPart[];
 }
 
 /** Response-side GenAI parameters captured for agent invocation telemetry. */
@@ -400,7 +403,7 @@ export interface GenAiResponseParameters {
   /** Number of output (completion) tokens produced by the response. */
   outputTokens?: number;
   /** Number of input tokens written into the cache. */
-  cacheCreationInputTokens?: number;
+  cacheWriteInputTokens?: number;
   /** Number of input tokens read from the cache. */
   cacheReadInputTokens?: number;
 }

@@ -51,6 +51,7 @@ export type {
   OutputMessagesParam,
   ResponseMessagesParam,
   MessagePart,
+  SystemInstructionPart,
   TextPart,
   ToolCallRequestPart,
   ToolCallResponsePart,

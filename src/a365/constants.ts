@@ -108,9 +108,9 @@ export class OpenTelemetryConstants {
 
   // ── GenAI usage ──────────────────────────────────────────────────
 
-  /** Attribute key for the number of input tokens written into the cache (`gen_ai.usage.cache_creation.input_tokens`). */
-  public static readonly GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS_KEY =
-    "gen_ai.usage.cache_creation.input_tokens";
+  /** Attribute key for the number of input tokens written into the cache (`gen_ai.usage.cache_write.input_tokens`). */
+  public static readonly GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY =
+    "gen_ai.usage.cache_write.input_tokens";
   /** Attribute key for the number of input tokens read from the cache (`gen_ai.usage.cache_read.input_tokens`). */
   public static readonly GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY =
     "gen_ai.usage.cache_read.input_tokens";

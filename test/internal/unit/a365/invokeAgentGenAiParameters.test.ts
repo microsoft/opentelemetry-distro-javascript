@@ -7,12 +7,14 @@ import type {
   GenAiRequestParameters as RootGenAiRequestParameters,
   GenAiResponseParameters as RootGenAiResponseParameters,
   InvokeAgentScopeDetails as RootInvokeAgentScopeDetails,
+  SystemInstructionPart as RootSystemInstructionPart,
 } from "../../../../src/index.js";
 import type {
   GenAiRequestParameters,
   GenAiResponseParameters,
   InvokeAgentScopeDetails,
   ServiceEndpoint,
+  SystemInstructionPart,
 } from "../../../../src/a365/index.js";
 
 type Expect<T extends true> = T;
@@ -29,6 +31,9 @@ type _RootRequestParametersExportMatchesA365 = Expect<
 >;
 type _RootResponseParametersExportMatchesA365 = Expect<
   Equal<RootGenAiResponseParameters, GenAiResponseParameters>
+>;
+type _RootSystemInstructionPartExportMatchesA365 = Expect<
+  Equal<RootSystemInstructionPart, SystemInstructionPart>
 >;
 type _RequestModelIsOptionalString = Expect<
   Equal<GenAiRequestParameters["model"], string | undefined>
@@ -63,8 +68,8 @@ type _RequestDataSourceIdIsOptionalString = Expect<
 type _RequestOutputTypeIsOptionalString = Expect<
   Equal<GenAiRequestParameters["outputType"], string | undefined>
 >;
-type _RequestSystemInstructionsIsOptionalString = Expect<
-  Equal<GenAiRequestParameters["systemInstructions"], string | undefined>
+type _RequestSystemInstructionsIsOptionalInstructionParts = Expect<
+  Equal<GenAiRequestParameters["systemInstructions"], SystemInstructionPart[] | undefined>
 >;
 type _ResponseFinishReasonsIsOptionalStringArray = Expect<
   Equal<GenAiResponseParameters["finishReasons"], string[] | undefined>
@@ -75,8 +80,8 @@ type _ResponseInputTokensIsOptionalNumber = Expect<
 type _ResponseOutputTokensIsOptionalNumber = Expect<
   Equal<GenAiResponseParameters["outputTokens"], number | undefined>
 >;
-type _ResponseCacheCreationInputTokensIsOptionalNumber = Expect<
-  Equal<GenAiResponseParameters["cacheCreationInputTokens"], number | undefined>
+type _ResponseCacheWriteInputTokensIsOptionalNumber = Expect<
+  Equal<GenAiResponseParameters["cacheWriteInputTokens"], number | undefined>
 >;
 type _ResponseCacheReadInputTokensIsOptionalNumber = Expect<
   Equal<GenAiResponseParameters["cacheReadInputTokens"], number | undefined>
@@ -105,13 +110,13 @@ describe("InvokeAgent GenAI parameter contracts", () => {
       topP: 0.8,
       dataSourceId: "sharepoint",
       outputType: "json",
-      systemInstructions: "Answer with JSON only.",
+      systemInstructions: [{ type: "text", content: "Answer with JSON only." }],
     };
     const responseParameters: RootGenAiResponseParameters = {
       finishReasons: ["stop"],
       inputTokens: 120,
       outputTokens: 48,
-      cacheCreationInputTokens: 12,
+      cacheWriteInputTokens: 12,
       cacheReadInputTokens: 3,
     };
     const scopeDetails: RootInvokeAgentScopeDetails = {
@@ -146,8 +151,8 @@ describe("InvokeAgent GenAI parameter contracts", () => {
       "gen_ai.request.stop_sequences",
     );
     assert.strictEqual(
-      OpenTelemetryConstants.GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS_KEY,
-      "gen_ai.usage.cache_creation.input_tokens",
+      OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY,
+      "gen_ai.usage.cache_write.input_tokens",
     );
     assert.strictEqual(
       OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY,

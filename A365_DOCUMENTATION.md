@@ -29,7 +29,9 @@ const invokeScope = InvokeAgentScope.start(
     requestParameters: {
       model: "gpt-4o",
       outputType: "json",
-      systemInstructions: "You are a helpful assistant.",
+      systemInstructions: [
+        { type: "text", content: "You are a helpful assistant." },
+      ],
     },
   },
   { agentId: "agent-1", tenantId: "tenant-1", providerName: "openai" },
@@ -56,7 +58,7 @@ invokeScope.recordResponseParameters({
   finishReasons: ["stop"],
   inputTokens: 120,
   outputTokens: 42,
-  cacheCreationInputTokens: 10,
+  cacheWriteInputTokens: 10,
   cacheReadInputTokens: 8,
 });
 invokeScope.dispose();
@@ -78,11 +80,11 @@ captures response and usage values after the agent completes.
 | `requestParameters.topP` | `gen_ai.request.top_p` |
 | `requestParameters.dataSourceId` | `gen_ai.data_source.id` |
 | `requestParameters.outputType` | `gen_ai.output.type` |
-| `requestParameters.systemInstructions` | `gen_ai.system_instructions` |
+| `requestParameters.systemInstructions` | `gen_ai.system_instructions` (JSON-serialized parts array) |
 | `responseParameters.finishReasons` | `gen_ai.response.finish_reasons` |
 | `responseParameters.inputTokens` | `gen_ai.usage.input_tokens` |
 | `responseParameters.outputTokens` | `gen_ai.usage.output_tokens` |
-| `responseParameters.cacheCreationInputTokens` | `gen_ai.usage.cache_creation.input_tokens` |
+| `responseParameters.cacheWriteInputTokens` | `gen_ai.usage.cache_write.input_tokens` |
 | `responseParameters.cacheReadInputTokens` | `gen_ai.usage.cache_read.input_tokens` |
 | `agentDetails.providerName` | `gen_ai.provider.name` |
 

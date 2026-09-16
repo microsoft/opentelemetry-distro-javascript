@@ -4,6 +4,7 @@
 import { SpanKind } from "@opentelemetry/api";
 import { OpenTelemetryScope } from "./OpenTelemetryScope.js";
 import { OpenTelemetryConstants } from "../constants.js";
+import { serializeSystemInstructions } from "../message-utils.js";
 import type {
   InvokeAgentScopeDetails,
   CallerDetails,
@@ -186,7 +187,9 @@ export class InvokeAgentScope extends OpenTelemetryScope {
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_OUTPUT_TYPE_KEY, requestParameters.outputType);
     this.setTagMaybe(
       OpenTelemetryConstants.GEN_AI_SYSTEM_INSTRUCTIONS_KEY,
-      requestParameters.systemInstructions,
+      requestParameters.systemInstructions === undefined
+        ? undefined
+        : serializeSystemInstructions(requestParameters.systemInstructions),
     );
   }
 
@@ -204,8 +207,8 @@ export class InvokeAgentScope extends OpenTelemetryScope {
       responseParameters.outputTokens,
     );
     this.setTagMaybe(
-      OpenTelemetryConstants.GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS_KEY,
-      responseParameters.cacheCreationInputTokens,
+      OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY,
+      responseParameters.cacheWriteInputTokens,
     );
     this.setTagMaybe(
       OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY,
