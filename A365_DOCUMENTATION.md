@@ -25,8 +25,16 @@ import {
 
 const invokeScope = InvokeAgentScope.start(
   { conversationId: "conv-123", sessionId: "session-456" },
-  {},
-  { agentId: "agent-1", tenantId: "tenant-1" },
+  {
+    requestParameters: {
+      model: "gpt-4o",
+      outputType: "json",
+      systemInstructions: [
+        { type: "text", content: "You are a helpful assistant." },
+      ],
+    },
+  },
+  { agentId: "agent-1", tenantId: "tenant-1", providerName: "openai" },
 );
 
 invokeScope.run(async () => {
@@ -46,6 +54,13 @@ invokeScope.run(async () => {
   inferenceScope.dispose();
 });
 
+invokeScope.recordResponseParameters({
+  finishReasons: ["stop"],
+  inputTokens: 120,
+  outputTokens: 42,
+  cacheWriteInputTokens: 10,
+  cacheReadInputTokens: 8,
+});
 invokeScope.dispose();
 ```
 
@@ -53,6 +68,33 @@ invokeScope.dispose();
 When you provide it, those scopes write `microsoft.session.id` directly on the created
 span instead of relying on later baggage enrichment. `OutputScope` does not currently
 propagate `request.sessionId` directly.
+
+`InvokeAgentScope.start()` captures request parameters immediately, while `recordResponseParameters()`
+captures response and usage values after the agent completes.
+
+| Input field | Emitted attribute key |
+| --- | --- |
+| `requestParameters.model` | `gen_ai.request.model` |
+| `requestParameters.seed` | `gen_ai.request.seed` |
+| `requestParameters.choiceCount` | `gen_ai.request.choice.count` |
+| `requestParameters.frequencyPenalty` | `gen_ai.request.frequency_penalty` |
+| `requestParameters.maxTokens` | `gen_ai.request.max_tokens` |
+| `requestParameters.presencePenalty` | `gen_ai.request.presence_penalty` |
+| `requestParameters.stopSequences` | `gen_ai.request.stop_sequences` |
+| `requestParameters.temperature` | `gen_ai.request.temperature` |
+| `requestParameters.topP` | `gen_ai.request.top_p` |
+| `requestParameters.dataSourceId` | `gen_ai.data_source.id` |
+| `requestParameters.outputType` | `gen_ai.output.type` |
+| `requestParameters.systemInstructions` | `gen_ai.system_instructions` (JSON-serialized parts array) |
+| `responseParameters.finishReasons` | `gen_ai.response.finish_reasons` |
+| `responseParameters.inputTokens` | `gen_ai.usage.input_tokens` |
+| `responseParameters.outputTokens` | `gen_ai.usage.output_tokens` |
+| `responseParameters.cacheWriteInputTokens` | `gen_ai.usage.cache_write.input_tokens` |
+| `responseParameters.cacheReadInputTokens` | `gen_ai.usage.cache_read.input_tokens` |
+| `agentDetails.providerName` | `gen_ai.provider.name` |
+
+System instructions may contain sensitive content. Only capture them when you
+intend to store prompt text and have reviewed downstream access controls.
 
 ## Baggage And Context
 

@@ -14,6 +14,7 @@ import type {
   OutputMessages,
   InputMessagesParam,
   OutputMessagesParam,
+  SystemInstructionPart,
 } from "./contracts.js";
 import { MessageRole, DEFAULT_FINISH_REASON } from "./contracts.js";
 
@@ -100,6 +101,25 @@ export function serializeMessages(wrapper: InputMessages | OutputMessages): stri
             content: `[serialization failed: ${wrapper.messages.length} ${wrapper.messages.length === 1 ? "message" : "messages"}]`,
           },
         ],
+      },
+    ]);
+  }
+}
+
+/**
+ * Serializes system instruction parts to a JSON array.
+ *
+ * The fallback keeps telemetry recording non-throwing when a part contains
+ * non-JSON-serializable values.
+ */
+export function serializeSystemInstructions(parts: SystemInstructionPart[]): string {
+  try {
+    return JSON.stringify(parts);
+  } catch {
+    return JSON.stringify([
+      {
+        type: "text",
+        content: `[serialization failed: ${parts.length} ${parts.length === 1 ? "instruction" : "instructions"}]`,
       },
     ]);
   }
