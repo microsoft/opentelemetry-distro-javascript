@@ -131,8 +131,9 @@ baggageScope.run(() => {
 - Custom baggage enrichment is opt-in. Only keys registered through `customAttribute()` or
   `customAttributes()` are copied from baggage onto spans; plain `setPairs()` entries stay in
   baggage only.
-- Automatic baggage-to-span enrichment only runs for recognized GenAI spans
-  (`invoke_agent`, `execute_tool`, `chat`, and `output_messages`).
+- Automatic baggage-to-span enrichment only runs for recognized GenAI spans whose
+  `gen_ai.operation.name` is `invoke_agent`, `execute_tool`, `output_messages`,
+  `apply_guardrail`, `chat`, `Chat`, `TextCompletion`, or `GenerateContent`.
 - Explicit span attributes win over baggage. If a span already has a value for a registered custom
   key, the span value is preserved.
 

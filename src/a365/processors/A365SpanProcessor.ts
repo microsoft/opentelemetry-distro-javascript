@@ -71,8 +71,7 @@ export class A365SpanProcessor implements BaseSpanProcessor {
       return;
     }
 
-    // Only process GenAI spans — those with a known gen_ai.operation.name
-    // span attribute (invoke_agent, execute_tool, chat, output_messages).
+    // Only process spans with an operation registered in GEN_AI_OPERATION_NAMES.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const operationNameAttr = (span as any).attributes?.[
       OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY
