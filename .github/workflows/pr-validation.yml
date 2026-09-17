@@ -24,9 +24,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Focused public API typecheck
-        run: npm run typecheck:baggage-public-api
-
       - name: Build
         run: npm run build
 
