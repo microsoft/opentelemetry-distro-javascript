@@ -1237,9 +1237,7 @@ describe("Main functions", () => {
     );
 
     assert.isDefined(processor);
-    assert.isTrue(
-      processor["genAiInstrumentationScopeNames"].has("custom-openai-scope"),
-    );
+    assert.isTrue(processor["genAiInstrumentationScopeNames"].has("custom-openai-scope"));
 
     await shutdownMicrosoftOpenTelemetry();
   });

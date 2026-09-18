@@ -29,9 +29,7 @@ const invokeScope = InvokeAgentScope.start(
     requestParameters: {
       model: "gpt-4o",
       outputType: "json",
-      systemInstructions: [
-        { type: "text", content: "You are a helpful assistant." },
-      ],
+      systemInstructions: [{ type: "text", content: "You are a helpful assistant." }],
     },
   },
   { agentId: "agent-1", tenantId: "tenant-1", providerName: "openai" },
@@ -72,26 +70,26 @@ propagate `request.sessionId` directly.
 `InvokeAgentScope.start()` captures request parameters immediately, while `recordResponseParameters()`
 captures response and usage values after the agent completes.
 
-| Input field | Emitted attribute key |
-| --- | --- |
-| `requestParameters.model` | `gen_ai.request.model` |
-| `requestParameters.seed` | `gen_ai.request.seed` |
-| `requestParameters.choiceCount` | `gen_ai.request.choice.count` |
-| `requestParameters.frequencyPenalty` | `gen_ai.request.frequency_penalty` |
-| `requestParameters.maxTokens` | `gen_ai.request.max_tokens` |
-| `requestParameters.presencePenalty` | `gen_ai.request.presence_penalty` |
-| `requestParameters.stopSequences` | `gen_ai.request.stop_sequences` |
-| `requestParameters.temperature` | `gen_ai.request.temperature` |
-| `requestParameters.topP` | `gen_ai.request.top_p` |
-| `requestParameters.dataSourceId` | `gen_ai.data_source.id` |
-| `requestParameters.outputType` | `gen_ai.output.type` |
-| `requestParameters.systemInstructions` | `gen_ai.system_instructions` (JSON-serialized parts array) |
-| `responseParameters.finishReasons` | `gen_ai.response.finish_reasons` |
-| `responseParameters.inputTokens` | `gen_ai.usage.input_tokens` |
-| `responseParameters.outputTokens` | `gen_ai.usage.output_tokens` |
-| `responseParameters.cacheWriteInputTokens` | `gen_ai.usage.cache_write.input_tokens` |
-| `responseParameters.cacheReadInputTokens` | `gen_ai.usage.cache_read.input_tokens` |
-| `agentDetails.providerName` | `gen_ai.provider.name` |
+| Input field                                | Emitted attribute key                                      |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| `requestParameters.model`                  | `gen_ai.request.model`                                     |
+| `requestParameters.seed`                   | `gen_ai.request.seed`                                      |
+| `requestParameters.choiceCount`            | `gen_ai.request.choice.count`                              |
+| `requestParameters.frequencyPenalty`       | `gen_ai.request.frequency_penalty`                         |
+| `requestParameters.maxTokens`              | `gen_ai.request.max_tokens`                                |
+| `requestParameters.presencePenalty`        | `gen_ai.request.presence_penalty`                          |
+| `requestParameters.stopSequences`          | `gen_ai.request.stop_sequences`                            |
+| `requestParameters.temperature`            | `gen_ai.request.temperature`                               |
+| `requestParameters.topP`                   | `gen_ai.request.top_p`                                     |
+| `requestParameters.dataSourceId`           | `gen_ai.data_source.id`                                    |
+| `requestParameters.outputType`             | `gen_ai.output.type`                                       |
+| `requestParameters.systemInstructions`     | `gen_ai.system_instructions` (JSON-serialized parts array) |
+| `responseParameters.finishReasons`         | `gen_ai.response.finish_reasons`                           |
+| `responseParameters.inputTokens`           | `gen_ai.usage.input_tokens`                                |
+| `responseParameters.outputTokens`          | `gen_ai.usage.output_tokens`                               |
+| `responseParameters.cacheWriteInputTokens` | `gen_ai.usage.cache_write.input_tokens`                    |
+| `responseParameters.cacheReadInputTokens`  | `gen_ai.usage.cache_read.input_tokens`                     |
+| `agentDetails.providerName`                | `gen_ai.provider.name`                                     |
 
 System instructions may contain sensitive content. Only capture them when you
 intend to store prompt text and have reviewed downstream access controls.
@@ -134,6 +132,10 @@ baggageScope.run(() => {
 - Automatic baggage-to-span enrichment only runs for recognized GenAI spans whose
   `gen_ai.operation.name` is `invoke_agent`, `execute_tool`, `output_messages`,
   `apply_guardrail`, `chat`, `Chat`, `TextCompletion`, or `GenerateContent`.
+- For the built-in LangChain and OpenAI Agents instrumentations, enrichment also recognizes
+  their exact instrumentation scope names when the final GenAI operation is not available at
+  span start. A configured OpenAI Agents `tracerName` is registered as an exact supported
+  scope. Scope prefixes and unrelated child scopes are not matched.
 - Explicit span attributes win over baggage. If a span already has a value for a registered custom
   key, the span value is preserved.
 
@@ -205,17 +207,17 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
 
 ### Durable Delivery Defaults
 
-| Option                               | Default                   | Notes                                                                             |
-| ------------------------------------ | ------------------------- | --------------------------------------------------------------------------------- |
-| `enabled`                            | `true`                    | Durable delivery stays on unless you explicitly disable it                         |
+| Option                               | Default                   | Notes                                                                                                                                  |
+| ------------------------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`                            | `true`                    | Durable delivery stays on unless you explicitly disable it                                                                             |
 | `storageDirectory`                   | auto                      | Uses the configured directory, or creates a secure platform-specific default root plus a stable per-application `app-<hash>` partition |
-| `maxStorageBytes`                    | `50 * 1024 * 1024`        | Bounds pending, quarantined, active leased, and non-stale temporary records within the current `app-<hash>` partition only |
-| `maxRecordAgeMilliseconds`           | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction, within the current `app-<hash>` partition only |
-| `replayIntervalMilliseconds`         | `2 * 60 * 1000`           | Scheduled replay cadence                                                          |
-| `maxReplayBatchSize`                 | `10`                      | Maximum records claimed per replay pass                                           |
-| `leaseDurationMilliseconds`          | `2 * 60 * 1000`           | Reclaims stale replay leases                                                      |
-| `shutdownTimeoutMilliseconds`        | `10_000`                  | Shared shutdown budget for accepted live exports and admitted durable handoff completion |
-| `tokenResolutionTimeoutMilliseconds` | `30_000`                  | Timeout per replay token-resolution attempt                                       |
+| `maxStorageBytes`                    | `50 * 1024 * 1024`        | Bounds pending, quarantined, active leased, and non-stale temporary records within the current `app-<hash>` partition only             |
+| `maxRecordAgeMilliseconds`           | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction, within the current `app-<hash>` partition only                                    |
+| `replayIntervalMilliseconds`         | `2 * 60 * 1000`           | Scheduled replay cadence                                                                                                               |
+| `maxReplayBatchSize`                 | `10`                      | Maximum records claimed per replay pass                                                                                                |
+| `leaseDurationMilliseconds`          | `2 * 60 * 1000`           | Reclaims stale replay leases                                                                                                           |
+| `shutdownTimeoutMilliseconds`        | `10_000`                  | Shared shutdown budget for accepted live exports and admitted durable handoff completion                                               |
+| `tokenResolutionTimeoutMilliseconds` | `30_000`                  | Timeout per replay token-resolution attempt                                                                                            |
 
 ### Operational Notes
 

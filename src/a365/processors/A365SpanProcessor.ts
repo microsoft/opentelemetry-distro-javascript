@@ -103,7 +103,8 @@ export class A365SpanProcessor implements BaseSpanProcessor {
       return;
     }
 
-    const explicitOperation = spanRecord.attributes?.[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY];
+    const explicitOperation =
+      spanRecord.attributes?.[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY];
     const recognizedExplicitOperation =
       typeof explicitOperation === "string" && GEN_AI_OPERATION_NAMES.has(explicitOperation)
         ? explicitOperation
