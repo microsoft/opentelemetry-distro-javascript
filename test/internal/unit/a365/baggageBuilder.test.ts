@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, expectTypeOf, beforeAll, afterAll } from "vitest";
 import { context, propagation } from "@opentelemetry/api";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 
@@ -10,6 +10,26 @@ import {
   BaggageScope,
   OpenTelemetryConstants,
 } from "../../../../src/a365/index.js";
+
+const INTERNAL_CUSTOM_KEYS_METADATA_KEY = "_internal.custom_keys";
+
+interface InterfaceTypedBaggagePairs {
+  "microsoft.tenant.id": string;
+  "gen_ai.agent.id": string;
+}
+
+interface InterfaceTypedCustomAttributes {
+  alpha: number;
+  beta: string;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- match the source-compatible public API surface
+type PublicPairsArg = Record<string, any> | Iterable<[string, any]> | null | undefined;
+
+function getScopeBaggage(scope: BaggageScope) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return propagation.getBaggage((scope as any).contextWithBaggage);
+}
 
 describe("BaggageBuilder", () => {
   let contextManager: AsyncLocalStorageContextManager;
@@ -111,6 +131,12 @@ describe("BaggageBuilder", () => {
   });
 
   describe("setPairs", () => {
+    it("should preserve the public setPairs parameter compatibility", () => {
+      type SetPairsArg = Parameters<BaggageBuilder["setPairs"]>[0];
+
+      expectTypeOf<SetPairsArg>().toEqualTypeOf<PublicPairsArg>();
+    });
+
     it("should accept dictionary of pairs", () => {
       const builder = new BaggageBuilder();
       builder.setPairs({
@@ -120,6 +146,21 @@ describe("BaggageBuilder", () => {
 
       const scope = builder.build();
       expect(scope).toBeInstanceOf(BaggageScope);
+    });
+
+    it("should accept interface-typed object inputs", () => {
+      const builder = new BaggageBuilder();
+      const pairs: InterfaceTypedBaggagePairs = {
+        "microsoft.tenant.id": "tenant-123",
+        "gen_ai.agent.id": "agent-456",
+      };
+
+      const result: BaggageBuilder = builder.setPairs(pairs);
+      expect(result).toBe(builder);
+
+      const bag = getScopeBaggage(result.build());
+      expect(bag?.getEntry(OpenTelemetryConstants.TENANT_ID_KEY)?.value).toBe("tenant-123");
+      expect(bag?.getEntry(OpenTelemetryConstants.GEN_AI_AGENT_ID_KEY)?.value).toBe("agent-456");
     });
 
     it("should accept iterable of pairs", () => {
@@ -152,6 +193,112 @@ describe("BaggageBuilder", () => {
 
       const scope = builder.build();
       expect(scope).toBeInstanceOf(BaggageScope);
+    });
+
+    it("should not mark setPairs entries as custom metadata", () => {
+      const scope = new BaggageBuilder()
+        .setPairs({
+          custom_key: "custom-value",
+        })
+        .build();
+
+      const bag = getScopeBaggage(scope);
+      expect(bag?.getEntry("custom_key")?.value).toBe("custom-value");
+      expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)).toBeUndefined();
+    });
+  });
+
+  describe("custom attributes", () => {
+    it("should preserve the public customAttributes parameter compatibility", () => {
+      type CustomAttributesArg = Parameters<BaggageBuilder["customAttributes"]>[0];
+
+      expectTypeOf<CustomAttributesArg>().toEqualTypeOf<PublicPairsArg>();
+    });
+
+    it("should normalize and mark a custom attribute", () => {
+      const builder = new BaggageBuilder();
+      expect(typeof (builder as unknown as { customAttribute?: unknown }).customAttribute).toBe(
+        "function",
+      );
+
+      const scope = (
+        builder as unknown as {
+          customAttribute(key: string, value: string | null | undefined): BaggageBuilder;
+        }
+      )
+        .customAttribute("  custom.key  ", "  custom-value  ")
+        .build();
+
+      const bag = getScopeBaggage(scope);
+      expect(bag?.getEntry("custom.key")?.value).toBe("custom-value");
+      expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("custom.key");
+    });
+
+    it("should accept object inputs and stringify valid values", () => {
+      const scope = (
+        new BaggageBuilder() as unknown as {
+          customAttributes(
+            pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+          ): BaggageBuilder;
+        }
+      )
+        .customAttributes({
+          "  beta  ": "  two  ",
+          alpha: 1,
+          blank: "   ",
+          skipNull: null,
+        })
+        .build();
+
+      const bag = getScopeBaggage(scope);
+      expect(bag?.getEntry("alpha")?.value).toBe("1");
+      expect(bag?.getEntry("beta")?.value).toBe("two");
+      expect(bag?.getEntry("blank")).toBeUndefined();
+      expect(bag?.getEntry("skipNull")).toBeUndefined();
+      expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("alpha,beta");
+    });
+
+    it("should accept interface-typed object inputs and stringify valid values", () => {
+      const builder = new BaggageBuilder();
+      const pairs: InterfaceTypedCustomAttributes = {
+        alpha: 1,
+        beta: "  two  ",
+      };
+
+      const result: BaggageBuilder = builder.customAttributes(pairs);
+      expect(result).toBe(builder);
+
+      const bag = getScopeBaggage(result.build());
+      expect(bag?.getEntry("alpha")?.value).toBe("1");
+      expect(bag?.getEntry("beta")?.value).toBe("two");
+      expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("alpha,beta");
+    });
+
+    it("should ignore invalid iterable keys and values", () => {
+      const scope = (
+        new BaggageBuilder() as unknown as {
+          customAttributes(
+            pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+          ): BaggageBuilder;
+        }
+      )
+        .customAttributes([
+          [" valid ", " kept "],
+          ["   ", "blank-key"],
+          ["bad,key", "comma-key"],
+          [INTERNAL_CUSTOM_KEYS_METADATA_KEY, "reserved-key"],
+          ["blank-value", "   "],
+          ["null-value", null],
+        ])
+        .build();
+
+      const bag = getScopeBaggage(scope);
+      expect(bag?.getEntry("valid")?.value).toBe("kept");
+      expect(bag?.getEntry("")).toBeUndefined();
+      expect(bag?.getEntry("bad,key")).toBeUndefined();
+      expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("valid");
+      expect(bag?.getEntry("blank-value")).toBeUndefined();
+      expect(bag?.getEntry("null-value")).toBeUndefined();
     });
   });
 
@@ -324,6 +471,67 @@ describe("BaggageScope", () => {
 
       const restoredContext = context.active();
       expect(restoredContext).toBeDefined();
+    });
+
+    it("should union custom metadata across nested scopes", () => {
+      const outerScope = (
+        new BaggageBuilder() as unknown as {
+          customAttributes(
+            pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+          ): BaggageBuilder;
+        }
+      )
+        .customAttributes({
+          beta: "two",
+          alpha: "one",
+        })
+        .build();
+
+      outerScope.run(() => {
+        const innerScope = (
+          new BaggageBuilder() as unknown as {
+            customAttributes(
+              pairs: Record<string, unknown> | Iterable<[string, unknown]> | null | undefined,
+            ): BaggageBuilder;
+          }
+        )
+          .customAttributes([
+            ["gamma", "three"],
+            ["beta", "updated"],
+          ])
+          .build();
+
+        const bag = getScopeBaggage(innerScope);
+        expect(bag?.getEntry("alpha")?.value).toBe("one");
+        expect(bag?.getEntry("beta")?.value).toBe("updated");
+        expect(bag?.getEntry("gamma")?.value).toBe("three");
+        expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("alpha,beta,gamma");
+      });
+    });
+
+    it("should deduplicate ambient custom metadata deterministically", () => {
+      const ambientBaggage = propagation
+        .createBaggage({})
+        .setEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY, {
+          value: "beta, alpha ,beta",
+        })
+        .setEntry("alpha", { value: "one" });
+      const ambientContext = propagation.setBaggage(context.active(), ambientBaggage);
+
+      context.with(ambientContext, () => {
+        const scope = (
+          new BaggageBuilder() as unknown as {
+            customAttribute(key: string, value: string | null | undefined): BaggageBuilder;
+          }
+        )
+          .customAttribute(" gamma ", " three ")
+          .build();
+
+        const bag = getScopeBaggage(scope);
+        expect(bag?.getEntry("alpha")?.value).toBe("one");
+        expect(bag?.getEntry("gamma")?.value).toBe("three");
+        expect(bag?.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value).toBe("alpha,beta,gamma");
+      });
     });
   });
 
