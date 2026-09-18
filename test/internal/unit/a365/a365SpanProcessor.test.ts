@@ -125,6 +125,30 @@ describe("A365SpanProcessor", () => {
       },
     );
 
+    it.each(["microsoft-otel-langchain", "microsoft-otel-openai-agents"])(
+      "does not copy ambient gen_ai.operation.name baggage for supported scope %s without an initial operation",
+      (tracerName) => {
+        const span = startSpan(provider, {
+          tracerName,
+          spanName: "unmodeled operation",
+          baggage: {
+            [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+            [OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]: "chat",
+            [OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]: "caller-123",
+            [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: "custom.one",
+            "custom.one": "value-1",
+          },
+        });
+        span.end();
+
+        const attributes = memoryExporter.getFinishedSpans()[0].attributes;
+        expect(attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+        expect(attributes["custom.one"]).toBe("value-1");
+        expect(attributes[OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]).toBeUndefined();
+        expect(attributes[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]).toBeUndefined();
+      },
+    );
+
     it("keeps exact tracer scope matching only", () => {
       const span = startSpan(provider, {
         tracerName: "microsoft-otel-langchain.child",
@@ -144,7 +168,7 @@ describe("A365SpanProcessor", () => {
 
     it("recognizes span-name boundaries for invoke-agent operations only", () => {
       const copied = startSpan(provider, {
-        tracerName: "microsoft-otel-langchain",
+        tracerName: "test",
         spanName: "invoke_agent planner",
         baggage: {
           [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
@@ -162,7 +186,7 @@ describe("A365SpanProcessor", () => {
       memoryExporter.reset();
 
       const untouched = startSpan(provider, {
-        tracerName: "microsoft-otel-langchain",
+        tracerName: "test",
         spanName: "invoke_agent_toolbox",
         baggage: {
           [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-456",
@@ -174,6 +198,24 @@ describe("A365SpanProcessor", () => {
       const untouchedAttrs = memoryExporter.getFinishedSpans()[0].attributes;
       expect(untouchedAttrs[OpenTelemetryConstants.TENANT_ID_KEY]).toBeUndefined();
       expect(untouchedAttrs[OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]).toBeUndefined();
+    });
+
+    it("does not copy ambient gen_ai.operation.name baggage for span-name inferred invoke_agent spans", () => {
+      const span = startSpan(provider, {
+        tracerName: "microsoft-otel-langchain",
+        spanName: "invoke_agent planner",
+        baggage: {
+          [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+          [OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]: "chat",
+          [OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]: "caller-123",
+        },
+      });
+      span.end();
+
+      const attributes = memoryExporter.getFinishedSpans()[0].attributes;
+      expect(attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+      expect(attributes[OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]).toBe("caller-123");
+      expect(attributes[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]).toBeUndefined();
     });
 
     it("prefers explicit unknown operations over span-name inference", () => {

@@ -137,6 +137,7 @@ export class A365SpanProcessor implements BaseSpanProcessor {
     getRegisteredCustomKeys(baggageMap.get(INTERNAL_CUSTOM_KEYS_METADATA_KEY)).forEach((key) =>
       targetKeys.add(key),
     );
+    targetKeys.delete(OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY);
 
     // Set telemetry SDK attributes
     if (!existingAttrs.has(OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY)) {
