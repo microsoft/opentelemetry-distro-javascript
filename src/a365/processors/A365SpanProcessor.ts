@@ -26,6 +26,8 @@ const DEFAULT_GEN_AI_INSTRUMENTATION_SCOPE_NAMES: readonly string[] = [
   "microsoft-otel-openai-agents",
 ];
 
+const INVOKE_AGENT_ATTRIBUTE_NAMES = new Set<string>(INVOKE_AGENT_ATTRIBUTES);
+
 function getOperationFromSpanName(spanName: unknown): string | undefined {
   if (typeof spanName !== "string") {
     return undefined;
@@ -51,6 +53,10 @@ function getRegisteredCustomKeys(value: string | undefined): string[] {
     .filter((key) => key && key !== INTERNAL_CUSTOM_KEYS_METADATA_KEY);
 }
 
+function shouldCopyRegisteredCustomKey(key: string, isInvokeAgent: boolean): boolean {
+  return isInvokeAgent || !INVOKE_AGENT_ATTRIBUTE_NAMES.has(key);
+}
+
 /**
  * Copies relevant baggage entries to span attributes on span start.
  *
@@ -65,10 +71,7 @@ export class A365SpanProcessor implements BaseSpanProcessor {
 
   constructor(additionalGenAiInstrumentationScopeNames: Iterable<string> = []) {
     for (const scopeName of additionalGenAiInstrumentationScopeNames) {
-      const normalizedScopeName = scopeName.trim();
-      if (normalizedScopeName) {
-        this.genAiInstrumentationScopeNames.add(normalizedScopeName);
-      }
+      this.genAiInstrumentationScopeNames.add(scopeName);
     }
   }
 
@@ -135,9 +138,9 @@ export class A365SpanProcessor implements BaseSpanProcessor {
     if (isInvokeAgent) {
       INVOKE_AGENT_ATTRIBUTES.forEach((key) => targetKeys.add(key));
     }
-    getRegisteredCustomKeys(baggageMap.get(INTERNAL_CUSTOM_KEYS_METADATA_KEY)).forEach((key) =>
-      targetKeys.add(key),
-    );
+    getRegisteredCustomKeys(baggageMap.get(INTERNAL_CUSTOM_KEYS_METADATA_KEY))
+      .filter((key) => shouldCopyRegisteredCustomKey(key, isInvokeAgent))
+      .forEach((key) => targetKeys.add(key));
     targetKeys.delete(OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY);
 
     // Set telemetry SDK attributes

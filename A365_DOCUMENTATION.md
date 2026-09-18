@@ -135,7 +135,11 @@ baggageScope.run(() => {
 - For the built-in LangChain and OpenAI Agents instrumentations, enrichment also recognizes
   their exact instrumentation scope names when the final GenAI operation is not available at
   span start. A configured OpenAI Agents `tracerName` is registered as an exact supported
-  scope. Scope prefixes and unrelated child scopes are not matched.
+  scope byte-for-byte, including whitespace or empty strings. Scope prefixes and unrelated child
+  scopes are not matched.
+- Invoke-agent-only baggage keys stay invoke-agent-only even when registered through
+  `_internal.custom_keys`; unknown or non-`invoke_agent` GenAI spans never receive those caller
+  agent attributes.
 - Explicit span attributes win over baggage. If a span already has a value for a registered custom
   key, the span value is preserved.
 

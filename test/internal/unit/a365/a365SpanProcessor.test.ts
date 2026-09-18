@@ -236,6 +236,40 @@ describe("A365SpanProcessor", () => {
       expect(attributes[OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]).toBeUndefined();
     });
 
+    it.each([
+      {
+        name: "supported-scope provisional operations",
+        tracerName: "microsoft-otel-openai-agents",
+        spanName: "mcp_tools listing",
+        operationName: "chain",
+      },
+      {
+        name: "recognized non-invoke operations",
+        tracerName: "test",
+        spanName: "chat span",
+        operationName: OpenTelemetryConstants.CHAT_OPERATION_NAME,
+      },
+    ])(
+      "does not copy invoke-agent-only baggage registered as custom for $name",
+      ({ tracerName, spanName, operationName }) => {
+        const span = startSpan(provider, {
+          tracerName,
+          spanName,
+          operationName,
+          baggage: {
+            [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+            [OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]: "caller-123",
+            [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY,
+          },
+        });
+        span.end();
+
+        const attributes = memoryExporter.getFinishedSpans()[0].attributes;
+        expect(attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+        expect(attributes[OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]).toBeUndefined();
+      },
+    );
+
     it("supports constructor-provided custom scopes", async () => {
       const customProcessor = new A365SpanProcessor(["custom-openai-scope"]);
       const customMemoryExporter = new InMemorySpanExporter();
@@ -260,6 +294,34 @@ describe("A365SpanProcessor", () => {
 
       await customProvider.shutdown();
     });
+
+    it.each(["  custom-openai-scope  ", ""])(
+      "preserves constructor-provided custom scope %j exactly",
+      async (customScopeName) => {
+        const customProcessor = new A365SpanProcessor([customScopeName]);
+        const customMemoryExporter = new InMemorySpanExporter();
+        const customProvider = new BasicTracerProvider({
+          spanProcessors: [customProcessor, new SimpleSpanProcessor(customMemoryExporter)],
+        });
+
+        const span = startSpan(customProvider, {
+          tracerName: customScopeName,
+          spanName: "unmodeled operation",
+          baggage: {
+            [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+            [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: "custom.one",
+            "custom.one": "value-1",
+          },
+        });
+        span.end();
+
+        const attributes = customMemoryExporter.getFinishedSpans()[0].attributes;
+        expect(attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+        expect(attributes["custom.one"]).toBe("value-1");
+
+        await customProvider.shutdown();
+      },
+    );
 
     it("does not treat custom scope descendants as supported scopes", async () => {
       const customProcessor = new A365SpanProcessor(["custom-openai-scope"]);
@@ -685,6 +747,24 @@ describe("A365SpanProcessor", () => {
       const attrs = spans[0].attributes;
       expect(attrs["custom.one"]).toBe("value-1");
       expect(attrs[INTERNAL_CUSTOM_KEYS_METADATA_KEY]).toBeUndefined();
+    });
+
+    it("should still copy invoke-agent-only baggage on invoke_agent spans when the key is registered as custom", () => {
+      const testSpan = startGenAiSpan(
+        provider,
+        OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME,
+        {
+          [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY,
+          [OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]: "caller-123",
+        },
+      );
+      testSpan.end();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0].attributes[OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]).toBe(
+        "caller-123",
+      );
     });
 
     it("should not allow registered custom baggage to overwrite telemetry SDK attributes", () => {

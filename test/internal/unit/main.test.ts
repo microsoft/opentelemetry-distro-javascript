@@ -1211,36 +1211,39 @@ describe("Main functions", () => {
     await shutdownMicrosoftOpenTelemetry();
   });
 
-  it("passes a configured OpenAI tracer name to A365SpanProcessor", async () => {
-    useMicrosoftOpenTelemetry({
-      azureMonitor: { enabled: false },
-      enableConsoleExporters: false,
-      a365: {
-        enabled: true,
-        tokenResolver: () => "token",
-      },
-      instrumentationOptions: {
-        openaiAgents: {
-          enabled: false,
-          tracerName: "custom-openai-scope",
+  it.each(["custom-openai-scope", "  custom-openai-scope  ", ""])(
+    "passes configured OpenAI tracer name %j to A365SpanProcessor unchanged",
+    async (tracerName) => {
+      useMicrosoftOpenTelemetry({
+        azureMonitor: { enabled: false },
+        enableConsoleExporters: false,
+        a365: {
+          enabled: true,
+          tokenResolver: () => "token",
         },
-        langchain: { enabled: false },
-      },
-    });
+        instrumentationOptions: {
+          openaiAgents: {
+            enabled: false,
+            tracerName,
+          },
+          langchain: { enabled: false },
+        },
+      });
 
-    const internalSdk = _getSdkInstance();
-    const tracerProvider = (internalSdk as any)["_tracerProvider"];
-    const registeredProcessors =
-      tracerProvider?.["_activeSpanProcessor"]?.["_spanProcessors"] || [];
-    const processor = registeredProcessors.find(
-      (candidate: any) => candidate.constructor?.name === "A365SpanProcessor",
-    );
+      const internalSdk = _getSdkInstance();
+      const tracerProvider = (internalSdk as any)["_tracerProvider"];
+      const registeredProcessors =
+        tracerProvider?.["_activeSpanProcessor"]?.["_spanProcessors"] || [];
+      const processor = registeredProcessors.find(
+        (candidate: any) => candidate.constructor?.name === "A365SpanProcessor",
+      );
 
-    assert.isDefined(processor);
-    assert.isTrue(processor["genAiInstrumentationScopeNames"].has("custom-openai-scope"));
+      assert.isDefined(processor);
+      assert.isTrue(processor["genAiInstrumentationScopeNames"].has(tracerName));
 
-    await shutdownMicrosoftOpenTelemetry();
-  });
+      await shutdownMicrosoftOpenTelemetry();
+    },
+  );
 
   it("registers A365SpanProcessor but not Agent365Exporter when a365.enableObservabilityExporter is false (default)", async () => {
     useMicrosoftOpenTelemetry({
@@ -1621,36 +1624,39 @@ describe("Main functions", () => {
     _resetA365LoggerForTest();
   });
 
-  it("initializes OpenAI Agents instrumentation when enabled", async () => {
-    const instrumentSpy = vi.spyOn(OpenAIAgentsTraceInstrumentor, "instrument");
+  it.each(["openai-agent-auto-instrumentation", "  openai-agent-auto-instrumentation  ", ""])(
+    "initializes OpenAI Agents instrumentation with exact tracer name %j",
+    async (tracerName) => {
+      const instrumentSpy = vi.spyOn(OpenAIAgentsTraceInstrumentor, "instrument");
 
-    useMicrosoftOpenTelemetry({
-      azureMonitor: { enabled: false },
-      enableConsoleExporters: false,
-      instrumentationOptions: {
-        openaiAgents: {
-          enabled: true,
-          tracerName: "openai-agent-auto-instrumentation",
-          tracerVersion: "1.0.0",
-          isContentRecordingEnabled: true,
+      useMicrosoftOpenTelemetry({
+        azureMonitor: { enabled: false },
+        enableConsoleExporters: false,
+        instrumentationOptions: {
+          openaiAgents: {
+            enabled: true,
+            tracerName,
+            tracerVersion: "1.0.0",
+            isContentRecordingEnabled: true,
+          },
+          langchain: { enabled: false },
         },
-        langchain: { enabled: false },
-      },
-    });
+      });
 
-    await vi.waitFor(() => {
-      expect(instrumentSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          enabled: true,
-          tracerName: "openai-agent-auto-instrumentation",
-          tracerVersion: "1.0.0",
-          isContentRecordingEnabled: true,
-        }),
-      );
-    });
+      await vi.waitFor(() => {
+        expect(instrumentSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            enabled: true,
+            tracerName,
+            tracerVersion: "1.0.0",
+            isContentRecordingEnabled: true,
+          }),
+        );
+      });
 
-    await shutdownMicrosoftOpenTelemetry();
-  });
+      await shutdownMicrosoftOpenTelemetry();
+    },
+  );
 
   it("initializes LangChain instrumentation when enabled", async () => {
     const instrumentSpy = vi.spyOn(LangChainTraceInstrumentor, "instrument");
