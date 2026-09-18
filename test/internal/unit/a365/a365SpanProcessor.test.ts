@@ -29,6 +29,37 @@ function createBaggage(entries: Record<string, string>) {
   return baggage;
 }
 
+function startSpan(
+  provider: BasicTracerProvider,
+  {
+    tracerName = "test",
+    spanName,
+    operationName,
+    baggage = {},
+  }: {
+    tracerName?: string;
+    spanName: string;
+    operationName?: string;
+    baggage?: Record<string, string>;
+  },
+) {
+  const ctx = propagation.setBaggage(context.active(), createBaggage(baggage));
+  return provider.getTracer(tracerName).startSpan(
+    spanName,
+    {
+      kind: SpanKind.CLIENT,
+      ...(operationName
+        ? {
+            attributes: {
+              [OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]: operationName,
+            },
+          }
+        : {}),
+    },
+    ctx,
+  );
+}
+
 /**
  * Helper: starts a GenAI span with `gen_ai.operation.name` as a span attribute
  * and the given baggage entries in context.
@@ -40,8 +71,6 @@ function startGenAiSpan(
   spanName?: string,
   attributes: Record<string, string> = {},
 ) {
-  const bag = createBaggage(baggage);
-  const ctx = propagation.setBaggage(context.active(), bag);
   const tracer = provider.getTracer("test");
   return tracer.startSpan(
     spanName ?? `${operationName} span`,
@@ -52,7 +81,7 @@ function startGenAiSpan(
         ...attributes,
       },
     },
-    ctx,
+    propagation.setBaggage(context.active(), createBaggage(baggage)),
   );
 }
 
@@ -74,6 +103,124 @@ describe("A365SpanProcessor", () => {
   });
 
   describe("GenAI span filtering", () => {
+    it.each(["microsoft-otel-langchain", "microsoft-otel-openai-agents"])(
+      "copies generic and registered custom baggage for supported scope %s without an initial operation",
+      (tracerName) => {
+        const span = startSpan(provider, {
+          tracerName,
+          spanName: "unmodeled operation",
+          baggage: {
+            [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+            [OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]: "caller-123",
+            [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: "custom.one",
+            "custom.one": "value-1",
+          },
+        });
+        span.end();
+
+        const attributes = memoryExporter.getFinishedSpans()[0].attributes;
+        expect(attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+        expect(attributes["custom.one"]).toBe("value-1");
+        expect(attributes[OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]).toBeUndefined();
+      },
+    );
+
+    it("keeps exact tracer scope matching only", () => {
+      const span = startSpan(provider, {
+        tracerName: "microsoft-otel-langchain.child",
+        spanName: "unmodeled operation",
+        baggage: {
+          [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+          [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: "custom.one",
+          "custom.one": "value-1",
+        },
+      });
+      span.end();
+
+      const attributes = memoryExporter.getFinishedSpans()[0].attributes;
+      expect(attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBeUndefined();
+      expect(attributes["custom.one"]).toBeUndefined();
+    });
+
+    it("recognizes span-name boundaries for invoke-agent operations only", () => {
+      const copied = startSpan(provider, {
+        tracerName: "microsoft-otel-langchain",
+        spanName: "invoke_agent planner",
+        baggage: {
+          [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+          [OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]: "caller-123",
+        },
+      });
+      copied.end();
+
+      const copiedAttrs = memoryExporter.getFinishedSpans()[0].attributes;
+      expect(copiedAttrs[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+      expect(copiedAttrs[OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]).toBe(
+        "caller-123",
+      );
+
+      memoryExporter.reset();
+
+      const untouched = startSpan(provider, {
+        tracerName: "microsoft-otel-langchain",
+        spanName: "invoke_agent_toolbox",
+        baggage: {
+          [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-456",
+          [OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]: "caller-456",
+        },
+      });
+      untouched.end();
+
+      const untouchedAttrs = memoryExporter.getFinishedSpans()[0].attributes;
+      expect(untouchedAttrs[OpenTelemetryConstants.TENANT_ID_KEY]).toBeUndefined();
+      expect(untouchedAttrs[OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]).toBeUndefined();
+    });
+
+    it("prefers explicit unknown operations over span-name inference", () => {
+      const span = startSpan(provider, {
+        tracerName: "microsoft-otel-langchain",
+        spanName: "invoke_agent planner",
+        operationName: "chain",
+        baggage: {
+          [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+          [OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]: "caller-123",
+          [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: "custom.one",
+          "custom.one": "value-1",
+        },
+      });
+      span.end();
+
+      const attributes = memoryExporter.getFinishedSpans()[0].attributes;
+      expect(attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+      expect(attributes["custom.one"]).toBe("value-1");
+      expect(attributes[OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]).toBeUndefined();
+    });
+
+    it("supports constructor-provided custom scopes", async () => {
+      const customProcessor = new A365SpanProcessor(["custom-openai-scope"]);
+      const customMemoryExporter = new InMemorySpanExporter();
+      const customProvider = new BasicTracerProvider({
+        spanProcessors: [customProcessor, new SimpleSpanProcessor(customMemoryExporter)],
+      });
+
+      const span = startSpan(customProvider, {
+        tracerName: "custom-openai-scope",
+        spanName: "unmodeled operation",
+        baggage: {
+          [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+          [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: "custom.one",
+          "custom.one": "value-1",
+        },
+      });
+      span.end();
+
+      const attributes = customMemoryExporter.getFinishedSpans()[0].attributes;
+      expect(attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+      expect(attributes["custom.one"]).toBe("value-1");
+
+      await customProvider.shutdown();
+    });
+
     it("should not mutate spans without gen_ai.operation.name", () => {
       const baggageEntries = {
         [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",

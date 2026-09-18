@@ -21,6 +21,25 @@ import { INTERNAL_CUSTOM_KEYS_METADATA_KEY, OpenTelemetryConstants } from "../co
 import { GEN_AI_OPERATION_NAMES } from "../exporter/utils.js";
 import { GENERIC_ATTRIBUTES, INVOKE_AGENT_ATTRIBUTES } from "./util.js";
 
+const DEFAULT_GEN_AI_INSTRUMENTATION_SCOPE_NAMES: readonly string[] = [
+  "microsoft-otel-langchain",
+  "microsoft-otel-openai-agents",
+];
+
+function getOperationFromSpanName(spanName: unknown): string | undefined {
+  if (typeof spanName !== "string") {
+    return undefined;
+  }
+
+  for (const operationName of GEN_AI_OPERATION_NAMES) {
+    if (spanName === operationName || spanName.startsWith(`${operationName} `)) {
+      return operationName;
+    }
+  }
+
+  return undefined;
+}
+
 function getRegisteredCustomKeys(value: string | undefined): string[] {
   if (!value) {
     return [];
@@ -40,6 +59,19 @@ function getRegisteredCustomKeys(value: string | undefined): string[] {
  * without explicitly creating scopes.
  */
 export class A365SpanProcessor implements BaseSpanProcessor {
+  private readonly genAiInstrumentationScopeNames = new Set<string>(
+    DEFAULT_GEN_AI_INSTRUMENTATION_SCOPE_NAMES,
+  );
+
+  constructor(additionalGenAiInstrumentationScopeNames: Iterable<string> = []) {
+    for (const scopeName of additionalGenAiInstrumentationScopeNames) {
+      const normalizedScopeName = scopeName.trim();
+      if (normalizedScopeName) {
+        this.genAiInstrumentationScopeNames.add(normalizedScopeName);
+      }
+    }
+  }
+
   /**
    * Called when a span is started.
    * Copies relevant baggage entries to span attributes.
@@ -53,16 +85,16 @@ export class A365SpanProcessor implements BaseSpanProcessor {
       return;
     }
 
+    const spanRecord = span as Span & {
+      attributes?: Record<string, unknown>;
+      name?: string;
+      instrumentationScope?: { name?: string };
+    };
+
     // Get existing span attributes
     const existingAttrs = new Set<string>();
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const spanRecord = span as any;
-      if (spanRecord.attributes) {
-        Object.keys(spanRecord.attributes).forEach((key) => existingAttrs.add(key));
-      }
-    } catch {
-      // Ignore errors accessing span attributes
+    if (spanRecord.attributes) {
+      Object.keys(spanRecord.attributes).forEach((key) => existingAttrs.add(key));
     }
 
     // Get all baggage entries
@@ -71,12 +103,19 @@ export class A365SpanProcessor implements BaseSpanProcessor {
       return;
     }
 
-    // Only process spans with an operation registered in GEN_AI_OPERATION_NAMES.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const operationNameAttr = (span as any).attributes?.[
-      OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY
-    ];
-    if (!GEN_AI_OPERATION_NAMES.has(operationNameAttr)) {
+    const explicitOperation = spanRecord.attributes?.[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY];
+    const recognizedExplicitOperation =
+      typeof explicitOperation === "string" && GEN_AI_OPERATION_NAMES.has(explicitOperation)
+        ? explicitOperation
+        : undefined;
+    const inferredOperation =
+      explicitOperation === undefined ? getOperationFromSpanName(spanRecord.name) : undefined;
+    const operationName = recognizedExplicitOperation ?? inferredOperation;
+    const supportedScope =
+      typeof spanRecord.instrumentationScope?.name === "string" &&
+      this.genAiInstrumentationScopeNames.has(spanRecord.instrumentationScope.name);
+
+    if (!operationName && !supportedScope) {
       return;
     }
 
@@ -88,11 +127,7 @@ export class A365SpanProcessor implements BaseSpanProcessor {
     });
 
     // Determine if this is an invoke_agent operation
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const spanName = (span as any).name || "";
-    const isInvokeAgent =
-      operationNameAttr === OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME ||
-      spanName.startsWith(OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME);
+    const isInvokeAgent = operationName === OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME;
 
     // Build target key set
     const targetKeys = new Set<string>(GENERIC_ATTRIBUTES);
