@@ -69,12 +69,6 @@ export class A365SpanProcessor implements BaseSpanProcessor {
     DEFAULT_GEN_AI_INSTRUMENTATION_SCOPE_NAMES,
   );
 
-  constructor(additionalGenAiInstrumentationScopeNames: Iterable<string> = []) {
-    for (const scopeName of additionalGenAiInstrumentationScopeNames) {
-      this.genAiInstrumentationScopeNames.add(scopeName);
-    }
-  }
-
   /**
    * Called when a span is started.
    * Copies relevant baggage entries to span attributes.

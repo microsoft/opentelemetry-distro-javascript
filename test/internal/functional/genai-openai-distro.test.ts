@@ -40,73 +40,69 @@ describe("OpenAI Agents distro integration", () => {
     vi.restoreAllMocks();
   });
 
-  it.each(["  custom-openai-scope  "])(
-    "wires OpenAI Agents via distro init with exact tracer name %j",
-    async (tracerName) => {
-      useMicrosoftOpenTelemetry({
-        tracesPerSecond: 0,
-        samplingRatio: 1,
-        a365: {
+  it("wires OpenAI Agents via distro init with the built-in instrumentation scope", async () => {
+    useMicrosoftOpenTelemetry({
+      tracesPerSecond: 0,
+      samplingRatio: 1,
+      a365: {
+        enabled: true,
+        tokenResolver: () => "token",
+      },
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+      instrumentationOptions: {
+        openaiAgents: {
           enabled: true,
-          tokenResolver: () => "token",
+          isContentRecordingEnabled: true,
         },
-        azureMonitor: { enabled: false },
-        enableConsoleExporters: false,
-        spanProcessors: [new SimpleSpanProcessor(exporter)],
-        instrumentationOptions: {
-          openaiAgents: {
-            enabled: true,
-            tracerName,
-            isContentRecordingEnabled: true,
+        langchain: { enabled: false },
+      },
+    });
+
+    // OpenAI instrumentor initialization is kicked off asynchronously during distro startup.
+    await vi.waitFor(() => {
+      expect(() => OpenAIAgentsTraceInstrumentor.enable()).not.toThrow();
+    });
+
+    await vi.waitFor(() => {
+      expect(OpenAIAgents.getCurrentTrace()).toBeNull();
+    });
+
+    exporter.reset();
+    OpenAIAgentsTraceInstrumentor.enable();
+    const baggageScope = new BaggageBuilder()
+      .tenantId("tenant-123")
+      .customAttribute("custom.scope", "openai")
+      .build();
+
+    await baggageScope.run(async () => {
+      await OpenAIAgents.withTrace("genai-openai-integration", async () => {
+        await OpenAIAgents.withGenerationSpan(
+          async () => {
+            return;
           },
-          langchain: { enabled: false },
-        },
-      });
-
-      // OpenAI instrumentor initialization is kicked off asynchronously during distro startup.
-      await vi.waitFor(() => {
-        expect(() => OpenAIAgentsTraceInstrumentor.enable()).not.toThrow();
-      });
-
-      await vi.waitFor(() => {
-        expect(OpenAIAgents.getCurrentTrace()).toBeNull();
-      });
-
-      exporter.reset();
-      OpenAIAgentsTraceInstrumentor.enable();
-      const baggageScope = new BaggageBuilder()
-        .tenantId("tenant-123")
-        .customAttribute("custom.scope", "openai")
-        .build();
-
-      await baggageScope.run(async () => {
-        await OpenAIAgents.withTrace("genai-openai-integration", async () => {
-          await OpenAIAgents.withGenerationSpan(
-            async () => {
-              return;
+          {
+            spanData: {
+              model: "gpt-4o",
+              usage: { input_tokens: 10, output_tokens: 5 },
+              input: [{ role: "user", content: "hello" }],
+              output: [{ role: "assistant", content: "hi" }],
             },
-            {
-              spanData: {
-                model: "gpt-4o",
-                usage: { input_tokens: 10, output_tokens: 5 },
-                input: [{ role: "user", content: "hello" }],
-                output: [{ role: "assistant", content: "hi" }],
-              },
-            } as any,
-          );
-        });
+          } as any,
+        );
       });
+    });
 
-      await flushGlobalTracerProvider();
-      const spans = exporter.getFinishedSpans();
-      expect(spans.length).toBeGreaterThan(0);
-      const chatSpan = spans.find(
-        (s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_CHAT,
-      );
-      expect(chatSpan).toBeDefined();
-      expect(chatSpan?.instrumentationScope.name).toBe(tracerName);
-      expect(chatSpan?.attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
-      expect(chatSpan?.attributes["custom.scope"]).toBe("openai");
-    },
-  );
+    await flushGlobalTracerProvider();
+    const spans = exporter.getFinishedSpans();
+    expect(spans.length).toBeGreaterThan(0);
+    const chatSpan = spans.find(
+      (s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_CHAT,
+    );
+    expect(chatSpan).toBeDefined();
+    expect(chatSpan?.instrumentationScope.name).toBe("microsoft-otel-openai-agents");
+    expect(chatSpan?.attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+    expect(chatSpan?.attributes["custom.scope"]).toBe("openai");
+  });
 });

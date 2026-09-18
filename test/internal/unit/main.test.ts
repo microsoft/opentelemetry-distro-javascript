@@ -1211,39 +1211,37 @@ describe("Main functions", () => {
     await shutdownMicrosoftOpenTelemetry();
   });
 
-  it.each(["custom-openai-scope", "  custom-openai-scope  ", ""])(
-    "passes configured OpenAI tracer name %j to A365SpanProcessor unchanged",
-    async (tracerName) => {
-      useMicrosoftOpenTelemetry({
-        azureMonitor: { enabled: false },
-        enableConsoleExporters: false,
-        a365: {
-          enabled: true,
-          tokenResolver: () => "token",
+  it("does not register configured OpenAI tracer names as A365 fallback scopes", async () => {
+    const tracerName = "custom-openai-scope";
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        tokenResolver: () => "token",
+      },
+      instrumentationOptions: {
+        openaiAgents: {
+          enabled: false,
+          tracerName,
         },
-        instrumentationOptions: {
-          openaiAgents: {
-            enabled: false,
-            tracerName,
-          },
-          langchain: { enabled: false },
-        },
-      });
+        langchain: { enabled: false },
+      },
+    });
 
-      const internalSdk = _getSdkInstance();
-      const tracerProvider = (internalSdk as any)["_tracerProvider"];
-      const registeredProcessors =
-        tracerProvider?.["_activeSpanProcessor"]?.["_spanProcessors"] || [];
-      const processor = registeredProcessors.find(
-        (candidate: any) => candidate.constructor?.name === "A365SpanProcessor",
-      );
+    const internalSdk = _getSdkInstance();
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const registeredProcessors =
+      tracerProvider?.["_activeSpanProcessor"]?.["_spanProcessors"] || [];
+    const processor = registeredProcessors.find(
+      (candidate: any) => candidate.constructor?.name === "A365SpanProcessor",
+    );
 
-      assert.isDefined(processor);
-      assert.isTrue(processor["genAiInstrumentationScopeNames"].has(tracerName));
+    assert.isDefined(processor);
+    assert.isFalse(processor["genAiInstrumentationScopeNames"].has(tracerName));
 
-      await shutdownMicrosoftOpenTelemetry();
-    },
-  );
+    await shutdownMicrosoftOpenTelemetry();
+  });
 
   it("registers A365SpanProcessor but not Agent365Exporter when a365.enableObservabilityExporter is false (default)", async () => {
     useMicrosoftOpenTelemetry({

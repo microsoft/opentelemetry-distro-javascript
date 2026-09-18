@@ -134,9 +134,8 @@ baggageScope.run(() => {
   `apply_guardrail`, `chat`, `Chat`, `TextCompletion`, or `GenerateContent`.
 - For the built-in LangChain and OpenAI Agents instrumentations, enrichment also recognizes
   their exact instrumentation scope names when the final GenAI operation is not available at
-  span start. A configured OpenAI Agents `tracerName` is registered as an exact supported
-  scope byte-for-byte, including whitespace or empty strings. Scope prefixes and unrelated child
-  scopes are not matched.
+  span start. Configured custom tracer names, scope prefixes, and unrelated child scopes are not
+  matched.
 - Invoke-agent-only baggage keys stay invoke-agent-only even when registered through
   `_internal.custom_keys`; unknown or non-`invoke_agent` GenAI spans never receive those caller
   agent attributes.
