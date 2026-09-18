@@ -261,6 +261,32 @@ describe("A365SpanProcessor", () => {
       await customProvider.shutdown();
     });
 
+    it("does not treat custom scope descendants as supported scopes", async () => {
+      const customProcessor = new A365SpanProcessor(["custom-openai-scope"]);
+      const customMemoryExporter = new InMemorySpanExporter();
+      const customProvider = new BasicTracerProvider({
+        spanProcessors: [customProcessor, new SimpleSpanProcessor(customMemoryExporter)],
+      });
+
+      const span = startSpan(customProvider, {
+        tracerName: "custom-openai-scope.child",
+        spanName: "unmodeled operation",
+        baggage: {
+          [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
+          [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: "custom.one",
+          "custom.one": "value-1",
+        },
+      });
+      span.end();
+
+      const attributes = customMemoryExporter.getFinishedSpans()[0].attributes;
+      expect(attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBeUndefined();
+      expect(attributes["custom.one"]).toBeUndefined();
+      expect(attributes[OpenTelemetryConstants.TELEMETRY_SDK_NAME_KEY]).toBeUndefined();
+
+      await customProvider.shutdown();
+    });
+
     it("copies generic and registered custom baggage for provisional chain spans from supported scopes", () => {
       const span = startSpan(provider, {
         tracerName: "microsoft-otel-openai-agents",
