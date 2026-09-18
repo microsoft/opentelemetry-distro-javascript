@@ -1211,6 +1211,39 @@ describe("Main functions", () => {
     await shutdownMicrosoftOpenTelemetry();
   });
 
+  it("passes a configured OpenAI tracer name to A365SpanProcessor", async () => {
+    useMicrosoftOpenTelemetry({
+      azureMonitor: { enabled: false },
+      enableConsoleExporters: false,
+      a365: {
+        enabled: true,
+        tokenResolver: () => "token",
+      },
+      instrumentationOptions: {
+        openaiAgents: {
+          enabled: false,
+          tracerName: "custom-openai-scope",
+        },
+        langchain: { enabled: false },
+      },
+    });
+
+    const internalSdk = _getSdkInstance();
+    const tracerProvider = (internalSdk as any)["_tracerProvider"];
+    const registeredProcessors =
+      tracerProvider?.["_activeSpanProcessor"]?.["_spanProcessors"] || [];
+    const processor = registeredProcessors.find(
+      (candidate: any) => candidate.constructor?.name === "A365SpanProcessor",
+    );
+
+    assert.isDefined(processor);
+    assert.isTrue(
+      processor["genAiInstrumentationScopeNames"].has("custom-openai-scope"),
+    );
+
+    await shutdownMicrosoftOpenTelemetry();
+  });
+
   it("registers A365SpanProcessor but not Agent365Exporter when a365.enableObservabilityExporter is false (default)", async () => {
     useMicrosoftOpenTelemetry({
       azureMonitor: { enabled: false },

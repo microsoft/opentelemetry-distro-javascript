@@ -324,7 +324,11 @@ export function useMicrosoftOpenTelemetry(options?: MicrosoftOpenTelemetryOption
     // telemetry.sdk.* attributes to span attributes. Always registered when
     // A365 is enabled, even if the HTTP exporter is suppressed, so downstream
     // exporters (Azure Monitor, OTLP, …) still receive the enriched spans.
-    spanProcessors.push(new A365SpanProcessor());
+    const configuredOpenAiTracerName =
+      config.instrumentationOptions?.openaiAgents?.tracerName;
+    spanProcessors.push(
+      new A365SpanProcessor(configuredOpenAiTracerName ? [configuredOpenAiTracerName] : []),
+    );
     if (a365Config.enableObservabilityExporter) {
       const a365Exporter = new Agent365Exporter({
         clusterCategory: a365Config.clusterCategory,
