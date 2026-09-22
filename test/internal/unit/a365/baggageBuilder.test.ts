@@ -366,7 +366,7 @@ describe("BaggageBuilder", () => {
       },
     );
 
-    it("should clear previously set non-443 port when port is 443", () => {
+    it("should preserve a previously set port when a later call uses the default port", () => {
       const builder = new BaggageBuilder();
       builder.invokeAgentServer("api.example.com", 8080);
       builder.invokeAgentServer("api.example.com", 443);
@@ -376,7 +376,7 @@ describe("BaggageBuilder", () => {
       expect(bag?.getEntry(OpenTelemetryConstants.SERVER_ADDRESS_KEY)?.value).toBe(
         "api.example.com",
       );
-      expect(bag?.getEntry(OpenTelemetryConstants.SERVER_PORT_KEY)).toBeUndefined();
+      expect(bag?.getEntry(OpenTelemetryConstants.SERVER_PORT_KEY)?.value).toBe("8080");
     });
 
     it("should return self for method chaining", () => {
