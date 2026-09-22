@@ -57,6 +57,15 @@ function shouldCopyRegisteredCustomKey(key: string, isInvokeAgent: boolean): boo
   return isInvokeAgent || !INVOKE_AGENT_ATTRIBUTE_NAMES.has(key);
 }
 
+function getSpanAttributeValue(key: string, value: string): string | number | undefined {
+  if (key !== OpenTelemetryConstants.SERVER_PORT_KEY) {
+    return value;
+  }
+
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : undefined;
+}
+
 /**
  * Copies relevant baggage entries to span attributes on span start.
  *
@@ -172,8 +181,13 @@ export class A365SpanProcessor implements BaseSpanProcessor {
         continue;
       }
 
+      const attributeValue = getSpanAttributeValue(key, value);
+      if (attributeValue === undefined) {
+        continue;
+      }
+
       try {
-        span.setAttribute(key, value);
+        span.setAttribute(key, attributeValue);
       } catch {
         // Ignore errors setting attributes
       }

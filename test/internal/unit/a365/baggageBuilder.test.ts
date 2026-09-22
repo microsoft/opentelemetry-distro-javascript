@@ -366,17 +366,17 @@ describe("BaggageBuilder", () => {
       },
     );
 
-    it("should preserve a previously set port when a later call uses the default port", () => {
+    it("should clear a previously set port when a later call uses the default port", () => {
       const builder = new BaggageBuilder();
-      builder.invokeAgentServer("api.example.com", 8080);
-      builder.invokeAgentServer("api.example.com", 443);
+      builder.invokeAgentServer("old.example.com", 8080);
+      builder.invokeAgentServer("new.example.com", 443);
       const scope = builder.build();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const bag = propagation.getBaggage((scope as any).contextWithBaggage);
       expect(bag?.getEntry(OpenTelemetryConstants.SERVER_ADDRESS_KEY)?.value).toBe(
-        "api.example.com",
+        "new.example.com",
       );
-      expect(bag?.getEntry(OpenTelemetryConstants.SERVER_PORT_KEY)?.value).toBe("8080");
+      expect(bag?.getEntry(OpenTelemetryConstants.SERVER_PORT_KEY)).toBeUndefined();
     });
 
     it("should return self for method chaining", () => {

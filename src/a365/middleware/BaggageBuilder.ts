@@ -225,6 +225,8 @@ export class BaggageBuilder {
     this.set(OpenTelemetryConstants.SERVER_ADDRESS_KEY, address);
     if (port !== undefined && port !== 443) {
       this.set(OpenTelemetryConstants.SERVER_PORT_KEY, port.toString());
+    } else {
+      this.pairs.delete(OpenTelemetryConstants.SERVER_PORT_KEY);
     }
     return this;
   }

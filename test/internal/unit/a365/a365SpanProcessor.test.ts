@@ -287,8 +287,21 @@ describe("A365SpanProcessor", () => {
 
       const attributes = memoryExporter.getFinishedSpans()[0].attributes;
       expect(attributes[OpenTelemetryConstants.SERVER_ADDRESS_KEY]).toBe("agent.example.com");
-      expect(attributes[OpenTelemetryConstants.SERVER_PORT_KEY]).toBe("8443");
+      expect(attributes[OpenTelemetryConstants.SERVER_PORT_KEY]).toBe(8443);
     });
+
+    it.each(["not-a-port", "8443.5", "0", "65536"])(
+      "does not copy invalid invoke-agent server port baggage %s",
+      (port) => {
+        const span = startGenAiSpan(provider, OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME, {
+          [OpenTelemetryConstants.SERVER_PORT_KEY]: port,
+        });
+        span.end();
+
+        const attributes = memoryExporter.getFinishedSpans()[0].attributes;
+        expect(attributes[OpenTelemetryConstants.SERVER_PORT_KEY]).toBeUndefined();
+      },
+    );
 
     it("copies generic and registered custom baggage for provisional chain spans from supported scopes", () => {
       const span = startSpan(provider, {
