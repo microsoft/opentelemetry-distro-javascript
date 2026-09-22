@@ -53,4 +53,7 @@ export const INVOKE_AGENT_ATTRIBUTES: readonly string[] = [
   consts.GEN_AI_CALLER_AGENT_APPLICATION_ID_KEY,
   consts.GEN_AI_CALLER_AGENT_PLATFORM_ID_KEY,
   consts.GEN_AI_CALLER_AGENT_VERSION_KEY,
+  // Server address/port for invoke agent target
+  consts.SERVER_ADDRESS_KEY,
+  consts.SERVER_PORT_KEY,
 ];

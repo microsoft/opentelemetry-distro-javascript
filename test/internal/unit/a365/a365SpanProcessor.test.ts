@@ -259,7 +259,13 @@ describe("A365SpanProcessor", () => {
           baggage: {
             [OpenTelemetryConstants.TENANT_ID_KEY]: "tenant-123",
             [OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]: "caller-123",
-            [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY,
+            [OpenTelemetryConstants.SERVER_ADDRESS_KEY]: "agent.example.com",
+            [OpenTelemetryConstants.SERVER_PORT_KEY]: "8443",
+            [INTERNAL_CUSTOM_KEYS_METADATA_KEY]: [
+              OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY,
+              OpenTelemetryConstants.SERVER_ADDRESS_KEY,
+              OpenTelemetryConstants.SERVER_PORT_KEY,
+            ].join(","),
           },
         });
         span.end();
@@ -267,8 +273,22 @@ describe("A365SpanProcessor", () => {
         const attributes = memoryExporter.getFinishedSpans()[0].attributes;
         expect(attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
         expect(attributes[OpenTelemetryConstants.GEN_AI_CALLER_AGENT_ID_KEY]).toBeUndefined();
+        expect(attributes[OpenTelemetryConstants.SERVER_ADDRESS_KEY]).toBeUndefined();
+        expect(attributes[OpenTelemetryConstants.SERVER_PORT_KEY]).toBeUndefined();
       },
     );
+
+    it("copies invoke-agent server baggage only onto invoke_agent spans", () => {
+      const span = startGenAiSpan(provider, OpenTelemetryConstants.INVOKE_AGENT_OPERATION_NAME, {
+        [OpenTelemetryConstants.SERVER_ADDRESS_KEY]: "agent.example.com",
+        [OpenTelemetryConstants.SERVER_PORT_KEY]: "8443",
+      });
+      span.end();
+
+      const attributes = memoryExporter.getFinishedSpans()[0].attributes;
+      expect(attributes[OpenTelemetryConstants.SERVER_ADDRESS_KEY]).toBe("agent.example.com");
+      expect(attributes[OpenTelemetryConstants.SERVER_PORT_KEY]).toBe("8443");
+    });
 
     it("copies generic and registered custom baggage for provisional chain spans from supported scopes", () => {
       const span = startSpan(provider, {
@@ -736,6 +756,8 @@ describe("A365SpanProcessor", () => {
       expect(INVOKE_AGENT_ATTRIBUTES).toContain(
         OpenTelemetryConstants.GEN_AI_CALLER_AGENT_VERSION_KEY,
       );
+      expect(INVOKE_AGENT_ATTRIBUTES).toContain(OpenTelemetryConstants.SERVER_ADDRESS_KEY);
+      expect(INVOKE_AGENT_ATTRIBUTES).toContain(OpenTelemetryConstants.SERVER_PORT_KEY);
     });
 
     it("should include blueprint ID and agent version in generic attributes", () => {
