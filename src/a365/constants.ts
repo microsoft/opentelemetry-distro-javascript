@@ -3,6 +3,9 @@
 
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
 
+/** Internal baggage metadata key for registered custom attribute names. */
+export const INTERNAL_CUSTOM_KEYS_METADATA_KEY = "_internal.custom_keys";
+
 /**
  * OpenTelemetry constants for A365 observability.
  *

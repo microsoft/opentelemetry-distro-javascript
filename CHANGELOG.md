@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Features Added
+- Add manual `sessionId` propagation to `ExecuteToolScope` and `InferenceScope`, plus opt-in custom baggage enrichment for recognized GenAI spans through `BaggageBuilder.customAttribute()` and `customAttributes()`. [#242](https://github.com/microsoft/opentelemetry-distro-javascript/pull/242)
 - Add GenAI v1.42 InvokeAgent request, response, cache-token, and provider attribute capture for manual A365 scopes. [#239](https://github.com/microsoft/opentelemetry-distro-javascript/pull/239)
 
 ### Other Changes
