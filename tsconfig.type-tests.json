@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src", "test/internal/unit/a365/executeToolJsonModels.test.ts"]
+}
