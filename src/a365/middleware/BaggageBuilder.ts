@@ -12,7 +12,64 @@
 
 import { propagation, context as otelContext } from "@opentelemetry/api";
 import type { Context } from "@opentelemetry/api";
-import { OpenTelemetryConstants } from "../constants.js";
+import { INTERNAL_CUSTOM_KEYS_METADATA_KEY, OpenTelemetryConstants } from "../constants.js";
+
+function getPairEntries<T>(
+  pairs: Record<string, T> | Iterable<[string, T]>,
+): Iterable<[string, T]> {
+  if (Symbol.iterator in Object(pairs)) {
+    return pairs as Iterable<[string, T]>;
+  }
+
+  return Object.entries(pairs);
+}
+
+function normalizeValue(value: string | null | undefined): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function normalizeCustomKey(key: string): string | undefined {
+  const trimmed = key.trim();
+  if (!trimmed || trimmed.includes(",") || trimmed === INTERNAL_CUSTOM_KEYS_METADATA_KEY) {
+    return undefined;
+  }
+
+  return trimmed;
+}
+
+function parseCustomKeys(value: string | undefined): Set<string> {
+  const keys = new Set<string>();
+  if (!value) {
+    return keys;
+  }
+
+  for (const rawKey of value.split(",")) {
+    const key = normalizeCustomKey(rawKey);
+    if (key) {
+      keys.add(key);
+    }
+  }
+
+  return keys;
+}
+
+function serializeCustomKeys(customKeys: Iterable<string>): string | undefined {
+  const normalizedKeys = new Set<string>();
+  for (const customKey of customKeys) {
+    const normalizedKey = normalizeCustomKey(customKey);
+    if (normalizedKey) {
+      normalizedKeys.add(normalizedKey);
+    }
+  }
+
+  const sortedKeys = [...normalizedKeys].sort((left, right) => left.localeCompare(right));
+  return sortedKeys.length > 0 ? sortedKeys.join(",") : undefined;
+}
 
 /**
  * Fluent builder for setting OpenTelemetry baggage values.
@@ -31,6 +88,7 @@ import { OpenTelemetryConstants } from "../constants.js";
  */
 export class BaggageBuilder {
   private pairs: Map<string, string> = new Map();
+  private customKeys: Set<string> = new Set();
 
   /** Set the operation source baggage value (e.g., ATG, ACF). */
   operationSource(value: string | null | undefined): BaggageBuilder {
@@ -177,26 +235,53 @@ export class BaggageBuilder {
    * Set multiple baggage pairs from a dictionary or iterable.
    * @param pairs Dictionary or iterable of key-value pairs
    */
-
   setPairs(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- preserve source compatibility for interface/class-typed callers
     pairs: Record<string, any> | Iterable<[string, any]> | null | undefined,
   ): BaggageBuilder {
     if (!pairs) {
       return this;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let entries: Iterable<[string, any]>;
-    if (Symbol.iterator in Object(pairs)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      entries = pairs as Iterable<[string, any]>;
-    } else {
-      entries = Object.entries(pairs);
-    }
-
-    for (const [key, value] of entries) {
+    for (const [key, value] of getPairEntries(pairs)) {
       if (value !== null && value !== undefined) {
         this.set(key, String(value));
+      }
+    }
+
+    return this;
+  }
+
+  /**
+   * Set a single custom baggage pair and register its key for metadata propagation.
+   */
+  customAttribute(key: string, value: string | null | undefined): BaggageBuilder {
+    const normalizedKey = normalizeCustomKey(key);
+    const normalizedValue = normalizeValue(value);
+
+    if (normalizedKey && normalizedValue) {
+      this.pairs.set(normalizedKey, normalizedValue);
+      this.customKeys.add(normalizedKey);
+    }
+
+    return this;
+  }
+
+  /**
+   * Set multiple custom baggage pairs and register their keys for metadata propagation.
+   * @param pairs Dictionary or iterable of key-value pairs
+   */
+  customAttributes(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- preserve source compatibility for interface/class-typed callers
+    pairs: Record<string, any> | Iterable<[string, any]> | null | undefined,
+  ): BaggageBuilder {
+    if (!pairs) {
+      return this;
+    }
+
+    for (const [key, value] of getPairEntries(pairs)) {
+      if (value !== null && value !== undefined) {
+        this.customAttribute(key, String(value));
       }
     }
 
@@ -208,18 +293,16 @@ export class BaggageBuilder {
    * @returns A BaggageScope that can run callbacks under the baggage context
    */
   build(): BaggageScope {
-    return new BaggageScope(this.pairs);
+    return new BaggageScope(this.pairs, this.customKeys);
   }
 
   /**
    * Add a baggage key/value if the value is not null or whitespace.
    */
   private set(key: string, value: string | null | undefined): void {
-    if (value !== null && value !== undefined) {
-      const trimmed = value.trim();
-      if (trimmed) {
-        this.pairs.set(key, trimmed);
-      }
+    const trimmed = normalizeValue(value);
+    if (trimmed) {
+      this.pairs.set(key, trimmed);
     }
   }
 
@@ -244,17 +327,33 @@ export class BaggageScope {
   /** @internal Exposed for testing. */
   readonly contextWithBaggage: Context;
 
-  constructor(pairs: Map<string, string>) {
+  constructor(pairs: Map<string, string>, customKeys: ReadonlySet<string> = new Set()) {
     // 1. Start from current active context
     const currentCtx = otelContext.active();
 
     // 2. Build merged baggage
     let bag = propagation.getBaggage(currentCtx) ?? propagation.createBaggage({});
+    const mergedCustomKeys = parseCustomKeys(
+      bag.getEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY)?.value,
+    );
+
     for (const [key, value] of pairs.entries()) {
       if (value && value.trim()) {
         bag = bag.setEntry(key, { value });
       }
     }
+
+    for (const customKey of customKeys) {
+      const normalizedKey = normalizeCustomKey(customKey);
+      if (normalizedKey) {
+        mergedCustomKeys.add(normalizedKey);
+      }
+    }
+
+    const customKeysMetadata = serializeCustomKeys(mergedCustomKeys);
+    bag = customKeysMetadata
+      ? bag.setEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY, { value: customKeysMetadata })
+      : bag.removeEntry(INTERNAL_CUSTOM_KEYS_METADATA_KEY);
 
     // 3. Create a new context that carries that baggage
     this.contextWithBaggage = propagation.setBaggage(currentCtx, bag);

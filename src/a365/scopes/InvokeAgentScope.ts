@@ -4,12 +4,15 @@
 import { SpanKind } from "@opentelemetry/api";
 import { OpenTelemetryScope } from "./OpenTelemetryScope.js";
 import { OpenTelemetryConstants } from "../constants.js";
+import { serializeSystemInstructions } from "../message-utils.js";
 import type {
   InvokeAgentScopeDetails,
   CallerDetails,
   Request,
   SpanDetails,
   AgentDetails,
+  GenAiRequestParameters,
+  GenAiResponseParameters,
   InputMessagesParam,
   OutputMessagesParam,
 } from "../contracts.js";
@@ -69,9 +72,6 @@ export class InvokeAgentScope extends OpenTelemetryScope {
       callerDetails?.userDetails,
     );
 
-    // Provider name
-    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_PROVIDER_NAME_KEY, agentDetails.providerName);
-
     // Session ID
     this.setTagMaybe(OpenTelemetryConstants.SESSION_ID_KEY, request.sessionId);
 
@@ -95,6 +95,14 @@ export class InvokeAgentScope extends OpenTelemetryScope {
     // Request content as input messages
     if (request.content != null) {
       this.recordInputMessages(request.content);
+    }
+
+    if (invokeScopeDetails.requestParameters) {
+      this.mapRequestParameters(invokeScopeDetails.requestParameters);
+    }
+
+    if (invokeScopeDetails.responseParameters) {
+      this.mapResponseParameters(invokeScopeDetails.responseParameters);
     }
 
     // Caller agent details for A2A scenarios
@@ -130,6 +138,10 @@ export class InvokeAgentScope extends OpenTelemetryScope {
     this.recordOutputMessages(response);
   }
 
+  public recordResponseParameters(responseParameters: GenAiResponseParameters): void {
+    this.mapResponseParameters(responseParameters);
+  }
+
   /** Records the input messages for telemetry tracking. */
   public override recordInputMessages(messages: InputMessagesParam): void {
     super.recordInputMessages(messages);
@@ -138,5 +150,69 @@ export class InvokeAgentScope extends OpenTelemetryScope {
   /** Records the output messages for telemetry tracking. */
   public override recordOutputMessages(messages: OutputMessagesParam): void {
     super.recordOutputMessages(messages);
+  }
+
+  private mapRequestParameters(requestParameters: GenAiRequestParameters): void {
+    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_REQUEST_MODEL_KEY, requestParameters.model);
+    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_REQUEST_SEED_KEY, requestParameters.seed);
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_REQUEST_CHOICE_COUNT_KEY,
+      requestParameters.choiceCount,
+    );
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_REQUEST_FREQUENCY_PENALTY_KEY,
+      requestParameters.frequencyPenalty,
+    );
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_REQUEST_MAX_TOKENS_KEY,
+      requestParameters.maxTokens,
+    );
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_REQUEST_PRESENCE_PENALTY_KEY,
+      requestParameters.presencePenalty,
+    );
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_REQUEST_STOP_SEQUENCES_KEY,
+      requestParameters.stopSequences,
+    );
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_REQUEST_TEMPERATURE_KEY,
+      requestParameters.temperature,
+    );
+    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_REQUEST_TOP_P_KEY, requestParameters.topP);
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_DATA_SOURCE_ID_KEY,
+      requestParameters.dataSourceId,
+    );
+    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_OUTPUT_TYPE_KEY, requestParameters.outputType);
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_SYSTEM_INSTRUCTIONS_KEY,
+      requestParameters.systemInstructions === undefined
+        ? undefined
+        : serializeSystemInstructions(requestParameters.systemInstructions),
+    );
+  }
+
+  private mapResponseParameters(responseParameters: GenAiResponseParameters): void {
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_RESPONSE_FINISH_REASONS_KEY,
+      responseParameters.finishReasons,
+    );
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY,
+      responseParameters.inputTokens,
+    );
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_USAGE_OUTPUT_TOKENS_KEY,
+      responseParameters.outputTokens,
+    );
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY,
+      responseParameters.cacheWriteInputTokens,
+    );
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY,
+      responseParameters.cacheReadInputTokens,
+    );
   }
 }

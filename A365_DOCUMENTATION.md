@@ -30,8 +30,14 @@ import {
 
 const invokeScope = InvokeAgentScope.start(
   { conversationId: "conv-123", sessionId: "session-456" },
-  {},
-  { agentId: "agent-1", tenantId: "tenant-1" },
+  {
+    requestParameters: {
+      model: "gpt-4o",
+      outputType: "json",
+      systemInstructions: [{ type: "text", content: "You are a helpful assistant." }],
+    },
+  },
+  { agentId: "agent-1", tenantId: "tenant-1", providerName: "openai" },
 );
 
 invokeScope.run(async () => {
@@ -58,7 +64,7 @@ invokeScope.run(async () => {
   });
 
   const toolScope = ExecuteToolScope.start(
-    { conversationId: "conv-123" },
+    { conversationId: "conv-123", sessionId: "session-456" },
     {
       toolName: "Search",
       arguments: toolArguments,
@@ -69,7 +75,7 @@ invokeScope.run(async () => {
   );
 
   const inferenceScope = InferenceScope.start(
-    { conversationId: "conv-123" },
+    { conversationId: "conv-123", sessionId: "session-456" },
     { operationName: InferenceOperationType.ChatCompletion },
     { agentId: "agent-1", tenantId: "tenant-1" },
   );
@@ -108,11 +114,50 @@ invokeScope.run(async () => {
   inferenceScope.dispose();
 });
 
+invokeScope.recordResponseParameters({
+  finishReasons: ["stop"],
+  inputTokens: 120,
+  outputTokens: 42,
+  cacheWriteInputTokens: 10,
+  cacheReadInputTokens: 8,
+});
 invokeScope.dispose();
 ```
 
 `ExecuteToolScope` serializes arguments to `gen_ai.tool.call.arguments` and results to
 `gen_ai.tool.call.result` as JSON span attributes, so they may contain sensitive data.
+
+`InvokeAgentScope`, `InferenceScope`, and `ExecuteToolScope` accept `request.sessionId`.
+When you provide it, those scopes write `microsoft.session.id` directly on the created
+span instead of relying on later baggage enrichment. `OutputScope` does not currently
+propagate `request.sessionId` directly.
+
+`InvokeAgentScope.start()` captures request parameters immediately, while `recordResponseParameters()`
+captures response and usage values after the agent completes.
+
+| Input field                                | Emitted attribute key                                      |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| `requestParameters.model`                  | `gen_ai.request.model`                                     |
+| `requestParameters.seed`                   | `gen_ai.request.seed`                                      |
+| `requestParameters.choiceCount`            | `gen_ai.request.choice.count`                              |
+| `requestParameters.frequencyPenalty`       | `gen_ai.request.frequency_penalty`                         |
+| `requestParameters.maxTokens`              | `gen_ai.request.max_tokens`                                |
+| `requestParameters.presencePenalty`        | `gen_ai.request.presence_penalty`                          |
+| `requestParameters.stopSequences`          | `gen_ai.request.stop_sequences`                            |
+| `requestParameters.temperature`            | `gen_ai.request.temperature`                               |
+| `requestParameters.topP`                   | `gen_ai.request.top_p`                                     |
+| `requestParameters.dataSourceId`           | `gen_ai.data_source.id`                                    |
+| `requestParameters.outputType`             | `gen_ai.output.type`                                       |
+| `requestParameters.systemInstructions`     | `gen_ai.system_instructions` (JSON-serialized parts array) |
+| `responseParameters.finishReasons`         | `gen_ai.response.finish_reasons`                           |
+| `responseParameters.inputTokens`           | `gen_ai.usage.input_tokens`                                |
+| `responseParameters.outputTokens`          | `gen_ai.usage.output_tokens`                               |
+| `responseParameters.cacheWriteInputTokens` | `gen_ai.usage.cache_write.input_tokens`                    |
+| `responseParameters.cacheReadInputTokens`  | `gen_ai.usage.cache_read.input_tokens`                     |
+| `agentDetails.providerName`                | `gen_ai.provider.name`                                     |
+System instructions may contain sensitive content. Only capture them when you
+intend to store prompt text and have reviewed downstream access controls.
+intend to store prompt text and have reviewed downstream access controls.
 
 ## Baggage And Context
 
@@ -126,6 +171,11 @@ const baggageScope = new BaggageBuilder()
   .agentId("agent-1")
   .conversationId("conv-123")
   .sessionId("session-456")
+  .customAttribute("deployment.ring", "firstrelease")
+  .customAttributes({
+    "feature.name": "grounded-chat",
+    "customer.segment": "internal",
+  })
   .build();
 
 baggageScope.run(() => {
@@ -133,6 +183,29 @@ baggageScope.run(() => {
   injectContextToHeaders(headers);
 });
 ```
+
+- Baggage may cross process and service boundaries when you inject/extract context. Treat it like
+  inbound and outbound metadata: `_internal.custom_keys` registration metadata can arrive through
+  inbound baggage headers, applications must reject or sanitize untrusted baggage headers at the
+  edge, and you must never put secrets, access tokens, or PII in baggage keys or values.
+- `customAttribute()` and `customAttributes()` trim keys and values before storing them. Blank
+  keys/values are dropped, keys containing commas are rejected, and the reserved
+  `_internal.custom_keys` metadata key cannot be set directly.
+- Custom baggage enrichment is opt-in. Only keys registered through `customAttribute()` or
+  `customAttributes()` are copied from baggage onto spans; plain `setPairs()` entries stay in
+  baggage only.
+- Automatic baggage-to-span enrichment only runs for recognized GenAI spans whose
+  `gen_ai.operation.name` is `invoke_agent`, `execute_tool`, `output_messages`,
+  `apply_guardrail`, `chat`, `Chat`, `TextCompletion`, or `GenerateContent`.
+- For the built-in LangChain and OpenAI Agents instrumentations, enrichment also recognizes
+  their exact instrumentation scope names when the final GenAI operation is not available at
+  span start. Configured custom tracer names, scope prefixes, and unrelated child scopes are not
+  matched.
+- Invoke-agent-only baggage keys stay invoke-agent-only even when registered through
+  `_internal.custom_keys`; unknown or non-`invoke_agent` GenAI spans never receive those caller
+  agent attributes.
+- Explicit span attributes win over baggage. If a span already has a value for a registered custom
+  key, the span value is preserved.
 
 ## Hosting
 
@@ -202,17 +275,17 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
 
 ### Durable Delivery Defaults
 
-| Option                               | Default                   | Notes                                                                             |
-| ------------------------------------ | ------------------------- | --------------------------------------------------------------------------------- |
-| `enabled`                            | `true`                    | Durable delivery stays on unless you explicitly disable it                         |
+| Option                               | Default                   | Notes                                                                                                                                  |
+| ------------------------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`                            | `true`                    | Durable delivery stays on unless you explicitly disable it                                                                             |
 | `storageDirectory`                   | auto                      | Uses the configured directory, or creates a secure platform-specific default root plus a stable per-application `app-<hash>` partition |
-| `maxStorageBytes`                    | `50 * 1024 * 1024`        | Bounds pending, quarantined, active leased, and non-stale temporary records within the current `app-<hash>` partition only |
-| `maxRecordAgeMilliseconds`           | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction, within the current `app-<hash>` partition only |
-| `replayIntervalMilliseconds`         | `2 * 60 * 1000`           | Scheduled replay cadence                                                          |
-| `maxReplayBatchSize`                 | `10`                      | Maximum records claimed per replay pass                                           |
-| `leaseDurationMilliseconds`          | `2 * 60 * 1000`           | Reclaims stale replay leases                                                      |
-| `shutdownTimeoutMilliseconds`        | `10_000`                  | Shared shutdown budget for accepted live exports and admitted durable handoff completion |
-| `tokenResolutionTimeoutMilliseconds` | `30_000`                  | Timeout per replay token-resolution attempt                                       |
+| `maxStorageBytes`                    | `50 * 1024 * 1024`        | Bounds pending, quarantined, active leased, and non-stale temporary records within the current `app-<hash>` partition only             |
+| `maxRecordAgeMilliseconds`           | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction, within the current `app-<hash>` partition only                                    |
+| `replayIntervalMilliseconds`         | `2 * 60 * 1000`           | Scheduled replay cadence                                                                                                               |
+| `maxReplayBatchSize`                 | `10`                      | Maximum records claimed per replay pass                                                                                                |
+| `leaseDurationMilliseconds`          | `2 * 60 * 1000`           | Reclaims stale replay leases                                                                                                           |
+| `shutdownTimeoutMilliseconds`        | `10_000`                  | Shared shutdown budget for accepted live exports and admitted durable handoff completion                                               |
+| `tokenResolutionTimeoutMilliseconds` | `30_000`                  | Timeout per replay token-resolution attempt                                                                                            |
 
 ### Operational Notes
 

@@ -4,9 +4,12 @@
 
 ### Features Added
 - Add typed, extensible ExecuteTool argument and result schemas with default schema_version: "1.0". [#240](https://github.com/microsoft/opentelemetry-distro-javascript/pull/240)
+- Add manual `sessionId` propagation to `ExecuteToolScope` and `InferenceScope`, plus opt-in custom baggage enrichment for recognized GenAI spans through `BaggageBuilder.customAttribute()` and `customAttributes()`. [#242](https://github.com/microsoft/opentelemetry-distro-javascript/pull/242)
+- Add GenAI v1.42 InvokeAgent request, response, cache-token, and provider attribute capture for manual A365 scopes. [#239](https://github.com/microsoft/opentelemetry-distro-javascript/pull/239)
 
 ### Other Changes
 - Consolidate Dependabot updates for Vitest 4.1.11, Hono 4.13.7, qs 6.16.0, fast-uri 3.1.7, actions/deploy-pages 5.0.1, and actions/checkout 7.0.1.
+- Document local npm lockfile regeneration for contributors who cannot access the Microsoft package proxy, while retaining the proxy-generated lockfile. [#245](https://github.com/microsoft/opentelemetry-distro-javascript/pull/245)
 
 ## [1.4.0] - 2026-09-08
 

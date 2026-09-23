@@ -14,6 +14,7 @@ import type {
   OutputMessages,
   InputMessagesParam,
   OutputMessagesParam,
+  SystemInstructionPart,
 } from "./contracts.js";
 import {
   DEFAULT_FINISH_REASON,
@@ -136,6 +137,25 @@ export function serializeToolPayload(value: object | null | undefined): string |
     return JSON.stringify(value) ?? EXECUTE_TOOL_SERIALIZATION_ERROR;
   } catch {
     return EXECUTE_TOOL_SERIALIZATION_ERROR;
+  }
+}
+
+/**
+ * Serializes system instruction parts to a JSON array.
+ *
+ * The fallback keeps telemetry recording non-throwing when a part contains
+ * non-JSON-serializable values.
+ */
+export function serializeSystemInstructions(parts: SystemInstructionPart[]): string {
+  try {
+    return JSON.stringify(parts);
+  } catch {
+    return JSON.stringify([
+      {
+        type: "text",
+        content: `[serialization failed: ${parts.length} ${parts.length === 1 ? "instruction" : "instructions"}]`,
+      },
+    ]);
   }
 }
 
