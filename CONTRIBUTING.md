@@ -63,3 +63,84 @@ the required proxy rather than using this workflow to bypass its restrictions.
 - Link related issues when applicable.
 - Update documentation when public behavior or setup changes.
 - Keep the repository planning and README documents aligned with the implementation.
+
+## SDK performance benchmarks
+
+After building, run the standalone harness on Node.js 22 or later. It measures
+recording span creation (with and without an attribute), counter aggregation,
+and log emission through the built SDK. Non-exporting processors and a metric
+reader keep serialization, network transport, and exporter batching out of the
+measurement. Recording/aggregation probes fail rather than measuring no-op
+providers. This is not an end-to-end exporter or application benchmark.
+
+```sh
+node --expose-gc perf/benchmark.mjs --output tmp/perf/raw.json --iterations 100000 --rounds 12 --memory-iterations 10000 --memory-trials 5
+node perf/export-events.mjs --input tmp/perf/raw.json --output tmp/perf/events.json
+```
+
+Both commands are offline by default. The benchmark disables inherited
+OpenTelemetry/Application Insights exporter and sampler configuration,
+SDKStats, automatic instrumentation, and network resource discovery in its
+dedicated processes. The VM resource detector is temporarily replaced during
+SDK startup because the distro invokes it independently of the detector
+environment setting. None of these changes affect normal library usage.
+Use a clean Node process without instrumentation preloads.
+
+`--package-root` defaults to the current directory and must contain the tested
+`@microsoft/opentelemetry` manifest and `dist/esm/index.js`. It can also point to
+an extracted npm package, with dependencies installed in that directory or an
+ancestor. The manifest supplies the measured package name/version. Optional
+`--revision` must identify that tested package's source revision, not the CI
+orchestration repository; omit it if unknown. Optional `--run-id` supplies an
+explicit execution correlation shared by the result events. Neither identifier
+is inferred from a host, collector, timestamp, or session.
+
+The options shown above are the defaults. Each throughput scenario has 20,000
+warmup operations followed by the requested number of measured rounds, with GC
+before each round. Raw output retains nanosecond durations, per-round operation
+rates, and the existing `ns/op` samples/median consumed by `perf/compare.mjs`.
+Only the original two span cases are regression-gating in that comparison.
+Throughput telemetry is the **median of per-round rates**, in `operations/s`,
+not the reciprocal of the median duration.
+
+Each memory trial uses a fresh `--expose-gc` worker, warms up
+`min(memory-iterations, 1000)` operations, settles GC three times, captures a
+baseline, performs the requested operations, then captures immediate and
+post-GC snapshots. The raw artifact retains all snapshots, counts, timestamps,
+package identity, runtime/OS/architecture, and supplied provenance.
+Memory results are medians of **signed deltas**, without clamping or noise
+thresholds: immediate heap-used, post-GC retained heap, and immediate RSS minus
+baseline, in `By`; heap and retained-heap per-operation deltas are in
+`By/{operation}`. These are noisy process observations, not total allocated
+bytes or a leak diagnosis. Negative and zero observations remain valid.
+
+The second command validates the raw observations and writes native OTLP JSON
+named log events (`microsoft.opentelemetry.benchmark.result`). Each event has
+`test.case.name`, `test.suite.name`, `benchmark.metric`, numeric `benchmark.value`,
+`benchmark.unit`, `benchmark.statistic`, and actual iteration/round or
+memory-trial counts. Case names are distinct from scenario labels. Metrics are
+`microsoft.opentelemetry.benchmark.throughput` and
+`microsoft.opentelemetry.benchmark.memory.{heap_used_delta,heap_used_delta_per_operation,retained_heap_delta,retained_heap_delta_per_operation,rss_delta}`.
+The custom JSON reporting harness is identified by `telemetry.sdk.*` and
+`service.name`, separately from the measured `package.name`/`package.version`.
+Runtime/OS/architecture are measured resource attributes; optional provenance
+uses `vcs.ref.head.revision` and `benchmark.run_id`.
+
+Sending is a separate, explicit action for a trusted CI job or operator:
+
+```sh
+node perf/export-events.mjs --input tmp/perf/raw.json --output tmp/perf/events.json --endpoint https://YOUR-COLLECTOR/otlp/v1/logs
+```
+
+There is no default endpoint or environment-variable fallback. Keep the real
+collector URL in private CI configuration, and gate submission separately from
+offline benchmark execution (never submit untrusted PR results). HTTPS is
+required except for loopback test servers. Credentials, query strings, and
+redirects are not accepted. The request uses `Content-Type: application/json`;
+timestamps/int64 attributes are strings and measurement `doubleValue` fields
+are finite numbers. The default request timeout is 20,000 ms, configurable with
+`--timeout-ms` up to 120,000 ms. Non-2xx responses, malformed success responses,
+and partial success/error bodies fail the command. There are no automatic
+retries because delivery may be uncertain. Both raw and generated payload files
+remain available after export failure; archive them even on failed CI runs.
+HTTP success alone does not prove downstream ingestion or dashboard refresh.
