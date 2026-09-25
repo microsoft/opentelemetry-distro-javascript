@@ -143,4 +143,6 @@ are finite numbers. The default request timeout is 20,000 ms, configurable with
 and partial success/error bodies fail the command. There are no automatic
 retries because delivery may be uncertain. Both raw and generated payload files
 remain available after export failure; archive them even on failed CI runs.
+Output files are replaced atomically, and existing aliases of the raw input
+(including hardlinks and symlinks) are rejected rather than overwritten.
 HTTP success alone does not prove downstream ingestion or dashboard refresh.

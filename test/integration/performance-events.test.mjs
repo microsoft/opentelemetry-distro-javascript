@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { link, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -324,6 +324,64 @@ test("offline CLI ignores exporter environment and preserves both artifacts on e
     /must not overwrite/,
   );
   assert.equal(await readFile(input, "utf8"), raw);
+});
+
+test("export CLI preserves raw input through filesystem aliases", async (t) => {
+  for (const kind of ["hardlink", "symlink", "directory alias", "case variant"]) {
+    await t.test(kind, async (t) => {
+      if (kind === "case variant" && process.platform !== "win32") {
+        t.skip("Case-insensitive path regression applies to Windows");
+        return;
+      }
+      const directory = await tempFor(t);
+      const input = join(directory, "raw.json");
+      const output =
+        kind === "directory alias"
+          ? join(directory, "alias", "raw.json")
+          : join(directory, kind === "case variant" ? "RAW.JSON" : "events.json");
+      const raw = JSON.stringify(fixture());
+      await writeFile(input, raw);
+      if (kind === "hardlink") await link(input, output);
+      if (kind === "directory alias") {
+        await symlink(
+          directory,
+          join(directory, "alias"),
+          process.platform === "win32" ? "junction" : "dir",
+        );
+      }
+      if (kind === "symlink") {
+        try {
+          await symlink(input, output, "file");
+        } catch (error) {
+          if (process.platform !== "win32" || error.code !== "EPERM") throw error;
+          t.skip("Creating file symlinks requires Windows developer mode or elevation");
+          return;
+        }
+      }
+      await assert.rejects(
+        run(["perf/export-events.mjs", "--input", input, "--output", output]),
+        /must not overwrite/,
+      );
+      assert.equal(await readFile(input, "utf8"), raw);
+      assert(!(await readdir(directory)).some((name) => name.startsWith(".sdk-perf-")));
+    });
+  }
+});
+
+test("export CLI replaces legitimate existing output without modifying its other hardlinks", async (t) => {
+  const directory = await tempFor(t);
+  const input = join(directory, "raw.json");
+  const output = join(directory, "events.json");
+  const previous = join(directory, "previous.json");
+  const raw = JSON.stringify(fixture());
+  await writeFile(input, raw);
+  await writeFile(previous, "old output");
+  await link(previous, output);
+  await run(["perf/export-events.mjs", "--input", input, "--output", output]);
+  assert.equal(await readFile(input, "utf8"), raw);
+  assert.equal(await readFile(previous, "utf8"), "old output");
+  assert.equal(records(JSON.parse(await readFile(output))).length, 24);
+  assert.deepEqual((await readdir(directory)).sort(), ["events.json", "previous.json", "raw.json"]);
 });
 
 test("built SDK benchmark records genuine workloads offline despite inherited telemetry configuration", async (t) => {

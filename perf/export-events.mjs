@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { createEvents } from "./report-results.mjs";
@@ -92,7 +92,30 @@ async function main() {
   }
   const payload = createEvents(JSON.parse(await readFile(input, "utf8")));
   await mkdir(dirname(output), { recursive: true });
-  await writeFile(output, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  const directory = await realpath(dirname(output));
+  const destination = join(directory, basename(output));
+  const temporaryDirectory = await mkdtemp(join(directory, ".sdk-perf-"));
+  try {
+    const temporaryFile = join(temporaryDirectory, "events.json");
+    await writeFile(temporaryFile, `${JSON.stringify(payload, null, 2)}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+    });
+    const inputStat = await stat(input, { bigint: true });
+    let outputStat;
+    try {
+      outputStat = await stat(destination, { bigint: true });
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    if (outputStat && inputStat.dev === outputStat.dev && inputStat.ino === outputStat.ino) {
+      throw new Error("--output must not overwrite the raw --input artifact");
+    }
+    // Replace the directory entry, not its target, even if an output link changes after stat.
+    await rename(temporaryFile, destination);
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
   if (values.endpoint !== undefined) {
     await exportEvents(payload, values.endpoint, Number(values["timeout-ms"]));
   }
