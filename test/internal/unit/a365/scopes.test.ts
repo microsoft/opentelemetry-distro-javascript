@@ -1015,8 +1015,8 @@ describe("Scopes", () => {
     });
 
     it.each([
-      ["CLIENT (default)", undefined, SpanKind.CLIENT],
-      ["SERVER", SpanKind.SERVER, SpanKind.SERVER],
+      ["INTERNAL (default)", undefined, SpanKind.INTERNAL],
+      ["SERVER (override)", SpanKind.SERVER, SpanKind.SERVER],
     ])("InvokeAgentScope spanKind: %s", (_label, input, expected) => {
       const scope = InvokeAgentScope.start(
         testRequest,

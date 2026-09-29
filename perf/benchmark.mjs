@@ -1,157 +1,156 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { isAbsolute, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { execFile } from "node:child_process";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { release } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs, promisify } from "node:util";
+import { startBenchmarkSdk } from "./benchmark-sdk.mjs";
+import { median } from "./report-results.mjs";
 
-const DEFAULT_ITERATIONS = 100_000;
-const DEFAULT_ROUNDS = 12;
-const WARMUP_ITERATIONS = 20_000;
-
-function readArgument(name, fallback) {
-  const index = process.argv.indexOf(name);
-  if (index === -1) {
-    return fallback;
-  }
-  const value = process.argv[index + 1];
-  if (!value) {
-    throw new Error(`Missing value for ${name}`);
+const { values } = parseArgs({
+  options: Object.fromEntries(
+    [
+      ["package-root", process.cwd()],
+      ["output", undefined],
+      ["iterations", "100000"],
+      ["rounds", "12"],
+      ["memory-iterations", "10000"],
+      ["memory-trials", "5"],
+      ["run-id", undefined],
+      ["revision", undefined],
+    ].map(([name, defaultValue]) => [name, { type: "string", default: defaultValue }]),
+  ),
+});
+function count(name) {
+  const value = Number(values[name]);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`--${name} must be a positive safe integer`);
   }
   return value;
 }
-
-function median(values) {
-  const sorted = [...values].sort((left, right) => left - right);
-  const midpoint = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[midpoint - 1] + sorted[midpoint]) / 2 : sorted[midpoint];
+const iterations = count("iterations");
+const rounds = count("rounds");
+const memoryIterations = count("memory-iterations");
+const memoryTrials = count("memory-trials");
+const warmupIterations = 20_000;
+if (typeof globalThis.gc !== "function") {
+  throw new Error("Benchmark requires Node --expose-gc");
 }
-
-function runIterations(operation, iterations) {
+for (const option of ["run-id", "revision"]) {
+  if (values[option] !== undefined && !values[option].trim()) {
+    throw new Error(`--${option} must not be empty`);
+  }
+}
+const packageRoot = resolve(values["package-root"]);
+const manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
+if (
+  manifest.name !== "@microsoft/opentelemetry" ||
+  typeof manifest.version !== "string" ||
+  !manifest.version
+) {
+  throw new Error("--package-root must identify a built @microsoft/opentelemetry package");
+}
+const startedAt = new Date().toISOString();
+const benchmarks = [];
+function runIterations(operation, count) {
   const start = process.hrtime.bigint();
-  for (let index = 0; index < iterations; index += 1) {
+  for (let index = 0; index < count; index += 1) {
     operation();
   }
-  return Number(process.hrtime.bigint() - start) / iterations;
+  return Number(process.hrtime.bigint() - start);
 }
-
-async function benchmark(name, operation, iterations, rounds) {
-  runIterations(operation, WARMUP_ITERATIONS);
-  const samples = [];
-
-  for (let round = 0; round < rounds; round += 1) {
-    globalThis.gc?.();
-    samples.push(runIterations(operation, iterations));
-    await new Promise((resolveRound) => setImmediate(resolveRound));
-  }
-
-  const result = {
-    gating: true,
-    name,
-    samples,
-    stats: { median: median(samples) },
-    unit: "ns/op",
-  };
-  console.log(`${name}: ${result.stats.median.toFixed(1)} ns/op`);
-  return result;
-}
-
-const packageRootArgument = readArgument("--package-root", process.cwd());
-const packageRoot = isAbsolute(packageRootArgument)
-  ? packageRootArgument
-  : resolve(process.cwd(), packageRootArgument);
-const outputArgument = readArgument("--output");
-const iterations = Number(readArgument("--iterations", String(DEFAULT_ITERATIONS)));
-const rounds = Number(readArgument("--rounds", String(DEFAULT_ROUNDS)));
-
-if (!Number.isInteger(iterations) || iterations <= 0) {
-  throw new Error("--iterations must be a positive integer");
-}
-if (!Number.isInteger(rounds) || rounds <= 0) {
-  throw new Error("--rounds must be a positive integer");
-}
-
-const distroEntryPoint = pathToFileURL(join(packageRoot, "dist", "esm", "index.js")).href;
-const requireFromPackage = createRequire(join(packageRoot, "package.json"));
-const { trace } = requireFromPackage("@opentelemetry/api");
-process.env.MICROSOFT_OTEL_SDKSTATS_DISABLED = "true";
-const { shutdownMicrosoftOpenTelemetry, useMicrosoftOpenTelemetry } = await import(
-  distroEntryPoint
-);
-const spanProcessor = {
-  forceFlush: () => Promise.resolve(),
-  onEnd: () => {},
-  onStart: () => {},
-  shutdown: () => Promise.resolve(),
-};
-
-useMicrosoftOpenTelemetry({
-  azureMonitor: { enabled: false },
-  enableConsoleExporters: false,
-  instrumentationOptions: {
-    azureSdk: { enabled: false },
-    bunyan: { enabled: false },
-    console: { enabled: false },
-    http: { enabled: false },
-    langchain: { enabled: false },
-    mongoDb: { enabled: false },
-    mySql: { enabled: false },
-    openaiAgents: { enabled: false },
-    postgreSql: { enabled: false },
-    redis: { enabled: false },
-    redis4: { enabled: false },
-    winston: { enabled: false },
-  },
-  samplingRatio: 1,
-  spanProcessors: [spanProcessor],
-  tracesPerSecond: 0,
-});
-
-const tracer = trace.getTracer("performance-test");
-const probeSpan = tracer.startSpan("benchmark-probe");
-if (!probeSpan.isRecording()) {
-  throw new Error(`Benchmark tracer for ${packageRoot} is not backed by a recording provider`);
-}
-probeSpan.end();
-const benchmarks = [];
-
+const { scenarios, shutdown } = await startBenchmarkSdk(packageRoot);
 try {
-  benchmarks.push(
-    await benchmark(
-      "span",
-      () => {
-        tracer.startSpan("benchmark-span").end();
-      },
-      iterations,
-      rounds,
-    ),
-  );
-  benchmarks.push(
-    await benchmark(
-      "span_with_attribute",
-      () => {
-        const span = tracer.startSpan("benchmark-span");
-        span.setAttribute("benchmark.attribute", 1);
-        span.end();
-      },
-      iterations,
-      rounds,
-    ),
-  );
+  for (const scenario of scenarios) {
+    runIterations(scenario.operation, warmupIterations);
+    const durationsNs = [];
+    for (let round = 0; round < rounds; round += 1) {
+      globalThis.gc();
+      durationsNs.push(runIterations(scenario.operation, iterations));
+      await new Promise((resolveRound) => setImmediate(resolveRound));
+    }
+    const samples = durationsNs.map((duration) => duration / iterations);
+    benchmarks.push({
+      name: scenario.name,
+      test: scenario.test,
+      category: scenario.category,
+      gating: scenario.category === "span",
+      samples,
+      durationsNs,
+      operationsPerSecond: durationsNs.map((duration) => (iterations * 1e9) / duration),
+      stats: { median: median(samples) },
+      unit: "ns/op",
+      completedAt: new Date().toISOString(),
+    });
+  }
 } finally {
-  await shutdownMicrosoftOpenTelemetry();
+  await shutdown();
 }
-
+const memory = [];
+const execute = promisify(execFile);
+for (const scenario of scenarios) {
+  const trials = [];
+  for (let trial = 0; trial < memoryTrials; trial += 1) {
+    const { stdout } = await execute(
+      process.execPath,
+      [
+        "--expose-gc",
+        fileURLToPath(new URL("./memory-worker.mjs", import.meta.url)),
+        "--package-root",
+        packageRoot,
+        "--scenario",
+        scenario.name,
+        "--iterations",
+        String(memoryIterations),
+      ],
+      { timeout: 120_000, maxBuffer: 1024 * 1024, windowsHide: true },
+    );
+    const lines = stdout.split(/\r?\n/).filter((line) => line.startsWith("MEMORY_RESULT:"));
+    if (lines.length !== 1) {
+      throw new Error(`Memory worker ${scenario.name} did not return exactly one result`);
+    }
+    trials.push(JSON.parse(lines[0].slice("MEMORY_RESULT:".length)));
+  }
+  memory.push({
+    name: scenario.name,
+    test: scenario.test,
+    category: scenario.category,
+    trials,
+    completedAt: new Date().toISOString(),
+  });
+}
 const result = {
-  benchmarks,
-  iterations,
+  schemaVersion: 1,
+  package: { name: manifest.name, version: manifest.version },
   packageRoot,
+  harness: { name: "microsoft-opentelemetry-benchmark", version: "1" },
+  environment: {
+    runtimeName: "nodejs",
+    runtimeVersion: process.versions.node,
+    osType: { win32: "windows", darwin: "darwin" }[process.platform] ?? process.platform,
+    osVersion: release(),
+    architecture:
+      { x64: "amd64", ia32: "x86", arm: "arm32", arm64: "arm64" }[process.arch] ?? process.arch,
+  },
+  ...(values["run-id"] === undefined ? {} : { runId: values["run-id"] }),
+  ...(values.revision === undefined ? {} : { revision: values.revision }),
+  startedAt,
+  completedAt: new Date().toISOString(),
+  iterations,
   rounds,
+  warmupIterations,
+  memoryIterations,
+  memoryTrials,
+  benchmarks,
+  memory,
 };
-
-if (outputArgument) {
-  await writeFile(outputArgument, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+const json = `${JSON.stringify(result, null, 2)}\n`;
+if (values.output) {
+  await mkdir(dirname(resolve(values.output)), { recursive: true });
+  await writeFile(values.output, json, "utf8");
 } else {
-  console.log(JSON.stringify(result, null, 2));
+  process.stdout.write(json);
 }
