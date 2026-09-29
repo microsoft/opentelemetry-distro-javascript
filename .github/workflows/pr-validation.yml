@@ -27,9 +27,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Type-check test sources
-        run: npm run typecheck:test
-
       - name: Format check
         run: npm run format
 

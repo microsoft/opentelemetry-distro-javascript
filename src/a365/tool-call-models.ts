@@ -1,6 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+export const EXECUTE_TOOL_PAYLOAD_KIND = Symbol.for(
+  "@microsoft/opentelemetry.execute_tool_payload_kind",
+);
+
 /** Action requested by an execute tool call. */
 export enum ToolCallAction {
   /** Create a resource. */
@@ -131,6 +135,7 @@ export interface ToolCallResultResource extends ToolCallResource {
 
 /** Structured arguments for an execute tool call. */
 export class ExecuteToolCallArguments implements ToolCallExtensionData {
+  declare readonly [EXECUTE_TOOL_PAYLOAD_KIND]: "arguments";
   /** Schema version for this payload. */
   declare schema_version: string;
   /** Resources referenced by the tool call. */
@@ -143,7 +148,8 @@ export class ExecuteToolCallArguments implements ToolCallExtensionData {
   declare extension_data?: Record<string, unknown>;
 
   constructor(init: Partial<ExecuteToolCallArguments> = {}) {
-    this.schema_version = init.schema_version ?? "1.0";
+    Object.defineProperty(this, EXECUTE_TOOL_PAYLOAD_KIND, { value: "arguments" });
+    this.schema_version = init.schema_version === undefined ? "1.0" : init.schema_version;
     if (init.resources !== undefined) this.resources = init.resources;
     if (init.action !== undefined) this.action = init.action;
     if (init.parameters !== undefined) this.parameters = init.parameters;
@@ -153,6 +159,7 @@ export class ExecuteToolCallArguments implements ToolCallExtensionData {
 
 /** Structured result for an execute tool call. */
 export class ExecuteToolCallResult implements ToolCallExtensionData {
+  declare readonly [EXECUTE_TOOL_PAYLOAD_KIND]: "result";
   /** Schema version for this payload. */
   declare schema_version: string;
   /** Overall tool call outcome. */
@@ -167,7 +174,8 @@ export class ExecuteToolCallResult implements ToolCallExtensionData {
   declare extension_data?: Record<string, unknown>;
 
   constructor(init: Partial<ExecuteToolCallResult> = {}) {
-    this.schema_version = init.schema_version ?? "1.0";
+    Object.defineProperty(this, EXECUTE_TOOL_PAYLOAD_KIND, { value: "result" });
+    this.schema_version = init.schema_version === undefined ? "1.0" : init.schema_version;
     if (init.outcome !== undefined) this.outcome = init.outcome;
     if (init.resources !== undefined) this.resources = init.resources;
     if (init.data !== undefined) this.data = init.data;

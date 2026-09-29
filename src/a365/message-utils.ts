@@ -34,6 +34,7 @@ import {
   ToolCallOutcomeStatus,
   ToolPolicyDecision,
 } from "./contracts.js";
+import { EXECUTE_TOOL_PAYLOAD_KIND } from "./tool-call-models.js";
 
 const EXECUTE_TOOL_SERIALIZATION_ERROR =
   '{"serialization_error":"Failed to serialize execute tool payload."}';
@@ -41,7 +42,10 @@ const EXECUTE_TOOL_SERIALIZATION_ERROR =
 function isTypedExecuteToolPayload(
   value: object,
 ): value is ExecuteToolCallArguments | ExecuteToolCallResult {
-  return value instanceof ExecuteToolCallArguments || value instanceof ExecuteToolCallResult;
+  const kind = (value as Partial<Record<typeof EXECUTE_TOOL_PAYLOAD_KIND, unknown>>)[
+    EXECUTE_TOOL_PAYLOAD_KIND
+  ];
+  return kind === "arguments" || kind === "result";
 }
 
 type JsonValue = null | boolean | number | string | JsonValue[] | JsonRecord;
@@ -164,7 +168,7 @@ function serializeTypedToolPayload(
 ): string {
   const stack = new Set<object>();
   const serialized =
-    value instanceof ExecuteToolCallArguments
+    value[EXECUTE_TOOL_PAYLOAD_KIND] === "arguments"
       ? serializeArguments(value, stack)
       : serializeResult(value, stack);
   return JSON.stringify(serialized);
@@ -365,7 +369,7 @@ function serializeOptionalSchemaArray<T extends object>(
   if (!Array.isArray(value)) {
     throw new TypeError("Execute tool schema collections must be arrays.");
   }
-  return withActiveContainer(value, stack, () => value.map((item) => serialize(item, stack)));
+  return serializeArray(value, stack, (item) => serialize(item, stack));
 }
 
 function serializeOptionalRecord(
@@ -390,8 +394,9 @@ function withMetadata(
     if (!isPlainRecord(extensionData)) {
       throw new TypeError("Execute tool extension data must be a plain object.");
     }
-    if (Object.keys(extensionData).length > 0) {
-      serialized.metadata = toJsonRecord(extensionData, stack);
+    const metadata = toJsonRecord(extensionData, stack);
+    if (Object.keys(metadata).length > 0) {
+      serialized.metadata = metadata;
     }
   }
   return serialized;
@@ -446,7 +451,7 @@ function toJsonValue(value: unknown, stack: Set<object>): JsonValue {
     return Buffer.from(value).toString("base64");
   }
   if (Array.isArray(value)) {
-    return withActiveContainer(value, stack, () => value.map((item) => toJsonValue(item, stack)));
+    return serializeArray(value, stack, (item) => toJsonValue(item, stack));
   }
   if (value instanceof Set) {
     return withActiveContainer(value, stack, () =>
@@ -465,10 +470,30 @@ function toJsonRecord(value: Record<string, unknown>, stack: Set<object>): JsonR
   if (!isPlainRecord(value)) {
     throw new TypeError("Execute tool payload mappings must be plain objects.");
   }
+  if (Object.getOwnPropertySymbols(value).length > 0) {
+    throw new TypeError("Execute tool payload mappings must use string keys.");
+  }
   return withActiveContainer(value, stack, () => {
-    const serialized: JsonRecord = {};
+    const serialized = Object.create(null) as JsonRecord;
     for (const [key, item] of Object.entries(value)) {
       serialized[key] = toJsonValue(item, stack);
+    }
+    return serialized;
+  });
+}
+
+function serializeArray<T>(
+  value: T[],
+  stack: Set<object>,
+  serialize: (item: T) => JsonValue,
+): JsonValue[] {
+  return withActiveContainer(value, stack, () => {
+    const serialized: JsonValue[] = [];
+    for (let index = 0; index < value.length; index++) {
+      if (!(index in value)) {
+        throw new TypeError("Execute tool payload arrays must not be sparse.");
+      }
+      serialized.push(serialize(value[index]));
     }
     return serialized;
   });

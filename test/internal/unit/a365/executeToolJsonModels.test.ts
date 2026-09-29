@@ -89,6 +89,14 @@ describe("execute tool JSON models", () => {
     expect(explicitArgs.schema_version).toBe("2.0");
   });
 
+  it("preserves explicit null schema versions for omission during serialization", () => {
+    const argumentsModel = new a365.ExecuteToolCallArguments({ schema_version: null as any });
+    const resultModel = new a365.ExecuteToolCallResult({ schema_version: null as any });
+
+    expect(argumentsModel.schema_version).toBeNull();
+    expect(resultModel.schema_version).toBeNull();
+  });
+
   it("allows execute tool call argument models in ToolCallDetails.arguments", () => {
     const argumentsModel = new a365.ExecuteToolCallArguments({
       action: a365.ToolCallAction.READ,

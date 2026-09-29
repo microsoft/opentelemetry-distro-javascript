@@ -442,6 +442,38 @@ describe("serializeToolPayload", () => {
     });
   });
 
+  it("omits explicit null schema versions", () => {
+    const payload = new ExecuteToolCallArguments({ schema_version: null as any });
+
+    expect(JSON.parse(serializeToolPayload(payload) as string)).toEqual({});
+  });
+
+  it("preserves __proto__ as an own mapping key", () => {
+    const data = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(data, "__proto__", {
+      value: { provider: "graph" },
+      enumerable: true,
+    });
+    data.kept = 1;
+
+    const serialized = serializeToolPayload(
+      new ExecuteToolCallResult({
+        data,
+        extension_data: data,
+      }),
+    );
+
+    const parsed = JSON.parse(serialized as string);
+
+    expect(parsed.schema_version).toBe("1.0");
+    expect(parsed.data.kept).toBe(1);
+    expect(parsed.metadata.kept).toBe(1);
+    expect(Object.hasOwn(parsed.data, "__proto__")).toBe(true);
+    expect(Object.hasOwn(parsed.metadata, "__proto__")).toBe(true);
+    expect(parsed.data["__proto__"]).toEqual({ provider: "graph" });
+    expect(parsed.metadata["__proto__"]).toEqual({ provider: "graph" });
+  });
+
   it.each([
     ["action", new ExecuteToolCallArguments({ action: "READ" as any })],
     [
@@ -474,6 +506,28 @@ describe("serializeToolPayload", () => {
     ["bigint", BigInt(1)],
   ])("returns the exact fallback for unsupported %s mapping values", (_name, value) => {
     expect(serializeToolPayload(new ExecuteToolCallArguments({ parameters: { value } }))).toBe(
+      serializationError,
+    );
+  });
+
+  it("returns the exact fallback for sparse arrays", () => {
+    const values = new Array(2);
+    values[1] = 1;
+
+    expect(serializeToolPayload(new ExecuteToolCallResult({ data: { values } }))).toBe(
+      serializationError,
+    );
+  });
+
+  it("returns the exact fallback for symbol-keyed mappings", () => {
+    const data = { kept: true };
+    Object.defineProperty(data, Symbol("unsupported"), {
+      value: "dropped",
+      enumerable: true,
+    });
+
+    expect(serializeToolPayload(new ExecuteToolCallResult({ data }))).toBe(serializationError);
+    expect(serializeToolPayload(new ExecuteToolCallResult({ extension_data: data }))).toBe(
       serializationError,
     );
   });
