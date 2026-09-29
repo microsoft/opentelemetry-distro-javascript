@@ -9,7 +9,12 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import { trace, type ProxyTracerProvider } from "@opentelemetry/api";
 import * as OpenAIAgents from "@openai/agents";
-import { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } from "../../../src/index.js";
+import {
+  BaggageBuilder,
+  OpenTelemetryConstants,
+  useMicrosoftOpenTelemetry,
+  shutdownMicrosoftOpenTelemetry,
+} from "../../../src/index.js";
 import { OpenAIAgentsTraceInstrumentor } from "../../../src/genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js";
 import { ATTR_GEN_AI_OPERATION_NAME, GEN_AI_OPERATION_CHAT } from "../../../src/genai/index.js";
 
@@ -35,15 +40,22 @@ describe("OpenAI Agents distro integration", () => {
     vi.restoreAllMocks();
   });
 
-  it("wires OpenAI Agents via distro init and emits spans with microsoft-otel-openai-agents scope", async () => {
+  it("wires OpenAI Agents via distro init with the built-in instrumentation scope", async () => {
     useMicrosoftOpenTelemetry({
       tracesPerSecond: 0,
       samplingRatio: 1,
+      a365: {
+        enabled: true,
+        tokenResolver: () => "token",
+      },
       azureMonitor: { enabled: false },
       enableConsoleExporters: false,
       spanProcessors: [new SimpleSpanProcessor(exporter)],
       instrumentationOptions: {
-        openaiAgents: { enabled: true, isContentRecordingEnabled: true },
+        openaiAgents: {
+          enabled: true,
+          isContentRecordingEnabled: true,
+        },
         langchain: { enabled: false },
       },
     });
@@ -57,10 +69,14 @@ describe("OpenAI Agents distro integration", () => {
       expect(OpenAIAgents.getCurrentTrace()).toBeNull();
     });
 
-    await vi.waitFor(async () => {
-      exporter.reset();
-      OpenAIAgentsTraceInstrumentor.enable();
+    exporter.reset();
+    OpenAIAgentsTraceInstrumentor.enable();
+    const baggageScope = new BaggageBuilder()
+      .tenantId("tenant-123")
+      .customAttribute("custom.scope", "openai")
+      .build();
 
+    await baggageScope.run(async () => {
       await OpenAIAgents.withTrace("genai-openai-integration", async () => {
         await OpenAIAgents.withGenerationSpan(
           async () => {
@@ -76,15 +92,17 @@ describe("OpenAI Agents distro integration", () => {
           } as any,
         );
       });
-
-      await flushGlobalTracerProvider();
-      const spans = exporter.getFinishedSpans();
-      expect(spans.length).toBeGreaterThan(0);
-      const chatSpan = spans.find(
-        (s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_CHAT,
-      );
-      expect(chatSpan).toBeDefined();
-      expect(chatSpan?.instrumentationScope.name).toBe("microsoft-otel-openai-agents");
     });
+
+    await flushGlobalTracerProvider();
+    const spans = exporter.getFinishedSpans();
+    expect(spans.length).toBeGreaterThan(0);
+    const chatSpan = spans.find(
+      (s) => s.attributes[ATTR_GEN_AI_OPERATION_NAME] === GEN_AI_OPERATION_CHAT,
+    );
+    expect(chatSpan).toBeDefined();
+    expect(chatSpan?.instrumentationScope.name).toBe("microsoft-otel-openai-agents");
+    expect(chatSpan?.attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+    expect(chatSpan?.attributes["custom.scope"]).toBe("openai");
   });
 });

@@ -9,7 +9,12 @@ import {
   BasicTracerProvider,
 } from "@opentelemetry/sdk-trace-base";
 import { trace, type ProxyTracerProvider } from "@opentelemetry/api";
-import { useMicrosoftOpenTelemetry, shutdownMicrosoftOpenTelemetry } from "../../../src/index.js";
+import {
+  BaggageBuilder,
+  OpenTelemetryConstants,
+  useMicrosoftOpenTelemetry,
+  shutdownMicrosoftOpenTelemetry,
+} from "../../../src/index.js";
 import { LangChainTraceInstrumentor } from "../../../src/genai/instrumentations/langchain/langchainTraceInstrumentor.js";
 import { ATTR_GEN_AI_OPERATION_NAME, GEN_AI_OPERATION_CHAT } from "../../../src/genai/index.js";
 
@@ -74,6 +79,10 @@ describe("GenAI distro integration", () => {
     useMicrosoftOpenTelemetry({
       tracesPerSecond: 0,
       samplingRatio: 1,
+      a365: {
+        enabled: true,
+        tokenResolver: () => "token",
+      },
       azureMonitor: { enabled: false },
       enableConsoleExporters: false,
       spanProcessors: [new SimpleSpanProcessor(exporter)],
@@ -97,8 +106,15 @@ describe("GenAI distro integration", () => {
     ) as any;
 
     const run = makeLangChainRun();
-    await langChainTracer.onRunCreate(run);
-    await langChainTracer._endTrace(run);
+    const baggageScope = new BaggageBuilder()
+      .tenantId("tenant-123")
+      .customAttribute("custom.scope", "langchain")
+      .build();
+
+    await baggageScope.run(async () => {
+      await langChainTracer.onRunCreate(run);
+      await langChainTracer._endTrace(run);
+    });
     await flushGlobalTracerProvider();
 
     const spans = exporter.getFinishedSpans();
@@ -108,5 +124,7 @@ describe("GenAI distro integration", () => {
     );
     expect(chatSpan).toBeDefined();
     expect(chatSpan?.instrumentationScope.name).toBe("microsoft-otel-langchain");
+    expect(chatSpan?.attributes[OpenTelemetryConstants.TENANT_ID_KEY]).toBe("tenant-123");
+    expect(chatSpan?.attributes["custom.scope"]).toBe("langchain");
   });
 });

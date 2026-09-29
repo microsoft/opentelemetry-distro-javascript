@@ -121,6 +121,7 @@ export abstract class OpenTelemetryScope {
         agentDetails.agentBlueprintId,
       );
       this.setTagMaybe(OpenTelemetryConstants.GEN_AI_AGENT_VERSION_KEY, agentDetails.agentVersion);
+      this.setTagMaybe(OpenTelemetryConstants.GEN_AI_PROVIDER_NAME_KEY, agentDetails.providerName);
     }
 
     // Set tenant ID

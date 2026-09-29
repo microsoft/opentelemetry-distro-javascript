@@ -3,6 +3,9 @@
 
 import { MICROSOFT_OPENTELEMETRY_VERSION } from "../types.js";
 
+/** Internal baggage metadata key for registered custom attribute names. */
+export const INTERNAL_CUSTOM_KEYS_METADATA_KEY = "_internal.custom_keys";
+
 /**
  * OpenTelemetry constants for A365 observability.
  *
@@ -67,8 +70,16 @@ export class OpenTelemetryConstants {
 
   /** Attribute key for the gen-ai operation name (`gen_ai.operation.name`). */
   public static readonly GEN_AI_OPERATION_NAME_KEY = "gen_ai.operation.name";
+  /** Attribute key for the external data source identifier (`gen_ai.data_source.id`). */
+  public static readonly GEN_AI_DATA_SOURCE_ID_KEY = "gen_ai.data_source.id";
+  /** Attribute key for the requested output type (`gen_ai.output.type`). */
+  public static readonly GEN_AI_OUTPUT_TYPE_KEY = "gen_ai.output.type";
   /** Attribute key for the requested model name (`gen_ai.request.model`). */
   public static readonly GEN_AI_REQUEST_MODEL_KEY = "gen_ai.request.model";
+  /** Attribute key for the requested number of choices (`gen_ai.request.choice.count`). */
+  public static readonly GEN_AI_REQUEST_CHOICE_COUNT_KEY = "gen_ai.request.choice.count";
+  /** Attribute key for the frequency penalty (`gen_ai.request.frequency_penalty`). */
+  public static readonly GEN_AI_REQUEST_FREQUENCY_PENALTY_KEY = "gen_ai.request.frequency_penalty";
   /** Attribute key for the model that produced the response (`gen_ai.response.model`). */
   public static readonly GEN_AI_RESPONSE_MODEL_KEY = "gen_ai.response.model";
   /** Attribute key for the finish reasons returned by the model (`gen_ai.response.finish_reasons`). */
@@ -77,6 +88,12 @@ export class OpenTelemetryConstants {
   public static readonly GEN_AI_PROVIDER_NAME_KEY = "gen_ai.provider.name";
   /** Attribute key for the requested maximum number of tokens (`gen_ai.request.max_tokens`). */
   public static readonly GEN_AI_REQUEST_MAX_TOKENS_KEY = "gen_ai.request.max_tokens";
+  /** Attribute key for the presence penalty (`gen_ai.request.presence_penalty`). */
+  public static readonly GEN_AI_REQUEST_PRESENCE_PENALTY_KEY = "gen_ai.request.presence_penalty";
+  /** Attribute key for the request seed (`gen_ai.request.seed`). */
+  public static readonly GEN_AI_REQUEST_SEED_KEY = "gen_ai.request.seed";
+  /** Attribute key for the stop sequences (`gen_ai.request.stop_sequences`). */
+  public static readonly GEN_AI_REQUEST_STOP_SEQUENCES_KEY = "gen_ai.request.stop_sequences";
   /** Attribute key for the sampling temperature (`gen_ai.request.temperature`). */
   public static readonly GEN_AI_REQUEST_TEMPERATURE_KEY = "gen_ai.request.temperature";
   /** Attribute key for the nucleus-sampling top-p value (`gen_ai.request.top_p`). */
@@ -94,6 +111,12 @@ export class OpenTelemetryConstants {
 
   // ── GenAI usage ──────────────────────────────────────────────────
 
+  /** Attribute key for the number of input tokens written into the cache (`gen_ai.usage.cache_write.input_tokens`). */
+  public static readonly GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY =
+    "gen_ai.usage.cache_write.input_tokens";
+  /** Attribute key for the number of input tokens read from the cache (`gen_ai.usage.cache_read.input_tokens`). */
+  public static readonly GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY =
+    "gen_ai.usage.cache_read.input_tokens";
   /** Attribute key for the number of input (prompt) tokens (`gen_ai.usage.input_tokens`). */
   public static readonly GEN_AI_USAGE_INPUT_TOKENS_KEY = "gen_ai.usage.input_tokens";
   /** Attribute key for the number of output (completion) tokens (`gen_ai.usage.output_tokens`). */
