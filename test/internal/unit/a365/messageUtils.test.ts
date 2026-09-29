@@ -519,6 +519,15 @@ describe("serializeToolPayload", () => {
     );
   });
 
+  it("returns the exact fallback when a sparse array inherits an indexed value", () => {
+    const values = new Array(1);
+    Object.setPrototypeOf(values, { 0: "inherited" });
+
+    expect(serializeToolPayload(new ExecuteToolCallResult({ data: { values } }))).toBe(
+      serializationError,
+    );
+  });
+
   it("returns the exact fallback for symbol-keyed mappings", () => {
     const data = { kept: true };
     Object.defineProperty(data, Symbol("unsupported"), {

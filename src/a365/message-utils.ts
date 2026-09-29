@@ -490,7 +490,7 @@ function serializeArray<T>(
   return withActiveContainer(value, stack, () => {
     const serialized: JsonValue[] = [];
     for (let index = 0; index < value.length; index++) {
-      if (!(index in value)) {
+      if (!Object.hasOwn(value, index)) {
         throw new TypeError("Execute tool payload arrays must not be sparse.");
       }
       serialized.push(serialize(value[index]));
