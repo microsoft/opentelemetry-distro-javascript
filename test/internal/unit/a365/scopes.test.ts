@@ -1560,10 +1560,10 @@ describe("Request content and message serialization (span attributes)", () => {
             id: "doc-1",
             type: "document",
             provider: "sharepoint",
-            provider_resource_type: "page",
+            extension_data: { provider_resource_type: "page" },
           },
         ],
-        request_context: { scenario: "enterprise-search" },
+        extension_data: { request_context: { scenario: "enterprise-search" } },
       });
 
       const scope = ExecuteToolScope.start(
@@ -1582,8 +1582,8 @@ describe("Request content and message serialization (span attributes)", () => {
         sensitivity: "high",
         includeArchived: true,
       });
-      expect(parsed.resources[0].provider_resource_type).toBe("page");
-      expect(parsed.request_context).toEqual({ scenario: "enterprise-search" });
+      expect(parsed.resources[0].metadata.provider_resource_type).toBe("page");
+      expect(parsed.metadata.request_context).toEqual({ scenario: "enterprise-search" });
     });
 
     it("should serialize typed results with nested outcome and extension fields", () => {
@@ -1592,7 +1592,7 @@ describe("Request content and message serialization (span attributes)", () => {
           status: ToolCallOutcomeStatus.SUCCESS,
           message: "Fetched 1 document",
           provider_code: "OK",
-          retryable: false,
+          extension_data: { retryable: false },
         },
         resources: [
           {
@@ -1601,18 +1601,18 @@ describe("Request content and message serialization (span attributes)", () => {
             outcome: {
               status: ToolCallOutcomeStatus.SUCCESS,
               message: "available",
-              provider_status: "complete",
+              extension_data: { provider_status: "complete" },
             },
             data: { title: "Doc A" },
-            relevance_score: 0.95,
+            extension_data: { relevance_score: 0.95 },
           },
         ],
         pagination: {
           has_more: false,
           total_count: 1,
-          request_charge: 3,
+          extension_data: { request_charge: 3 },
         },
-        source_trace: { provider: "sharepoint" },
+        extension_data: { source_trace: { provider: "sharepoint" } },
       });
 
       const scope = ExecuteToolScope.start(testRequest, { toolName: "tool" }, testAgentDetails);
@@ -1627,16 +1627,16 @@ describe("Request content and message serialization (span attributes)", () => {
         status: "success",
         message: "Fetched 1 document",
         provider_code: "OK",
-        retryable: false,
+        metadata: { retryable: false },
       });
-      expect(parsed.resources[0].outcome.provider_status).toBe("complete");
-      expect(parsed.resources[0].relevance_score).toBe(0.95);
+      expect(parsed.resources[0].outcome.metadata.provider_status).toBe("complete");
+      expect(parsed.resources[0].metadata.relevance_score).toBe(0.95);
       expect(parsed.pagination).toEqual({
         has_more: false,
         total_count: 1,
-        request_charge: 3,
+        metadata: { request_charge: 3 },
       });
-      expect(parsed.source_trace).toEqual({ provider: "sharepoint" });
+      expect(parsed.metadata.source_trace).toEqual({ provider: "sharepoint" });
     });
 
     it("should omit the typed result attribute when response is undefined", () => {
@@ -1676,11 +1676,13 @@ describe("Request content and message serialization (span attributes)", () => {
     });
 
     it("should use the typed fallback for circular ExecuteToolCallArguments instances", () => {
+      const extension_data: Record<string, unknown> = {};
       const typedArgs = new ExecuteToolCallArguments({
         action: ToolCallAction.READ,
         parameters: { query: "GDPR" },
+        extension_data,
       });
-      typedArgs.self = typedArgs;
+      extension_data.self = typedArgs;
 
       const scope = ExecuteToolScope.start(
         testRequest,
@@ -1708,12 +1710,14 @@ describe("Request content and message serialization (span attributes)", () => {
     });
 
     it("should use the typed fallback for circular ExecuteToolCallResult instances", () => {
+      const data: Record<string, unknown> = {};
       const typedResult = new ExecuteToolCallResult({
         outcome: {
           status: ToolCallOutcomeStatus.SUCCESS,
         },
+        data,
       });
-      typedResult.self = typedResult;
+      data.self = data;
 
       const scope = ExecuteToolScope.start(testRequest, { toolName: "tool" }, testAgentDetails);
       scope.recordResponse(typedResult);

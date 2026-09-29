@@ -10,6 +10,7 @@ import {
   Modality,
   ToolCallAction,
   ToolCallOutcomeStatus,
+  ToolPolicyDecision,
 } from "../../../../src/a365/contracts.js";
 import type { InputMessages, OutputMessages } from "../../../../src/a365/contracts.js";
 import {
@@ -336,7 +337,7 @@ describe("serializeToolPayload", () => {
     expect(serializeToolPayload(null)).toBeUndefined();
   });
 
-  it("serializes typed payloads with schema version, nested values, and extension fields", () => {
+  it("serializes extension data as metadata without replacing declared fields", () => {
     const payload = new ExecuteToolCallArguments({
       action: ToolCallAction.READ,
       parameters: {
@@ -348,23 +349,169 @@ describe("serializeToolPayload", () => {
           id: "doc-1",
           type: "document",
           provider: "sharepoint",
-          provider_resource_type: "page",
+          extension_data: { provider_resource_type: "page" },
         },
       ],
-      request_context: { scenario: "enterprise-search" },
+      extension_data: {
+        action: "write",
+        schema_version: "9.9",
+        request_context: { scenario: "enterprise-search" },
+      },
     });
 
     const serialized = serializeToolPayload(payload);
     const parsed = JSON.parse(serialized as string);
 
-    expect(parsed.schema_version).toBe("1.0");
-    expect(parsed.action).toBe("read");
-    expect(parsed.parameters.filters).toEqual({
-      sensitivity: "high",
-      includeArchived: true,
+    expect(parsed).toEqual({
+      schema_version: "1.0",
+      action: "read",
+      parameters: {
+        query: "GDPR",
+        filters: { sensitivity: "high", includeArchived: true },
+      },
+      resources: [
+        {
+          id: "doc-1",
+          type: "document",
+          provider: "sharepoint",
+          metadata: { provider_resource_type: "page" },
+        },
+      ],
+      metadata: {
+        action: "write",
+        schema_version: "9.9",
+        request_context: { scenario: "enterprise-search" },
+      },
     });
-    expect(parsed.resources[0].provider_resource_type).toBe("page");
-    expect(parsed.request_context).toEqual({ scenario: "enterprise-search" });
+  });
+
+  it("keeps nested extension keys inside metadata", () => {
+    const payload = new ExecuteToolCallResult({
+      outcome: {
+        status: ToolCallOutcomeStatus.SUCCESS,
+        code: "ok",
+        extension_data: { code: "provider-code", status: "provider-status" },
+      },
+      resources: [
+        {
+          policy: {
+            decision: ToolPolicyDecision.ALLOW,
+            extension_data: { decision: "conditional-allow" },
+          },
+        },
+      ],
+    });
+
+    expect(JSON.parse(serializeToolPayload(payload) as string)).toEqual({
+      schema_version: "1.0",
+      outcome: {
+        status: "success",
+        code: "ok",
+        metadata: { code: "provider-code", status: "provider-status" },
+      },
+      resources: [
+        {
+          policy: {
+            decision: "allow",
+            metadata: { decision: "conditional-allow" },
+          },
+        },
+      ],
+    });
+  });
+
+  it("omits nullish declared fields and preserves nulls inside mappings and arrays", () => {
+    const payload = new ExecuteToolCallResult({
+      outcome: {
+        status: ToolCallOutcomeStatus.SUCCESS,
+        provider_code: null as any,
+        extension_data: { provider_outcome: null, attempts: 0 },
+      },
+      data: { content: null, matches: [null, 1] },
+      extension_data: { provider_result: null, cached: false },
+    });
+
+    expect(JSON.parse(serializeToolPayload(payload) as string)).toEqual({
+      schema_version: "1.0",
+      outcome: {
+        status: "success",
+        metadata: { provider_outcome: null, attempts: 0 },
+      },
+      data: { content: null, matches: [null, 1] },
+      metadata: { provider_result: null, cached: false },
+    });
+  });
+
+  it.each([
+    ["action", new ExecuteToolCallArguments({ action: "READ" as any })],
+    [
+      "outcome status",
+      new ExecuteToolCallResult({ outcome: { status: "ok" as ToolCallOutcomeStatus } }),
+    ],
+    [
+      "policy decision",
+      new ExecuteToolCallResult({
+        resources: [{ policy: { decision: "permit" as ToolPolicyDecision } }],
+      }),
+    ],
+  ])("returns the exact fallback for an invalid %s", (_name, payload) => {
+    expect(serializeToolPayload(payload)).toBe(serializationError);
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "returns the exact fallback for non-finite number %s",
+    (value) => {
+      expect(serializeToolPayload(new ExecuteToolCallResult({ data: { value } }))).toBe(
+        serializationError,
+      );
+    },
+  );
+
+  it.each([
+    ["undefined", undefined],
+    ["function", () => "unsupported"],
+    ["symbol", Symbol("unsupported")],
+    ["bigint", BigInt(1)],
+  ])("returns the exact fallback for unsupported %s mapping values", (_name, value) => {
+    expect(
+      serializeToolPayload(new ExecuteToolCallArguments({ parameters: { value } })),
+    ).toBe(serializationError);
+  });
+
+  it("returns the exact fallback when extension data is not a mapping", () => {
+    expect(
+      serializeToolPayload(
+        new ExecuteToolCallArguments({ extension_data: [] as unknown as Record<string, unknown> }),
+      ),
+    ).toBe(serializationError);
+  });
+
+  it("serializes supported JavaScript scalar and collection values", () => {
+    const payload = new ExecuteToolCallResult({
+      data: {
+        timestamp: new Date("2026-01-02T03:04:05.000Z"),
+        bytes: new Uint8Array([0, 1, 2, 3]),
+        scopes: new Set(["read", "write"]),
+      },
+    });
+
+    expect(JSON.parse(serializeToolPayload(payload) as string).data).toEqual({
+      timestamp: "2026-01-02T03:04:05.000Z",
+      bytes: "AAECAw==",
+      scopes: ["read", "write"],
+    });
+  });
+
+  it("serializes repeated references that are not cycles", () => {
+    const shared = { value: true };
+    const payload = new ExecuteToolCallResult({
+      data: { first: shared, second: shared },
+    });
+
+    expect(JSON.parse(serializeToolPayload(payload) as string).data).toEqual({
+      first: { value: true },
+      second: { value: true },
+    });
   });
 
   it("returns the legacy fallback for circular generic payloads", () => {
@@ -375,18 +522,23 @@ describe("serializeToolPayload", () => {
   });
 
   it("returns the exact fallback for circular ExecuteToolCallArguments payloads", () => {
-    const payload = new ExecuteToolCallArguments({ action: ToolCallAction.READ });
-    payload.self = payload;
+    const extension_data: Record<string, unknown> = {};
+    const payload = new ExecuteToolCallArguments({
+      action: ToolCallAction.READ,
+      extension_data,
+    });
+    extension_data.self = payload;
 
     expect(serializeToolPayload(payload)).toBe(serializationError);
   });
 
   it("returns the exact fallback for circular ExecuteToolCallResult payloads", () => {
+    const data: Record<string, unknown> = { count: 1 };
     const result = new ExecuteToolCallResult({
       outcome: { status: ToolCallOutcomeStatus.SUCCESS },
-      data: { count: 1 },
+      data,
     });
-    result.self = result;
+    data.self = data;
 
     expect(serializeToolPayload(result)).toBe(serializationError);
   });
@@ -394,16 +546,24 @@ describe("serializeToolPayload", () => {
   it("returns the exact fallback for bigint payloads", () => {
     expect(
       serializeToolPayload(
-        new ExecuteToolCallArguments({ action: ToolCallAction.READ, count: BigInt(1) }),
+        new ExecuteToolCallArguments({
+          action: ToolCallAction.READ,
+          extension_data: { count: BigInt(1) },
+        }),
       ),
     ).toBe(serializationError);
   });
 
   it("returns the exact fallback when payload serialization throws", () => {
-    const payload = new ExecuteToolCallArguments({ action: ToolCallAction.READ });
-    payload.toJSON = () => {
-      throw new Error("boom");
+    const extension_data = {
+      get value(): never {
+        throw new Error("boom");
+      },
     };
+    const payload = new ExecuteToolCallArguments({
+      action: ToolCallAction.READ,
+      extension_data,
+    });
 
     expect(serializeToolPayload(payload)).toBe(serializationError);
   });
