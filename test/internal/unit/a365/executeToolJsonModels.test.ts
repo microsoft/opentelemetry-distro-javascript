@@ -5,10 +5,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as a365 from "../../../../src/a365/index.js";
 import * as rootExports from "../../../../src/index.js";
-import type {
-  ToolCallDetails,
-  ToolCallExtensionData,
-} from "../../../../src/a365/index.js";
+import type { ToolCallDetails, ToolCallExtensionData } from "../../../../src/a365/index.js";
 import type { ToolCallExtensionData as RootToolCallExtensionData } from "../../../../src/index.js";
 
 describe("execute tool JSON models", () => {

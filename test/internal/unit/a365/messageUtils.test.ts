@@ -473,9 +473,9 @@ describe("serializeToolPayload", () => {
     ["symbol", Symbol("unsupported")],
     ["bigint", BigInt(1)],
   ])("returns the exact fallback for unsupported %s mapping values", (_name, value) => {
-    expect(
-      serializeToolPayload(new ExecuteToolCallArguments({ parameters: { value } })),
-    ).toBe(serializationError);
+    expect(serializeToolPayload(new ExecuteToolCallArguments({ parameters: { value } }))).toBe(
+      serializationError,
+    );
   });
 
   it("returns the exact fallback when extension data is not a mapping", () => {

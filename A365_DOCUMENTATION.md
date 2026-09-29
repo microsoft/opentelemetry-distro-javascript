@@ -56,11 +56,11 @@ invokeScope.run(async () => {
           uri: "https://contoso.example/folders/1",
           type: "folder",
         },
-        custom_resource_field: "kept",
+        extension_data: { custom_resource_field: "kept" },
       },
     ],
     parameters: { query: "hello", includeArchived: false },
-    custom_argument_field: "kept",
+    extension_data: { custom_argument_field: "kept" },
   });
 
   const toolScope = ExecuteToolScope.start(
@@ -102,11 +102,11 @@ invokeScope.run(async () => {
             name: "AllowDocumentRead",
           },
           data: { snippetCount: 3 },
-          custom_result_field: "kept",
+          extension_data: { custom_result_field: "kept" },
         },
       ],
       pagination: { has_more: false, total_count: 1 },
-      custom_result_field: "kept",
+      extension_data: { custom_result_field: "kept" },
     }),
   );
 
@@ -126,6 +126,13 @@ invokeScope.dispose();
 
 `ExecuteToolScope` serializes arguments to `gen_ai.tool.call.arguments` and results to
 `gen_ai.tool.call.result` as JSON span attributes, so they may contain sensitive data.
+Use `extension_data` for provider-specific fields on any typed ExecuteTool model. Non-empty
+extension data is emitted under the model's `metadata` JSON property. Metadata keys remain
+isolated from declared schema fields, so an `extension_data.action` or
+`extension_data.schema_version` value cannot replace the typed `action` or `schema_version`.
+Typed payloads that contain invalid enum tokens, non-finite numbers, unsupported values, or
+reference cycles are replaced with
+`{"serialization_error":"Failed to serialize execute tool payload."}`.
 
 `InvokeAgentScope`, `InferenceScope`, and `ExecuteToolScope` accept `request.sessionId`.
 When you provide it, those scopes write `microsoft.session.id` directly on the created

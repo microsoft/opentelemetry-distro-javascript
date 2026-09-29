@@ -170,10 +170,7 @@ function serializeTypedToolPayload(
   return JSON.stringify(serialized);
 }
 
-function serializeArguments(
-  value: ExecuteToolCallArguments,
-  stack: Set<object>,
-): JsonRecord {
+function serializeArguments(value: ExecuteToolCallArguments, stack: Set<object>): JsonRecord {
   return withActiveContainer(value, stack, () =>
     withMetadata(
       {
@@ -194,17 +191,9 @@ function serializeResult(value: ExecuteToolCallResult, stack: Set<object>): Json
       {
         schema_version: toOptionalJsonValue(value.schema_version, stack),
         outcome: serializeOptionalSchemaObject(value.outcome, serializeOutcome, stack),
-        resources: serializeOptionalSchemaArray(
-          value.resources,
-          serializeResultResource,
-          stack,
-        ),
+        resources: serializeOptionalSchemaArray(value.resources, serializeResultResource, stack),
         data: serializeOptionalRecord(value.data, stack),
-        pagination: serializeOptionalSchemaObject(
-          value.pagination,
-          serializePagination,
-          stack,
-        ),
+        pagination: serializeOptionalSchemaObject(value.pagination, serializePagination, stack),
       },
       value.extension_data,
       stack,
@@ -251,20 +240,13 @@ function serializeResource(value: ToolCallResource, stack: Set<object>): JsonRec
   );
 }
 
-function serializeResultResource(
-  value: ToolCallResultResource,
-  stack: Set<object>,
-): JsonRecord {
+function serializeResultResource(value: ToolCallResultResource, stack: Set<object>): JsonRecord {
   return serializeSchemaObject(value, stack, () =>
     withMetadata(
       {
         ...serializeResourceFields(value, stack),
         outcome: serializeOptionalSchemaObject(value.outcome, serializeOutcome, stack),
-        sensitivity: serializeOptionalSchemaObject(
-          value.sensitivity,
-          serializeSensitivity,
-          stack,
-        ),
+        sensitivity: serializeOptionalSchemaObject(value.sensitivity, serializeSensitivity, stack),
         policy: serializeOptionalSchemaObject(value.policy, serializePolicy, stack),
         security: serializeOptionalSchemaObject(value.security, serializeSecurity, stack),
         data: serializeOptionalRecord(value.data, stack),
@@ -285,11 +267,7 @@ function serializeResourceFields(
     name: toOptionalJsonValue(value.name, stack),
     type: toOptionalJsonValue(value.type, stack),
     provider: toOptionalJsonValue(value.provider, stack),
-    identifiers: serializeOptionalSchemaArray(
-      value.identifiers,
-      serializeIdentifier,
-      stack,
-    ),
+    identifiers: serializeOptionalSchemaArray(value.identifiers, serializeIdentifier, stack),
     container: serializeOptionalSchemaObject(value.container, serializeContainer, stack),
   };
 }
@@ -298,11 +276,7 @@ function serializeOutcome(value: ToolCallResultOutcome, stack: Set<object>): Jso
   return serializeSchemaObject(value, stack, () =>
     withMetadata(
       {
-        status: validateOptionalEnum(
-          value.status,
-          TOOL_CALL_OUTCOME_STATUS_VALUES,
-          "status",
-        ),
+        status: validateOptionalEnum(value.status, TOOL_CALL_OUTCOME_STATUS_VALUES, "status"),
         code: toOptionalJsonValue(value.code, stack),
         provider_code: toOptionalJsonValue(value.provider_code, stack),
         message: toOptionalJsonValue(value.message, stack),
@@ -313,10 +287,7 @@ function serializeOutcome(value: ToolCallResultOutcome, stack: Set<object>): Jso
   );
 }
 
-function serializeSensitivity(
-  value: ToolCallResultSensitivity,
-  stack: Set<object>,
-): JsonRecord {
+function serializeSensitivity(value: ToolCallResultSensitivity, stack: Set<object>): JsonRecord {
   return serializeSchemaObject(value, stack, () =>
     withMetadata(
       { label_id: toOptionalJsonValue(value.label_id, stack) },
@@ -330,11 +301,7 @@ function serializePolicy(value: ToolCallResultPolicy, stack: Set<object>): JsonR
   return serializeSchemaObject(value, stack, () =>
     withMetadata(
       {
-        decision: validateOptionalEnum(
-          value.decision,
-          TOOL_POLICY_DECISION_VALUES,
-          "decision",
-        ),
+        decision: validateOptionalEnum(value.decision, TOOL_POLICY_DECISION_VALUES, "decision"),
         id: toOptionalJsonValue(value.id, stack),
         name: toOptionalJsonValue(value.name, stack),
       },
@@ -354,10 +321,7 @@ function serializeSecurity(value: ToolCallResultSecurity, stack: Set<object>): J
   );
 }
 
-function serializePagination(
-  value: ToolCallResultPagination,
-  stack: Set<object>,
-): JsonRecord {
+function serializePagination(value: ToolCallResultPagination, stack: Set<object>): JsonRecord {
   return serializeSchemaObject(value, stack, () =>
     withMetadata(
       {
@@ -447,10 +411,7 @@ function validateOptionalEnum(
   return value;
 }
 
-function toOptionalJsonValue(
-  value: unknown,
-  stack: Set<object>,
-): JsonValue | undefined {
+function toOptionalJsonValue(value: unknown, stack: Set<object>): JsonValue | undefined {
   return value == null ? undefined : toJsonValue(value, stack);
 }
 
@@ -485,9 +446,7 @@ function toJsonValue(value: unknown, stack: Set<object>): JsonValue {
     return Buffer.from(value).toString("base64");
   }
   if (Array.isArray(value)) {
-    return withActiveContainer(value, stack, () =>
-      value.map((item) => toJsonValue(item, stack)),
-    );
+    return withActiveContainer(value, stack, () => value.map((item) => toJsonValue(item, stack)));
   }
   if (value instanceof Set) {
     return withActiveContainer(value, stack, () =>
@@ -515,11 +474,7 @@ function toJsonRecord(value: Record<string, unknown>, stack: Set<object>): JsonR
   });
 }
 
-function withActiveContainer<T>(
-  value: object,
-  stack: Set<object>,
-  serialize: () => T,
-): T {
+function withActiveContainer<T>(value: object, stack: Set<object>, serialize: () => T): T {
   if (stack.has(value)) {
     throw new TypeError("Circular reference detected in execute tool payload.");
   }
