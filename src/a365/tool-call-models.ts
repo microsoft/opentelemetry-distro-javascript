@@ -29,30 +29,32 @@ export enum ToolPolicyDecision {
   DENY = "deny",
 }
 
+/** Provider-specific properties not defined by an execute tool schema model. */
+export interface ToolCallExtensionData {
+  /** Properties serialized under the `metadata` wire field. */
+  extension_data?: Record<string, unknown>;
+}
+
 /** Resource identifier details for an execute tool call. */
-export interface ToolCallIdentifier {
+export interface ToolCallIdentifier extends ToolCallExtensionData {
   /** Identifier type. */
   type?: string;
   /** Identifier value. */
   value?: string;
-  /** Provider-specific properties not defined by the schema. */
-  [key: string]: unknown;
 }
 
 /** Container metadata for a resource reference. */
-export interface ToolCallContainer {
+export interface ToolCallContainer extends ToolCallExtensionData {
   /** Container identifier. */
   id?: string;
   /** Container URI. */
   uri?: string;
   /** Container type. */
   type?: string;
-  /** Provider-specific properties not defined by the schema. */
-  [key: string]: unknown;
 }
 
 /** Resource metadata for an execute tool call. */
-export interface ToolCallResource {
+export interface ToolCallResource extends ToolCallExtensionData {
   /** Resource identifier. */
   id?: string;
   /** Resource URI. */
@@ -67,12 +69,10 @@ export interface ToolCallResource {
   identifiers?: ToolCallIdentifier[];
   /** Container that owns the resource. */
   container?: ToolCallContainer;
-  /** Provider-specific properties not defined by the schema. */
-  [key: string]: unknown;
 }
 
 /** Outcome details for an execute tool call result. */
-export interface ToolCallResultOutcome {
+export interface ToolCallResultOutcome extends ToolCallExtensionData {
   /** Whether the tool call succeeded or failed. */
   status?: ToolCallOutcomeStatus;
   /** Tool-specific result code. */
@@ -81,48 +81,38 @@ export interface ToolCallResultOutcome {
   provider_code?: string;
   /** Human-readable outcome message. */
   message?: string;
-  /** Provider-specific properties not defined by the schema. */
-  [key: string]: unknown;
 }
 
 /** Sensitivity metadata for a tool call result. */
-export interface ToolCallResultSensitivity {
+export interface ToolCallResultSensitivity extends ToolCallExtensionData {
   /** Sensitivity label identifier. */
   label_id?: string;
-  /** Provider-specific properties not defined by the schema. */
-  [key: string]: unknown;
 }
 
 /** Policy metadata for a tool call result. */
-export interface ToolCallResultPolicy {
+export interface ToolCallResultPolicy extends ToolCallExtensionData {
   /** Policy decision for the tool call. */
   decision?: ToolPolicyDecision;
   /** Policy identifier. */
   id?: string;
   /** Policy name. */
   name?: string;
-  /** Provider-specific properties not defined by the schema. */
-  [key: string]: unknown;
 }
 
 /** Security metadata for a tool call result. */
-export interface ToolCallResultSecurity {
+export interface ToolCallResultSecurity extends ToolCallExtensionData {
   /** Whether XPIA was detected. */
   xpia_detected?: boolean;
-  /** Provider-specific properties not defined by the schema. */
-  [key: string]: unknown;
 }
 
 /** Pagination metadata for a tool call result. */
-export interface ToolCallResultPagination {
+export interface ToolCallResultPagination extends ToolCallExtensionData {
   /** Whether more results are available. */
   has_more?: boolean;
   /** Cursor for the next page of results. */
   next_cursor?: string;
   /** Total result count when known. */
   total_count?: number;
-  /** Provider-specific properties not defined by the schema. */
-  [key: string]: unknown;
 }
 
 /** Resource payload returned by an execute tool call. */
@@ -140,43 +130,48 @@ export interface ToolCallResultResource extends ToolCallResource {
 }
 
 /** Structured arguments for an execute tool call. */
-export class ExecuteToolCallArguments {
-  /** Provider-specific properties not defined by the schema. */
-  [key: string]: unknown;
-
+export class ExecuteToolCallArguments implements ToolCallExtensionData {
   /** Schema version for this payload. */
-  schema_version: string;
+  declare schema_version: string;
   /** Resources referenced by the tool call. */
-  resources?: ToolCallResource[];
+  declare resources?: ToolCallResource[];
   /** Requested action for the tool call. */
-  action?: ToolCallAction;
+  declare action?: ToolCallAction;
   /** Tool parameters for the call. */
-  parameters?: Record<string, unknown>;
+  declare parameters?: Record<string, unknown>;
+  /** Provider-specific properties serialized under `metadata`. */
+  declare extension_data?: Record<string, unknown>;
 
   constructor(init: Partial<ExecuteToolCallArguments> = {}) {
-    Object.assign(this, init);
     this.schema_version = init.schema_version ?? "1.0";
+    if (init.resources !== undefined) this.resources = init.resources;
+    if (init.action !== undefined) this.action = init.action;
+    if (init.parameters !== undefined) this.parameters = init.parameters;
+    if (init.extension_data !== undefined) this.extension_data = init.extension_data;
   }
 }
 
 /** Structured result for an execute tool call. */
-export class ExecuteToolCallResult {
-  /** Provider-specific properties not defined by the schema. */
-  [key: string]: unknown;
-
+export class ExecuteToolCallResult implements ToolCallExtensionData {
   /** Schema version for this payload. */
-  schema_version: string;
+  declare schema_version: string;
   /** Overall tool call outcome. */
-  outcome?: ToolCallResultOutcome;
+  declare outcome?: ToolCallResultOutcome;
   /** Resources returned by the tool call. */
-  resources?: ToolCallResultResource[];
+  declare resources?: ToolCallResultResource[];
   /** Tool result data. */
-  data?: Record<string, unknown>;
+  declare data?: Record<string, unknown>;
   /** Pagination metadata for the result set. */
-  pagination?: ToolCallResultPagination;
+  declare pagination?: ToolCallResultPagination;
+  /** Provider-specific properties serialized under `metadata`. */
+  declare extension_data?: Record<string, unknown>;
 
   constructor(init: Partial<ExecuteToolCallResult> = {}) {
-    Object.assign(this, init);
     this.schema_version = init.schema_version ?? "1.0";
+    if (init.outcome !== undefined) this.outcome = init.outcome;
+    if (init.resources !== undefined) this.resources = init.resources;
+    if (init.data !== undefined) this.data = init.data;
+    if (init.pagination !== undefined) this.pagination = init.pagination;
+    if (init.extension_data !== undefined) this.extension_data = init.extension_data;
   }
 }

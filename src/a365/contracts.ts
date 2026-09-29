@@ -19,6 +19,7 @@ export {
   ExecuteToolCallResult,
 } from "./tool-call-models.js";
 export type {
+  ToolCallExtensionData,
   ToolCallIdentifier,
   ToolCallContainer,
   ToolCallResource,

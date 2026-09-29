@@ -61,6 +61,7 @@ export type {
   ToolCallRequestPart,
   ToolCallResponsePart,
   ReasoningPart,
+  ToolCallExtensionData,
   ToolCallIdentifier,
   ToolCallContainer,
   ToolCallResource,

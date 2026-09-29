@@ -5,7 +5,11 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as a365 from "../../../../src/a365/index.js";
 import * as rootExports from "../../../../src/index.js";
-import type { ToolCallDetails } from "../../../../src/a365/index.js";
+import type {
+  ToolCallDetails,
+  ToolCallExtensionData,
+} from "../../../../src/a365/index.js";
+import type { ToolCallExtensionData as RootToolCallExtensionData } from "../../../../src/index.js";
 
 describe("execute tool JSON models", () => {
   it("exports execute tool model values from the A365 and root barrels", () => {
@@ -20,6 +24,7 @@ describe("execute tool JSON models", () => {
     expect(rootExports.ToolCallAction).toBe(a365.ToolCallAction);
     expect(rootExports.ToolCallOutcomeStatus).toBe(a365.ToolCallOutcomeStatus);
     expect(rootExports.ToolPolicyDecision).toBe(a365.ToolPolicyDecision);
+    expectTypeOf<ToolCallExtensionData>().toEqualTypeOf<RootToolCallExtensionData>();
   });
 
   it("defaults schema_version when execute tool call arguments are constructed with no input", () => {
@@ -44,18 +49,24 @@ describe("execute tool JSON models", () => {
           name: "Quarterly plan",
           type: "document",
           provider: "sharepoint",
-          identifiers: [{ type: "driveItem", value: "1", provider_code: "sp" }],
+          identifiers: [
+            {
+              type: "driveItem",
+              value: "1",
+              extension_data: { provider_code: "sp" },
+            },
+          ],
           container: {
             id: "folder-1",
             uri: "https://contoso.example/folders/1",
             type: "folder",
-            label_id: "container-label",
+            extension_data: { label_id: "container-label" },
           },
-          custom_resource_field: true,
+          extension_data: { custom_resource_field: true },
         },
       ],
       parameters: { query: "plan" },
-      top_level_extra: "kept",
+      extension_data: { top_level_extra: "kept" },
     });
 
     expect(defaultArgs).toMatchObject({
@@ -63,12 +74,18 @@ describe("execute tool JSON models", () => {
       action: "read",
       resources: [
         {
-          identifiers: [{ type: "driveItem", value: "1", provider_code: "sp" }],
-          container: { label_id: "container-label" },
-          custom_resource_field: true,
+          identifiers: [
+            {
+              type: "driveItem",
+              value: "1",
+              extension_data: { provider_code: "sp" },
+            },
+          ],
+          container: { extension_data: { label_id: "container-label" } },
+          extension_data: { custom_resource_field: true },
         },
       ],
-      top_level_extra: "kept",
+      extension_data: { top_level_extra: "kept" },
     });
 
     const explicitArgs = new a365.ExecuteToolCallArguments({ schema_version: "2.0" });
@@ -96,7 +113,9 @@ describe("execute tool JSON models", () => {
     expect(existingObjectArguments.arguments).toEqual({ query: "plan" });
     expect(existingStringArguments.arguments).toBe('{"query":"plan"}');
     expect(details.arguments).toBe(argumentsModel);
-    expectTypeOf(details.arguments).toMatchTypeOf<Record<string, unknown> | string | undefined>();
+    expectTypeOf(details.arguments).toMatchTypeOf<
+      Record<string, unknown> | a365.ExecuteToolCallArguments | string | undefined
+    >();
   });
 
   it("defaults schema_version on execute tool call results and preserves exact wire fields", () => {
@@ -114,7 +133,13 @@ describe("execute tool JSON models", () => {
           name: "Quarterly plan",
           type: "document",
           provider: "sharepoint",
-          identifiers: [{ type: "driveItem", value: "1", provider_code: "sp" }],
+          identifiers: [
+            {
+              type: "driveItem",
+              value: "1",
+              extension_data: { provider_code: "sp" },
+            },
+          ],
           container: {
             id: "folder-1",
             uri: "https://contoso.example/folders/1",
@@ -125,7 +150,10 @@ describe("execute tool JSON models", () => {
             provider_code: "partial-failure",
             message: "1 record skipped",
           },
-          sensitivity: { label_id: "secret", sensitivity_extra: "kept" },
+          sensitivity: {
+            label_id: "secret",
+            extension_data: { sensitivity_extra: "kept" },
+          },
           policy: {
             decision: a365.ToolPolicyDecision.ALLOW,
             id: "policy-1",
@@ -133,12 +161,12 @@ describe("execute tool JSON models", () => {
           },
           security: { xpia_detected: true },
           data: { skipped: 1 },
-          resource_extra: "kept",
+          extension_data: { resource_extra: "kept" },
         },
       ],
       data: { documents: 1 },
       pagination: { has_more: true, next_cursor: "cursor-2", total_count: 10 },
-      result_extra: "kept",
+      extension_data: { result_extra: "kept" },
     });
 
     expect(defaultResult).toMatchObject({
@@ -150,17 +178,42 @@ describe("execute tool JSON models", () => {
       resources: [
         {
           outcome: { status: "failure", provider_code: "partial-failure" },
-          sensitivity: { label_id: "secret", sensitivity_extra: "kept" },
+          sensitivity: {
+            label_id: "secret",
+            extension_data: { sensitivity_extra: "kept" },
+          },
           policy: { decision: "allow" },
           security: { xpia_detected: true },
-          resource_extra: "kept",
+          extension_data: { resource_extra: "kept" },
         },
       ],
       pagination: { has_more: true, next_cursor: "cursor-2", total_count: 10 },
-      result_extra: "kept",
+      extension_data: { result_extra: "kept" },
     });
 
     const explicitResult = new a365.ExecuteToolCallResult({ schema_version: "2.1" });
     expect(explicitResult.schema_version).toBe("2.1");
+  });
+
+  it("does not copy undeclared top-level properties into typed models", () => {
+    const argumentsModel = new a365.ExecuteToolCallArguments({
+      action: a365.ToolCallAction.READ,
+      extension_data: { action: "write", schema_version: "9.9" },
+      top_level_extra: "not-extension-data",
+    } as any);
+    const resultModel = new a365.ExecuteToolCallResult({
+      extension_data: { outcome: "provider-outcome" },
+      result_extra: "not-extension-data",
+    } as any);
+
+    expect(argumentsModel).toEqual({
+      schema_version: "1.0",
+      action: "read",
+      extension_data: { action: "write", schema_version: "9.9" },
+    });
+    expect(resultModel).toEqual({
+      schema_version: "1.0",
+      extension_data: { outcome: "provider-outcome" },
+    });
   });
 });
