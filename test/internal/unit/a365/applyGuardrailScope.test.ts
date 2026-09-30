@@ -104,6 +104,33 @@ describe("ApplyGuardrailScope", () => {
     expect(getFinishedSpan().kind).toBe(SpanKind.CLIENT);
   });
 
+  it("should write shared request context attributes", () => {
+    const scope = ApplyGuardrailScope.start(
+      { targetType: GuardrailTargetType.LlmInput, decisionType: GuardrailDecisionType.Allow },
+      testAgentDetails,
+      {
+        content: "Guard this prompt",
+        conversationId: "guardrail-conversation",
+        sessionId: "guardrail-session",
+        operationSource: "guardrail-host",
+        channel: { name: "Teams", description: "https://teams.example" },
+      },
+    );
+    scope.dispose();
+
+    const attributes = getFinishedSpan().attributes;
+    expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe(
+      "guardrail-conversation",
+    );
+    expect(attributes[OpenTelemetryConstants.SESSION_ID_KEY]).toBe("guardrail-session");
+    expect(attributes[OpenTelemetryConstants.SERVICE_NAME_KEY]).toBe("guardrail-host");
+    expect(attributes[OpenTelemetryConstants.CHANNEL_NAME_KEY]).toBe("Teams");
+    expect(attributes[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBe("https://teams.example");
+    expect(attributes[OpenTelemetryConstants.SECURITY_CONTENT_INPUT_VALUE_KEY]).toBe(
+      "Guard this prompt",
+    );
+  });
+
   it("should throw when agentDetails.tenantId is missing", () => {
     expect(() =>
       ApplyGuardrailScope.start(

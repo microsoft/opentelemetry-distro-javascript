@@ -1200,6 +1200,34 @@ describe("Request content and message serialization (span attributes)", () => {
     });
   });
 
+  describe("shared request context span attributes", () => {
+    it("should write request.operationSource to service.name", () => {
+      const scope = InvokeAgentScope.start(
+        { ...testRequest, operationSource: "agent-framework" },
+        {},
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.SERVICE_NAME_KEY]).toBe(
+        "agent-framework",
+      );
+    });
+
+    it("should write request.sessionId on output spans", () => {
+      const scope = OutputScope.start(
+        { ...testRequest, sessionId: "session-output-123" },
+        { messages: "Hello" },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.SESSION_ID_KEY]).toBe(
+        "session-output-123",
+      );
+    });
+  });
+
   describe("InvokeAgentScope – GenAI request and response parameters", () => {
     it("should record all request attributes and response-at-start attributes", () => {
       const requestParameters: GenAiRequestParameters = {
@@ -1782,6 +1810,8 @@ describe("recordAttributes ownership and precedence", () => {
     const scope = InvokeAgentScope.start(
       {
         conversationId: "conv-owned",
+        sessionId: "session-owned",
+        operationSource: "service-owned",
         channel: { name: "Teams", description: "https://teams.example" },
       },
       {},
@@ -1791,6 +1821,8 @@ describe("recordAttributes ownership and precedence", () => {
     scope.recordAttributes({
       [OpenTelemetryConstants.GEN_AI_AGENT_NAME_KEY]: "Override Agent",
       [OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]: "override-conv",
+      [OpenTelemetryConstants.SESSION_ID_KEY]: "override-session",
+      [OpenTelemetryConstants.SERVICE_NAME_KEY]: "override-service",
       "custom.attribute": "custom value",
     });
     scope.dispose();
@@ -1798,6 +1830,8 @@ describe("recordAttributes ownership and precedence", () => {
     const attributes = getLastSpan().attributes;
     expect(attributes[OpenTelemetryConstants.GEN_AI_AGENT_NAME_KEY]).toBe("Test Agent");
     expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe("conv-owned");
+    expect(attributes[OpenTelemetryConstants.SESSION_ID_KEY]).toBe("session-owned");
+    expect(attributes[OpenTelemetryConstants.SERVICE_NAME_KEY]).toBe("service-owned");
     expect(attributes["custom.attribute"]).toBe("custom value");
   });
 

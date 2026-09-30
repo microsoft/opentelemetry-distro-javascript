@@ -71,10 +71,8 @@ export class InvokeAgentScope extends OpenTelemetryScope {
       agentDetails,
       resolvedSpanDetails,
       callerDetails?.userDetails,
+      request,
     );
-
-    // Session ID
-    this.setTagMaybe(OpenTelemetryConstants.SESSION_ID_KEY, request.sessionId);
 
     // Endpoint
     if (invokeScopeDetails.endpoint) {
@@ -83,15 +81,6 @@ export class InvokeAgentScope extends OpenTelemetryScope {
         this.setTagMaybe(OpenTelemetryConstants.SERVER_PORT_KEY, invokeScopeDetails.endpoint.port);
       }
     }
-
-    // Channel
-    if (request.channel) {
-      this.setTagMaybe(OpenTelemetryConstants.CHANNEL_NAME_KEY, request.channel.name);
-      this.setTagMaybe(OpenTelemetryConstants.CHANNEL_LINK_KEY, request.channel.description);
-    }
-
-    // Conversation ID
-    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY, request.conversationId);
 
     // Request content as input messages
     if (request.content != null) {

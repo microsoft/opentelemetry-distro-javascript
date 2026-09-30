@@ -69,6 +69,7 @@ export class ApplyGuardrailScope extends OpenTelemetryScope {
       agentDetails,
       resolvedSpanDetails,
       userDetails,
+      request,
     );
 
     // Required attributes
@@ -118,11 +119,6 @@ export class ApplyGuardrailScope extends OpenTelemetryScope {
     if (request) {
       if (typeof request.content === "string") {
         this.setTagMaybe(OpenTelemetryConstants.SECURITY_CONTENT_INPUT_VALUE_KEY, request.content);
-      }
-      this.setTagMaybe(OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY, request.conversationId);
-      if (request.channel) {
-        this.setTagMaybe(OpenTelemetryConstants.CHANNEL_NAME_KEY, request.channel.name);
-        this.setTagMaybe(OpenTelemetryConstants.CHANNEL_LINK_KEY, request.channel.description);
       }
     }
   }

@@ -14,7 +14,7 @@
  * span-creation time instead of caching it in a static field.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { trace, context as otelContext } from "@opentelemetry/api";
+import { trace, context as otelContext, propagation } from "@opentelemetry/api";
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
@@ -29,6 +29,8 @@ import {
   InferenceScope,
   ExecuteToolScope,
   OutputScope,
+  A365SpanProcessor,
+  OpenTelemetryConstants,
   InferenceOperationType,
 } from "../../../../src/a365/index.js";
 import type { AgentDetails } from "../../../../src/a365/index.js";
@@ -50,7 +52,7 @@ function simulateDistroInit(): InMemorySpanExporter {
   // ── Step 2: Register a new provider (like NodeSDK.start()) ──────
   const exporter = new InMemorySpanExporter();
   const provider = new BasicTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [new A365SpanProcessor(), new SimpleSpanProcessor(exporter)],
   });
 
   const contextManager = new AsyncLocalStorageContextManager();
@@ -59,6 +61,14 @@ function simulateDistroInit(): InMemorySpanExporter {
   trace.setGlobalTracerProvider(provider);
 
   return exporter;
+}
+
+function withBaggage(entries: Record<string, string>, callback: () => void): void {
+  let baggage = propagation.createBaggage();
+  for (const [key, value] of Object.entries(entries)) {
+    baggage = baggage.setEntry(key, { value });
+  }
+  otelContext.with(propagation.setBaggage(otelContext.active(), baggage), callback);
 }
 
 describe("A365 scopes after distro global-state reset", () => {
@@ -133,6 +143,69 @@ describe("A365 scopes after distro global-state reset", () => {
 
     const spans = exporter.getFinishedSpans();
     expect(spans.length).toBe(1);
+  });
+
+  it("explicit request context should override baggage attributes", () => {
+    const exporter = simulateDistroInit();
+
+    withBaggage(
+      {
+        [OpenTelemetryConstants.SESSION_ID_KEY]: "baggage-session",
+        [OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]: "baggage-conversation",
+        [OpenTelemetryConstants.SERVICE_NAME_KEY]: "baggage-service",
+        [OpenTelemetryConstants.CHANNEL_NAME_KEY]: "Baggage Channel",
+        [OpenTelemetryConstants.CHANNEL_LINK_KEY]: "https://baggage.example",
+      },
+      () => {
+        const scope = InvokeAgentScope.start(
+          {
+            sessionId: "request-session",
+            conversationId: "request-conversation",
+            operationSource: "request-service",
+            channel: { name: "Request Channel", description: "https://request.example" },
+          },
+          {},
+          agentDetails,
+        );
+        scope.dispose();
+      },
+    );
+
+    const attributes = exporter.getFinishedSpans()[0].attributes;
+    expect(attributes[OpenTelemetryConstants.SESSION_ID_KEY]).toBe("request-session");
+    expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe(
+      "request-conversation",
+    );
+    expect(attributes[OpenTelemetryConstants.SERVICE_NAME_KEY]).toBe("request-service");
+    expect(attributes[OpenTelemetryConstants.CHANNEL_NAME_KEY]).toBe("Request Channel");
+    expect(attributes[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBe("https://request.example");
+  });
+
+  it("absent request context should preserve baggage attributes", () => {
+    const exporter = simulateDistroInit();
+
+    withBaggage(
+      {
+        [OpenTelemetryConstants.SESSION_ID_KEY]: "baggage-session",
+        [OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]: "baggage-conversation",
+        [OpenTelemetryConstants.SERVICE_NAME_KEY]: "baggage-service",
+        [OpenTelemetryConstants.CHANNEL_NAME_KEY]: "Baggage Channel",
+        [OpenTelemetryConstants.CHANNEL_LINK_KEY]: "https://baggage.example",
+      },
+      () => {
+        const scope = InvokeAgentScope.start({}, {}, agentDetails);
+        scope.dispose();
+      },
+    );
+
+    const attributes = exporter.getFinishedSpans()[0].attributes;
+    expect(attributes[OpenTelemetryConstants.SESSION_ID_KEY]).toBe("baggage-session");
+    expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe(
+      "baggage-conversation",
+    );
+    expect(attributes[OpenTelemetryConstants.SERVICE_NAME_KEY]).toBe("baggage-service");
+    expect(attributes[OpenTelemetryConstants.CHANNEL_NAME_KEY]).toBe("Baggage Channel");
+    expect(attributes[OpenTelemetryConstants.CHANNEL_LINK_KEY]).toBe("https://baggage.example");
   });
 
   it("ConsoleSpanExporter scenario: spans reach user-provided processors", () => {

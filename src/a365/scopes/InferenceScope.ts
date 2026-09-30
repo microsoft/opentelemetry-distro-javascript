@@ -57,6 +57,7 @@ export class InferenceScope extends OpenTelemetryScope {
       agentDetails,
       resolvedSpanDetails,
       userDetails,
+      request,
     );
 
     // Core inference information
@@ -72,12 +73,6 @@ export class InferenceScope extends OpenTelemetryScope {
       OpenTelemetryConstants.GEN_AI_AGENT_THOUGHT_PROCESS_KEY,
       details.thoughtProcess,
     );
-
-    // Conversation and channel
-    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY, request.conversationId);
-    this.setTagMaybe(OpenTelemetryConstants.SESSION_ID_KEY, request.sessionId);
-    this.setTagMaybe(OpenTelemetryConstants.CHANNEL_NAME_KEY, request.channel?.name);
-    this.setTagMaybe(OpenTelemetryConstants.CHANNEL_LINK_KEY, request.channel?.description);
 
     // Endpoint
     if (details.endpoint) {

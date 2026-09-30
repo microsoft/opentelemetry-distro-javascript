@@ -306,6 +306,8 @@ export interface Channel {
 export interface Request {
   /** The input content (prompt / messages) for the request. */
   content?: InputMessagesParam;
+  /** Name of the service or framework that initiated the operation. */
+  operationSource?: string;
   /** Identifier of the session this request belongs to. */
   sessionId?: string;
   /** The channel the request originated from. */

@@ -59,6 +59,7 @@ export class ExecuteToolScope extends OpenTelemetryScope {
       agentDetails,
       resolvedSpanDetails,
       userDetails,
+      request,
     );
 
     const { toolName, arguments: args, toolCallId, description, toolType, endpoint } = details;
@@ -73,11 +74,6 @@ export class ExecuteToolScope extends OpenTelemetryScope {
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_TOOL_TYPE_KEY, toolType);
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_TOOL_CALL_ID_KEY, toolCallId);
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_TOOL_DESCRIPTION_KEY, description);
-
-    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY, request.conversationId);
-    this.setTagMaybe(OpenTelemetryConstants.SESSION_ID_KEY, request.sessionId);
-    this.setTagMaybe(OpenTelemetryConstants.CHANNEL_NAME_KEY, request.channel?.name);
-    this.setTagMaybe(OpenTelemetryConstants.CHANNEL_LINK_KEY, request.channel?.description);
 
     if (endpoint) {
       this.setTagMaybe(OpenTelemetryConstants.SERVER_ADDRESS_KEY, endpoint.host);

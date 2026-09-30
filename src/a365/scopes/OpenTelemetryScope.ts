@@ -14,6 +14,7 @@ import type {
   AgentDetails,
   UserDetails,
   SpanDetails,
+  Request,
   InputMessagesParam,
   OutputMessagesParam,
 } from "../contracts.js";
@@ -60,6 +61,7 @@ export abstract class OpenTelemetryScope {
    * @param agentDetails Optional agent details. Tenant ID is read from `agentDetails.tenantId`.
    * @param spanDetails Optional span configuration including parent context, start/end times, span kind, and span links.
    * @param userDetails Optional human caller identity details.
+   * @param request Optional request context shared by all scope types.
    */
   protected constructor(
     operationName: string,
@@ -67,6 +69,7 @@ export abstract class OpenTelemetryScope {
     agentDetails?: AgentDetails,
     spanDetails?: SpanDetails,
     userDetails?: UserDetails,
+    request?: Request,
   ) {
     const parentContext = spanDetails?.parentContext;
     const startTime = spanDetails?.startTime;
@@ -102,6 +105,13 @@ export abstract class OpenTelemetryScope {
       this.customStartTime = startTime;
     }
     this.customEndTime = endTime;
+
+    // Set shared request context
+    this.setTagMaybe(OpenTelemetryConstants.SESSION_ID_KEY, request?.sessionId);
+    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY, request?.conversationId);
+    this.setTagMaybe(OpenTelemetryConstants.SERVICE_NAME_KEY, request?.operationSource);
+    this.setTagMaybe(OpenTelemetryConstants.CHANNEL_NAME_KEY, request?.channel?.name);
+    this.setTagMaybe(OpenTelemetryConstants.CHANNEL_LINK_KEY, request?.channel?.description);
 
     // Set agent details
     if (agentDetails) {
