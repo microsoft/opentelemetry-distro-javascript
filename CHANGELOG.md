@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Bugs Fixed
-- A365: prevent `recordAttributes()` from overwriting scope-owned attributes such as builder-populated tags and `gen_ai.operation.name`, while still allowing late writes for known keys that were never set and repeated last-write-wins custom attributes. [#243](https://github.com/microsoft/opentelemetry-distro-javascript/pull/243)
+- A365: centralize shared request attributes in the base scope, including session and conversation IDs, channel details, and `operationSource` as `service.name`, while retaining last-write-wins `recordAttributes()` behavior. [#243](https://github.com/microsoft/opentelemetry-distro-javascript/pull/243)
 - Default `InvokeAgentScope` spans to `SpanKind.INTERNAL` while preserving explicit span-kind overrides. [#241](https://github.com/microsoft/opentelemetry-distro-javascript/pull/241)
 
 ### Features Added

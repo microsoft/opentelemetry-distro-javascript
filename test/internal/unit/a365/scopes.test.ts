@@ -1789,7 +1789,7 @@ describe("Request content and message serialization (span attributes)", () => {
   });
 });
 
-describe("recordAttributes ownership and precedence", () => {
+describe("recordAttributes last-write-wins behavior", () => {
   const testAgentDetails: AgentDetails = {
     agentId: "test-agent",
     agentName: "Test Agent",
@@ -1806,7 +1806,7 @@ describe("recordAttributes ownership and precedence", () => {
     return spans[spans.length - 1];
   };
 
-  it("should preserve builder-populated attributes when recordAttributes sees the same keys", () => {
+  it("should overwrite builder-populated attributes when recordAttributes sees the same keys", () => {
     const scope = InvokeAgentScope.start(
       {
         conversationId: "conv-owned",
@@ -1828,14 +1828,14 @@ describe("recordAttributes ownership and precedence", () => {
     scope.dispose();
 
     const attributes = getLastSpan().attributes;
-    expect(attributes[OpenTelemetryConstants.GEN_AI_AGENT_NAME_KEY]).toBe("Test Agent");
-    expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe("conv-owned");
-    expect(attributes[OpenTelemetryConstants.SESSION_ID_KEY]).toBe("session-owned");
-    expect(attributes[OpenTelemetryConstants.SERVICE_NAME_KEY]).toBe("service-owned");
+    expect(attributes[OpenTelemetryConstants.GEN_AI_AGENT_NAME_KEY]).toBe("Override Agent");
+    expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe("override-conv");
+    expect(attributes[OpenTelemetryConstants.SESSION_ID_KEY]).toBe("override-session");
+    expect(attributes[OpenTelemetryConstants.SERVICE_NAME_KEY]).toBe("override-service");
     expect(attributes["custom.attribute"]).toBe("custom value");
   });
 
-  it("should preserve the span builder operation name when recordAttributes provides another value", () => {
+  it("should overwrite the span builder operation name", () => {
     const scope = ExecuteToolScope.start(
       { conversationId: "conv-op-name" },
       { toolName: "search" },
@@ -1849,7 +1849,7 @@ describe("recordAttributes ownership and precedence", () => {
     scope.dispose();
 
     expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]).toBe(
-      OpenTelemetryConstants.EXECUTE_TOOL_OPERATION_NAME,
+      OpenTelemetryConstants.CHAT_OPERATION_NAME,
     );
   });
 
@@ -1870,7 +1870,7 @@ describe("recordAttributes ownership and precedence", () => {
     );
   });
 
-  it("should protect a key after a late typed setter claims ownership", () => {
+  it("should let a generic write overwrite a late typed setter", () => {
     const scope = InferenceScope.start(
       { conversationId: "conv-late-owned" },
       { operationName: InferenceOperationType.CHAT, model: "gpt-4" },
@@ -1886,7 +1886,7 @@ describe("recordAttributes ownership and precedence", () => {
     });
     scope.dispose();
 
-    expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]).toBe(20);
+    expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]).toBe(30);
   });
 
   it("should keep custom recordAttributes keys last-write-wins across repeated calls", () => {
@@ -1903,7 +1903,7 @@ describe("recordAttributes ownership and precedence", () => {
     expect(getLastSpan().attributes["custom.repeat"]).toBe("second");
   });
 
-  it("should support iterable attributes while skipping owned and blank keys", () => {
+  it("should support iterable attributes while skipping blank keys", () => {
     const scope = InvokeAgentScope.start(
       { conversationId: "conv-iterable", channel: { name: "Teams" } },
       {},
@@ -1919,7 +1919,7 @@ describe("recordAttributes ownership and precedence", () => {
     scope.dispose();
 
     const attributes = getLastSpan().attributes;
-    expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe("conv-iterable");
+    expect(attributes[OpenTelemetryConstants.GEN_AI_CONVERSATION_ID_KEY]).toBe("override-conv");
     expect(attributes["custom.iterable"]).toBe(42);
     expect(attributes[""]).toBeUndefined();
     expect(attributes["   "]).toBeUndefined();

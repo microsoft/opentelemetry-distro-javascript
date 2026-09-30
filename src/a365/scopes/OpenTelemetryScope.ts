@@ -52,7 +52,6 @@ export abstract class OpenTelemetryScope {
   private customEndTime?: TimeInput;
   private errorType?: string;
   private hasEnded = false;
-  private readonly ownedAttributeKeys = new Set<string>();
   private readonly logger = Logger.getInstance();
 
   /**
@@ -98,7 +97,6 @@ export abstract class OpenTelemetryScope {
       },
       currentContext,
     );
-    this.ownedAttributeKeys.add(OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY);
 
     this.wallClockStartMs = Date.now();
     if (startTime !== undefined) {
@@ -177,10 +175,7 @@ export abstract class OpenTelemetryScope {
     this.span.recordException(error);
   }
 
-  /**
-   * Records multiple attribute key/value pairs without overwriting values that
-   * the scope already populated through its typed setters or span builder.
-   */
+  /** Records multiple attribute key/value pairs using last-write-wins semantics. */
   public recordAttributes(
     attributes:
       Iterable<[string, AttributeValue]> | Record<string, AttributeValue> | null | undefined,
@@ -188,9 +183,9 @@ export abstract class OpenTelemetryScope {
     if (!attributes) return;
 
     if (Symbol.iterator in Object(attributes) && typeof attributes !== "string") {
-      this.recordUnownedAttributes(attributes as Iterable<[string, AttributeValue]>);
+      this.recordAttributeEntries(attributes as Iterable<[string, AttributeValue]>);
     } else if (typeof attributes === "object") {
-      this.recordUnownedAttributes(Object.entries(attributes as Record<string, AttributeValue>));
+      this.recordAttributeEntries(Object.entries(attributes as Record<string, AttributeValue>));
     }
   }
 
@@ -206,10 +201,7 @@ export abstract class OpenTelemetryScope {
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_OUTPUT_MESSAGES_KEY, serializeMessages(wrapper));
   }
 
-  /**
-   * Sets a tag on the span if the value is not null or undefined, and marks the
-   * key as owned by the scope so later generic attribute writes do not replace it.
-   */
+  /** Sets a tag on the span if the value is not null or undefined. */
   protected setTagMaybe<T extends string | number | boolean | string[] | number[]>(
     name: string,
     value: T | null | undefined,
@@ -218,13 +210,12 @@ export abstract class OpenTelemetryScope {
       this.span.setAttributes({
         [name]: value as string | number | boolean | string[] | number[],
       });
-      this.ownedAttributeKeys.add(name);
     }
   }
 
-  private recordUnownedAttributes(attributes: Iterable<[string, AttributeValue]>): void {
+  private recordAttributeEntries(attributes: Iterable<[string, AttributeValue]>): void {
     for (const [key, value] of attributes) {
-      if (!OpenTelemetryScope.isNonBlankAttributeKey(key) || this.ownedAttributeKeys.has(key)) {
+      if (!OpenTelemetryScope.isNonBlankAttributeKey(key)) {
         continue;
       }
 
