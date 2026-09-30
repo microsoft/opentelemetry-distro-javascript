@@ -630,4 +630,11 @@ describe("serializeToolPayload", () => {
 
     expect(serializeToolPayload(payload)).toBe(serializationError);
   });
+
+  it("returns the exact fallback when typed payload detection throws", () => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+
+    expect(serializeToolPayload(proxy)).toBe(serializationError);
+  });
 });

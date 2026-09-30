@@ -152,11 +152,10 @@ export function serializeToolPayload(value: object | null | undefined): string |
     return undefined;
   }
 
-  if (!isTypedExecuteToolPayload(value)) {
-    return safeSerializeToJson(value as Record<string, unknown>, "payload");
-  }
-
   try {
+    if (!isTypedExecuteToolPayload(value)) {
+      return safeSerializeToJson(value as Record<string, unknown>, "payload");
+    }
     return serializeTypedToolPayload(value);
   } catch {
     return EXECUTE_TOOL_SERIALIZATION_ERROR;

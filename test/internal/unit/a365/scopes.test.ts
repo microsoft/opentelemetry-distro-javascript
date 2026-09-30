@@ -1727,6 +1727,37 @@ describe("Request content and message serialization (span attributes)", () => {
         serializationError,
       );
     });
+
+    it("should not throw when argument payload detection throws", () => {
+      const { proxy, revoke } = Proxy.revocable({}, {});
+      revoke();
+
+      expect(() => {
+        const scope = ExecuteToolScope.start(
+          testRequest,
+          { toolName: "search", arguments: proxy },
+          testAgentDetails,
+        );
+        scope.dispose();
+      }).not.toThrow();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_TOOL_ARGS_KEY]).toBe(
+        serializationError,
+      );
+    });
+
+    it("should not throw when response payload detection throws", () => {
+      const { proxy, revoke } = Proxy.revocable({}, {});
+      revoke();
+      const scope = ExecuteToolScope.start(testRequest, { toolName: "tool" }, testAgentDetails);
+
+      expect(() => scope.recordResponse(proxy)).not.toThrow();
+      scope.dispose();
+
+      expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_TOOL_CALL_RESULT_KEY]).toBe(
+        serializationError,
+      );
+    });
   });
 });
 
