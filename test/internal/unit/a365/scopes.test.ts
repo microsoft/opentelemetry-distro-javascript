@@ -1870,6 +1870,25 @@ describe("recordAttributes ownership and precedence", () => {
     );
   });
 
+  it("should protect a key after a late typed setter claims ownership", () => {
+    const scope = InferenceScope.start(
+      { conversationId: "conv-late-owned" },
+      { operationName: InferenceOperationType.CHAT, model: "gpt-4" },
+      testAgentDetails,
+    );
+
+    scope.recordAttributes({
+      [OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]: 10,
+    });
+    scope.recordInputTokens(20);
+    scope.recordAttributes({
+      [OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]: 30,
+    });
+    scope.dispose();
+
+    expect(getLastSpan().attributes[OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY]).toBe(20);
+  });
+
   it("should keep custom recordAttributes keys last-write-wins across repeated calls", () => {
     const scope = ExecuteToolScope.start(
       { conversationId: "conv-custom-repeat" },
