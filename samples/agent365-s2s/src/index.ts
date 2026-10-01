@@ -26,6 +26,8 @@ export function createTelemetryOptions(
   tokenProvider: TokenProvider,
 ): MicrosoftOpenTelemetryOptions {
   return {
+    samplingRatio: 1,
+    tracesPerSecond: 0,
     a365: {
       enabled: true,
       enableObservabilityExporter: true,
