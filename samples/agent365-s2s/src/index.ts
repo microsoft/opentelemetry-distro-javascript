@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import "dotenv/config";
+
 import { pathToFileURL } from "node:url";
 import {
   configureA365Logger,
@@ -41,7 +43,7 @@ function safeFailureMessage(error: unknown): string {
     return "Agent365 S2S sample failed.";
   }
   if (
-    /^(?:Invalid sample configuration \([A-Za-z]+\)|Unable to load sample configuration|(?:Blueprint|Agent) token exchange failed \([A-Za-z0-9_.-]+\))\.$/.test(
+    /^(?:Invalid sample configuration \([A-Za-z]+\)|(?:Blueprint|Agent) token exchange failed \([A-Za-z0-9_.-]+\))\.$/.test(
       error.message,
     )
   ) {
@@ -50,7 +52,7 @@ function safeFailureMessage(error: unknown): string {
   return "Agent365 S2S sample failed.";
 }
 
-export async function main(configPath = "appsettings.json"): Promise<void> {
+export async function main(): Promise<void> {
   configureA365Logger({
     logger: safeConsoleLogger,
     logLevel: "info|warn|error",
@@ -58,7 +60,7 @@ export async function main(configPath = "appsettings.json"): Promise<void> {
 
   let initialized = false;
   try {
-    const config = await loadSampleConfig(configPath);
+    const config = loadSampleConfig();
     const tokenProvider = new S2STokenProvider(config, new MsalTokenExchangeClient(config));
     useMicrosoftOpenTelemetry(createTelemetryOptions(config, tokenProvider));
     initialized = true;
@@ -75,7 +77,7 @@ export async function main(configPath = "appsettings.json"): Promise<void> {
 
 const entryPoint = process.argv[1];
 if (entryPoint && import.meta.url === pathToFileURL(entryPoint).href) {
-  void main(process.argv[2]).catch(() => {
+  void main().catch(() => {
     process.exitCode = 1;
   });
 }

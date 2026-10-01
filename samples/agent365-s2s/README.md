@@ -16,7 +16,7 @@ required.
 - The blueprint and agent application must be configured for the Agent365
   federated managed identity (FMI) token-exchange flow.
 
-Never commit `appsettings.json`. The included `.gitignore` excludes it.
+Never commit `.env`. The included `.gitignore` excludes it.
 
 ## Configure and run
 
@@ -33,24 +33,24 @@ Set-Location samples\agent365-s2s
 Then configure and run the sample:
 
 ```powershell
-Copy-Item appsettings.example.json appsettings.json
+Copy-Item sample.env .env
 npm ci
 npm run build
 npm start
 ```
 
-Replace every placeholder in `appsettings.json`:
+Set every required value in `.env`:
 
-| Setting                 | Description                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------- |
-| `authority`             | HTTPS Microsoft Entra authority root, for example `https://login.microsoftonline.com` |
-| `blueprintClientId`     | Blueprint application client ID                                                       |
-| `blueprintClientSecret` | Blueprint application client secret                                                   |
-| `tenantId`              | Microsoft Entra tenant ID                                                             |
-| `agentId`               | Agent365 agent application client ID and FMI path                                     |
-| `clusterCategory`       | Must be `prod`                                                                        |
+| Variable                       | Description                                                                           |
+| ------------------------------ | ------------------------------------------------------------------------------------- |
+| `A365_AUTHORITY`               | HTTPS Microsoft Entra authority root, for example `https://login.microsoftonline.com` |
+| `A365_BLUEPRINT_CLIENT_ID`     | Blueprint application client ID                                                       |
+| `A365_BLUEPRINT_CLIENT_SECRET` | Blueprint application client secret                                                   |
+| `A365_TENANT_ID`               | Microsoft Entra tenant ID                                                             |
+| `A365_AGENT_ID`                | Agent365 agent application client ID and FMI path                                     |
+| `A365_CLUSTER_CATEGORY`        | Must be `prod`                                                                        |
 
-The sample rejects missing placeholders, malformed GUIDs, non-HTTPS
+The sample rejects missing values, malformed GUIDs, non-HTTPS
 authorities, and authorities containing tenant paths, queries, or fragments.
 Configuration errors name only the invalid setting and never echo its value.
 

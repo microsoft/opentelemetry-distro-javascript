@@ -1,4 +1,4 @@
-appsettings.json
+.env
 dist/
 node_modules/
 .test-tmp/

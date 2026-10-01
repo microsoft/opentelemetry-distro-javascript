@@ -19,7 +19,8 @@
   "dependencies": {
     "@azure/msal-node": "^6.0.0",
     "@microsoft/opentelemetry": "file:../..",
-    "@opentelemetry/api": "^1.9.1"
+    "@opentelemetry/api": "^1.9.1",
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

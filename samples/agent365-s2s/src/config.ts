@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readFile } from "node:fs/promises";
-
 export interface SampleConfig {
   authority: URL;
   blueprintClientId: string;
@@ -81,12 +79,13 @@ export function parseSampleConfig(value: unknown): SampleConfig {
   };
 }
 
-export async function loadSampleConfig(path = "appsettings.json"): Promise<SampleConfig> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(await readFile(path, "utf8")) as unknown;
-  } catch {
-    throw new Error("Unable to load sample configuration.");
-  }
-  return parseSampleConfig(parsed);
+export function loadSampleConfig(env: NodeJS.ProcessEnv = process.env): SampleConfig {
+  return parseSampleConfig({
+    authority: env.A365_AUTHORITY,
+    blueprintClientId: env.A365_BLUEPRINT_CLIENT_ID,
+    blueprintClientSecret: env.A365_BLUEPRINT_CLIENT_SECRET,
+    tenantId: env.A365_TENANT_ID,
+    agentId: env.A365_AGENT_ID,
+    clusterCategory: env.A365_CLUSTER_CATEGORY,
+  });
 }
