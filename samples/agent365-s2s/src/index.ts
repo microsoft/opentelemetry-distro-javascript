@@ -64,6 +64,7 @@ export async function main(): Promise<void> {
   try {
     const config = loadSampleConfig();
     const tokenProvider = new S2STokenProvider(config, new MsalTokenExchangeClient(config));
+    await tokenProvider.resolve(config.agentId, config.tenantId, [...OBSERVABILITY_SCOPES]);
     useMicrosoftOpenTelemetry(createTelemetryOptions(config, tokenProvider));
     initialized = true;
     await runScenario(config);
