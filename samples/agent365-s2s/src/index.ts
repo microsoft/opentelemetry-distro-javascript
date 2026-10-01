@@ -30,7 +30,7 @@ export function createTelemetryOptions(
       tokenResolver: (agentId, tenantId, scopes) =>
         tokenProvider.resolve(agentId, tenantId, scopes),
       authScopes: [...OBSERVABILITY_SCOPES],
-      clusterCategory: "prod",
+      clusterCategory: config.clusterCategory,
       useS2SEndpoint: true,
     },
   };
