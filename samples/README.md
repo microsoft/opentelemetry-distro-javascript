@@ -28,7 +28,7 @@ These sample programs show how to use the `@microsoft/opentelemetry` distributio
 | [a365Export.ts][a365export]                 | Demonstrates A365 observability export: token resolver setup, dual export with Azure Monitor, and span routing by tenant/agent. |
 | [a365ManualScopes.ts][a365manualscopes]     | Traces a full agent turn with manual scopes (InvokeAgent → Inference → ExecuteTool → Inference → Output) and cross-service context propagation. |
 | [a365HostingMiddleware.ts][a365hostingmiddleware] | Demonstrates A365 hosting middleware (BaggageMiddleware, OutputLoggingMiddleware, ObservabilityHostingManager, ScopeUtils). |
-| [agent365-s2s][agent365s2s]                 | Standalone Agent365 S2S sample with two-stage MSAL app-only authentication, expiry-aware token caching, and four deterministic manual spans. |
+| [agent365-s2s][agent365s2s]                 | Standalone Agent365 S2S sample with two-stage MSAL app-only authentication, expiry-aware token caching, and all five manual scope types. |
 
 ## Prerequisites
 

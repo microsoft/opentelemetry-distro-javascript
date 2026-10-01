@@ -71,18 +71,21 @@ Concurrent refreshes share one request, and failed refreshes can be retried.
 
 ## Expected telemetry
 
-Each run creates exactly four spans in one trace:
+Each run creates exactly six spans in one trace and demonstrates all five
+concrete manual scope types:
 
 1. `invoke_agent` for the complete synthetic request.
-2. `Chat` inference selecting `lookup_weather`.
-3. `execute_tool` with deterministic synthetic arguments and result.
-4. `Chat` inference producing the final answer.
+2. `apply_guardrail` allowing the synthetic input.
+3. `Chat` inference selecting `lookup_weather`.
+4. `execute_tool` with deterministic synthetic arguments and result.
+5. `Chat` inference producing the final answer.
+6. `output_messages` recording the response sent to the caller.
 
-All three operation spans are direct children of `invoke_agent`. The run starts
-at the current time and uses fixed relative offsets and durations; tests inject
-a fixed start time for repeatability. Published agent, caller, user,
-conversation, message, and tool values are explicitly synthetic; only the
-configured tenant and agent IDs identify the destination.
+All five child spans are direct children of `invoke_agent`. The run starts at
+the current time and uses fixed relative offsets and durations. Published
+agent, caller, user, conversation, message, guardrail, and tool values are
+explicitly synthetic; only the configured tenant and agent IDs identify the
+destination.
 
 The distro is configured with `enableObservabilityExporter: true`,
 `useS2SEndpoint: true`, the exact observability scope, and `prod` routing. The
@@ -94,15 +97,7 @@ without a fixed sleep.
 The logger prints only preformatted messages and discards additional error
 arguments. Tokens, client secrets, raw MSAL responses, exception messages,
 nested errors, and stacks are never rendered. Authentication failures contain
-only the failed stage and a sanitized MSAL error code. Successful exporter
-diagnostics contain only the HTTP status and correlation ID (`N/A` when the
-header is absent).
-
-Run the focused tests with:
-
-```powershell
-npm test
-```
+only the failed stage and a sanitized MSAL error code.
 
 The sample also reuses the repository's root Prettier and ESLint configuration:
 

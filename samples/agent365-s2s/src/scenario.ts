@@ -2,12 +2,17 @@
 // Licensed under the MIT License.
 
 import {
+  ApplyGuardrailScope,
   ExecuteToolScope,
   FinishReason,
+  GuardrailDecisionType,
+  GuardrailRiskSeverity,
+  GuardrailTargetType,
   InferenceOperationType,
   InferenceScope,
   InvokeAgentScope,
   MessageRole,
+  OutputScope,
   type AgentDetails,
   type A365Request,
   type CallerDetails,
@@ -62,17 +67,49 @@ export async function runScenario(
     },
     content: "What is the weather in Seattle?",
   };
+  const finalResponse = "The synthetic weather is sunny and 72°F in Seattle.";
 
   const invoke = InvokeAgentScope.start(
     request,
     { endpoint: { host: "synthetic-agent.invalid", port: 443 } },
     agentDetails,
     callerDetails,
-    { startTime: at(startMilliseconds, 0), endTime: at(startMilliseconds, 400) },
+    { startTime: at(startMilliseconds, 0), endTime: at(startMilliseconds, 500) },
   );
 
   try {
     await invoke.withActiveSpanAsync(async () => {
+      const guardrail = ApplyGuardrailScope.start(
+        {
+          targetType: GuardrailTargetType.LlmInput,
+          targetId: "synthetic-weather-request",
+          decisionType: GuardrailDecisionType.Allow,
+          guardianId: "synthetic-input-guardian",
+          guardianName: "Synthetic Input Guardian",
+          guardianProviderName: "sample",
+          guardianVersion: "1.0.0",
+          decisionReason: "Synthetic weather request is safe.",
+          policyId: "synthetic-weather-policy",
+          policyName: "Synthetic Weather Policy",
+          policyVersion: "1.0.0",
+        },
+        agentDetails,
+        request,
+        callerDetails.userDetails,
+        {
+          startTime: at(startMilliseconds, 10),
+          endTime: at(startMilliseconds, 40),
+        },
+      );
+      guardrail.recordFinding({
+        riskCategory: "synthetic_weather_request",
+        riskSeverity: GuardrailRiskSeverity.Low,
+        riskScore: 0.01,
+      });
+      guardrail.recordDecision(GuardrailDecisionType.Allow, "Synthetic weather request is safe.");
+      guardrail.recordContentOutput("What is the weather in Seattle?");
+      guardrail.dispose();
+
       const firstInference = InferenceScope.start(
         request,
         {
@@ -84,8 +121,8 @@ export async function runScenario(
         agentDetails,
         callerDetails.userDetails,
         {
-          startTime: at(startMilliseconds, 10),
-          endTime: at(startMilliseconds, 110),
+          startTime: at(startMilliseconds, 60),
+          endTime: at(startMilliseconds, 160),
         },
       );
       firstInference.recordInputMessages(["Select a tool for the synthetic weather request."]);
@@ -122,8 +159,8 @@ export async function runScenario(
         agentDetails,
         callerDetails.userDetails,
         {
-          startTime: at(startMilliseconds, 130),
-          endTime: at(startMilliseconds, 180),
+          startTime: at(startMilliseconds, 180),
+          endTime: at(startMilliseconds, 230),
         },
       );
       tool.recordResponse({
@@ -143,8 +180,8 @@ export async function runScenario(
         agentDetails,
         callerDetails.userDetails,
         {
-          startTime: at(startMilliseconds, 200),
-          endTime: at(startMilliseconds, 300),
+          startTime: at(startMilliseconds, 250),
+          endTime: at(startMilliseconds, 350),
         },
       );
       finalInference.recordInputMessages([
@@ -158,7 +195,7 @@ export async function runScenario(
             parts: [
               {
                 type: "text",
-                content: "The synthetic weather is sunny and 72°F in Seattle.",
+                content: finalResponse,
               },
             ],
           },
@@ -168,9 +205,22 @@ export async function runScenario(
       finalInference.recordOutputTokens(14);
       finalInference.recordFinishReasons([FinishReason.STOP]);
       finalInference.dispose();
+
+      const output = OutputScope.start(
+        request,
+        { messages: [finalResponse] },
+        agentDetails,
+        callerDetails.userDetails,
+        {
+          startTime: at(startMilliseconds, 370),
+          endTime: at(startMilliseconds, 420),
+        },
+      );
+      output.recordOutputMessages({ messages: [finalResponse] });
+      output.dispose();
     });
 
-    invoke.recordResponse("The synthetic weather is sunny and 72°F in Seattle.");
+    invoke.recordResponse(finalResponse);
   } finally {
     invoke.dispose();
   }

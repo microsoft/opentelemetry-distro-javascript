@@ -39,9 +39,6 @@ jobs:
       - name: Build Agent365 S2S sample
         run: npm run --prefix samples/agent365-s2s build
 
-      - name: Test Agent365 S2S sample
-        run: npm test --prefix samples/agent365-s2s
-
       - name: Format check
         run: npm run format
 

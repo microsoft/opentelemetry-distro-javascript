@@ -19,9 +19,7 @@ export type {
 
 // ── Re-exports from A365 configuration ──────────────────────────────────────
 export { A365Configuration } from "./a365/index.js";
-export { configureA365Logger } from "./a365/index.js";
 export type { ClusterCategory } from "./a365/index.js";
-export type { ILogger } from "./a365/index.js";
 export { Agent365Exporter } from "./a365/index.js";
 export type {
   Agent365ExporterOptions,

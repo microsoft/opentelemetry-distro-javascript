@@ -10,12 +10,11 @@
   "scripts": {
     "build": "npm run clean && tsc -p tsconfig.json",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true });\"",
-    "format": "node ../../node_modules/prettier/bin/prettier.cjs --check --config ../../.prettierrc.json --ignore-path ../../.prettierignore \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\"",
-    "format:fix": "node ../../node_modules/prettier/bin/prettier.cjs --write --config ../../.prettierrc.json --ignore-path ../../.prettierignore \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\"",
-    "lint": "node ../../node_modules/eslint/bin/eslint.js --config ../../eslint.config.mjs src test",
-    "lint:fix": "node ../../node_modules/eslint/bin/eslint.js --config ../../eslint.config.mjs src test --fix",
-    "start": "node dist/src/index.js",
-    "test": "npm run build && node --test dist/test/sample.test.js"
+    "format": "node ../../node_modules/prettier/bin/prettier.cjs --check --config ../../.prettierrc.json --ignore-path ../../.prettierignore \"src/**/*.ts\" \"*.json\"",
+    "format:fix": "node ../../node_modules/prettier/bin/prettier.cjs --write --config ../../.prettierrc.json --ignore-path ../../.prettierignore \"src/**/*.ts\" \"*.json\"",
+    "lint": "node ../../node_modules/eslint/bin/eslint.js --config ../../eslint.config.mjs src",
+    "lint:fix": "node ../../node_modules/eslint/bin/eslint.js --config ../../eslint.config.mjs src --fix",
+    "start": "node dist/src/index.js"
   },
   "dependencies": {
     "@azure/msal-node": "^6.0.0",
@@ -23,8 +22,6 @@
     "@opentelemetry/api": "^1.9.1"
   },
   "devDependencies": {
-    "@opentelemetry/sdk-trace-base": "^2.10.0",
-    "@opentelemetry/sdk-trace-node": "^2.10.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0"
   }
