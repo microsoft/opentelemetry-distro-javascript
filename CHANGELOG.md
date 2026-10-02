@@ -13,7 +13,7 @@
 - Add GenAI v1.42 InvokeAgent request, response, cache-token, and provider attribute capture for manual A365 scopes. [#239](https://github.com/microsoft/opentelemetry-distro-javascript/pull/239)
 
 ### Other Changes
-- Consolidate Dependabot updates for root markdown-it 14.3.2, Hono 4.13.12, and ip-address 10.7.2, plus samples brace-expansion 5.0.12, fast-uri 3.1.8, and ip-address 10.7.2.
+- Consolidate Dependabot updates for root markdown-it 14.3.2 and Hono 4.13.12, samples brace-expansion 5.0.12 and fast-uri 3.1.8, and root and samples ip-address 10.7.2. [#255](https://github.com/microsoft/opentelemetry-distro-javascript/pull/255)
 - Add upstream compatibility contracts for OpenTelemetry resource detectors, service instance identity precedence, telemetry SDK pipelines, and W3C trace propagation. [#249](https://github.com/microsoft/opentelemetry-distro-javascript/pull/249)
 - Add offline SDK throughput and signed memory benchmarks with raw artifacts and explicitly configured named OTLP log result export.
 - Consolidate Dependabot updates for Vitest 4.1.11, Hono 4.13.7, qs 6.16.0, fast-uri 3.1.7, actions/deploy-pages 5.0.1, and actions/checkout 7.0.1.
