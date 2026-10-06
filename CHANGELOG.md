@@ -2,21 +2,25 @@
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-06
+
 ### Bugs Fixed
-- Update `@grpc/grpc-js` from 1.14.4 to 1.14.5 in the root and AKS LangChain sample lockfiles to address [CVE-2026-101915](https://github.com/advisories/GHSA-f596-whhp-79r4) and [CVE-2026-101916](https://github.com/advisories/GHSA-m9gg-hp2v-232j).
+- Update `@grpc/grpc-js` from 1.14.4 to 1.14.5 in the root and AKS LangChain sample lockfiles to address [CVE-2026-101915](https://github.com/advisories/GHSA-f596-whhp-79r4) and [CVE-2026-101916](https://github.com/advisories/GHSA-m9gg-hp2v-232j). [#250](https://github.com/microsoft/opentelemetry-distro-javascript/pull/250)
 - A365: centralize shared request attributes in the base scope, including session and conversation IDs, channel details, and `operationSource` as `service.name`, while retaining last-write-wins `recordAttributes()` behavior. [#243](https://github.com/microsoft/opentelemetry-distro-javascript/pull/243)
 - Default `InvokeAgentScope` spans to `SpanKind.INTERNAL` while preserving explicit span-kind overrides. [#241](https://github.com/microsoft/opentelemetry-distro-javascript/pull/241)
 
 ### Features Added
+- Add a standalone Agent365 service-to-service observability sample with two-stage MSAL authentication, expiry-aware token caching, safe diagnostics, deterministic manual telemetry, and all five manual scope types. [#244](https://github.com/microsoft/opentelemetry-distro-javascript/pull/244)
 - Add typed ExecuteTool argument and result schemas with default schema_version: "1.0", collision-safe `extension_data` emitted under `metadata`, and non-throwing validation aligned with the .NET and Python distros. [#240](https://github.com/microsoft/opentelemetry-distro-javascript/pull/240)
 - Add manual `sessionId` propagation to `ExecuteToolScope` and `InferenceScope`, plus opt-in custom baggage enrichment for recognized GenAI spans through `BaggageBuilder.customAttribute()` and `customAttributes()`. [#242](https://github.com/microsoft/opentelemetry-distro-javascript/pull/242)
 - Add GenAI v1.42 InvokeAgent request, response, cache-token, and provider attribute capture for manual A365 scopes. [#239](https://github.com/microsoft/opentelemetry-distro-javascript/pull/239)
 
 ### Other Changes
+- Raise the `@azure/monitor-opentelemetry-exporter` floor to `1.0.0-beta.46`, the latest exporter beta.
 - Consolidate Dependabot updates for root markdown-it 14.3.2 and Hono 4.13.12, samples brace-expansion 5.0.12 and fast-uri 3.1.8, and root and samples ip-address 10.7.2. [#255](https://github.com/microsoft/opentelemetry-distro-javascript/pull/255)
 - Add upstream compatibility contracts for OpenTelemetry resource detectors, service instance identity precedence, telemetry SDK pipelines, and W3C trace propagation. [#249](https://github.com/microsoft/opentelemetry-distro-javascript/pull/249)
-- Add offline SDK throughput and signed memory benchmarks with raw artifacts and explicitly configured named OTLP log result export.
-- Consolidate Dependabot updates for Vitest 4.1.11, Hono 4.13.7, qs 6.16.0, fast-uri 3.1.7, actions/deploy-pages 5.0.1, and actions/checkout 7.0.1.
+- Add offline SDK throughput and signed memory benchmarks with raw artifacts and explicitly configured named OTLP log result export. [#246](https://github.com/microsoft/opentelemetry-distro-javascript/pull/246)
+- Consolidate Dependabot updates for Vitest 4.1.11, Hono 4.13.7, qs 6.16.0, fast-uri 3.1.7, actions/deploy-pages 5.0.1, and actions/checkout 7.0.1. [#238](https://github.com/microsoft/opentelemetry-distro-javascript/pull/238)
 - Document local npm lockfile regeneration for contributors who cannot access the Microsoft package proxy, while retaining the proxy-generated lockfile. [#245](https://github.com/microsoft/opentelemetry-distro-javascript/pull/245)
 - Bump the samples' `ip-address` dependency from `10.4.0` to `10.7.2`. [#248](https://github.com/microsoft/opentelemetry-distro-javascript/pull/248)
 
