@@ -469,6 +469,12 @@ export interface InferenceDetails {
   inputTokens?: number;
   /** Number of output (completion) tokens. */
   outputTokens?: number;
+  /** Canonical model name returned by the provider. */
+  responseModel?: string;
+  /** Number of input tokens read from cache. */
+  cacheReadInputTokens?: number;
+  /** Number of input tokens written to cache. */
+  cacheWriteInputTokens?: number;
   /** Finish reasons returned by the model. */
   finishReasons?: string[];
   /** The model's thought process / reasoning trace. */

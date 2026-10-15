@@ -17,6 +17,8 @@ export const GEN_AI_OPERATION_EXECUTE_TOOL = "execute_tool" as const;
 export const GEN_AI_OPERATION_OUTPUT_MESSAGES = "output_messages" as const;
 export const GEN_AI_OPERATION_APPLY_GUARDRAIL = "apply_guardrail" as const;
 export const GEN_AI_OPERATION_CHAT = "chat" as const;
+export const GEN_AI_OPERATION_TEXT_COMPLETION = "text_completion" as const;
+export const GEN_AI_OPERATION_GENERATE_CONTENT = "generate_content" as const;
 
 // --- Attributes (ATTR_ prefix, following OTel convention) ---
 
@@ -49,6 +51,10 @@ export const ATTR_GEN_AI_OUTPUT_MESSAGES = "gen_ai.output.messages" as const;
 // GenAI usage
 export const ATTR_GEN_AI_USAGE_INPUT_TOKENS = "gen_ai.usage.input_tokens" as const;
 export const ATTR_GEN_AI_USAGE_OUTPUT_TOKENS = "gen_ai.usage.output_tokens" as const;
+export const ATTR_GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS =
+  "gen_ai.usage.cache_read.input_tokens" as const;
+export const ATTR_GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS =
+  "gen_ai.usage.cache_write.input_tokens" as const;
 
 // GenAI agent
 export const ATTR_GEN_AI_AGENT_ID = "gen_ai.agent.id" as const;

@@ -203,7 +203,8 @@ baggageScope.run(() => {
   baggage only.
 - Automatic baggage-to-span enrichment only runs for recognized GenAI spans whose
   `gen_ai.operation.name` is `invoke_agent`, `execute_tool`, `output_messages`,
-  `apply_guardrail`, `chat`, `Chat`, `TextCompletion`, or `GenerateContent`.
+  `apply_guardrail`, `chat`, `text_completion`, `generate_content`, `Chat`, `TextCompletion`, or
+  `GenerateContent`.
 - For the built-in LangChain and OpenAI Agents instrumentations, enrichment also recognizes
   their exact instrumentation scope names when the final GenAI operation is not available at
   span start. Configured custom tracer names, scope prefixes, and unrelated child scopes are not

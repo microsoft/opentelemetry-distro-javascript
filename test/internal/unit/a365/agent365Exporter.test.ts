@@ -1806,6 +1806,22 @@ describe("Exporter utils", () => {
       assert.strictEqual(groups.get("t2:a2")?.length, 1);
     });
 
+    it("should retain inference spans with canonical multiword operation names", () => {
+      const spans = ["text_completion", "generate_content"].map((operationName) =>
+        makeSpan({
+          attributes: {
+            "microsoft.tenant.id": "t1",
+            "gen_ai.agent.id": "a1",
+            "gen_ai.operation.name": operationName,
+          },
+        }),
+      );
+
+      const groups = partitionByIdentity(spans);
+
+      assert.strictEqual(groups.get("t1:a1")?.length, 2);
+    });
+
     it("should skip spans without identity attributes", () => {
       const spans = [
         makeSpan({ attributes: { "gen_ai.operation.name": "invoke_agent" } }),
