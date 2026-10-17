@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Other Changes
+- Consolidate Dependabot updates for root `@modelcontextprotocol/sdk` 1.32.1, `brace-expansion` 5.0.12, and `source-map-js` 1.2.2, samples `proxy-addr` 2.0.8, `actions/setup-node` 7.1.0, and `actions/upload-artifact` 7.0.2.
+
 ## [1.5.0] - 2026-10-06
 
 ### Bugs Fixed
