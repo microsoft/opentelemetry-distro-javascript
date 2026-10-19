@@ -51,10 +51,11 @@ export class InferenceScope extends OpenTelemetryScope {
 
     // spanKind for InferenceScope is always CLIENT
     const resolvedSpanDetails: SpanDetails = { ...spanDetails, spanKind: SpanKind.CLIENT };
+    const operationName = getOperationName(details.operationName);
 
     super(
-      getOperationName(details.operationName),
-      `${details.operationName} ${details.model}`,
+      operationName,
+      `${operationName} ${details.model}`,
       agentDetails,
       resolvedSpanDetails,
       userDetails,
@@ -92,7 +93,7 @@ export class InferenceScope extends OpenTelemetryScope {
       }
     }
 
-    function getOperationName(operationName: InferenceOperationType): string {
+    function getOperationName(operationName: InferenceDetails["operationName"]): string {
       switch (operationName) {
         case InferenceOperationType.CHAT:
           return "chat";
@@ -100,6 +101,8 @@ export class InferenceScope extends OpenTelemetryScope {
           return "text_completion";
         case InferenceOperationType.GENERATE_CONTENT:
           return "generate_content";
+        default:
+          return operationName;
       }
     }
   }

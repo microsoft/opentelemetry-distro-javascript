@@ -139,6 +139,11 @@ When you provide it, those scopes write `microsoft.session.id` directly on the c
 span instead of relying on later baggage enrichment. `OutputScope` does not currently
 propagate `request.sessionId` directly.
 
+`InferenceScope` accepts `InferenceOperationType` enum values or the canonical strings
+`chat`, `text_completion`, and `generate_content` in `details.operationName`. Both
+`gen_ai.operation.name` and the span name use the canonical operation; for example,
+`InferenceOperationType.TEXT_COMPLETION` with model `gpt-4` produces `text_completion gpt-4`.
+
 `InvokeAgentScope.start()` captures request parameters immediately, while `recordResponseParameters()`
 captures response and usage values after the agent completes.
 

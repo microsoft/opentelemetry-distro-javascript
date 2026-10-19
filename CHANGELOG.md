@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Features Added
-- Add privacy-safe Model Observation attributes to `InferenceScope`, including the canonical served response model and cache read/write input-token counts. Attributes can be supplied when the scope starts or recorded after the response is available; operation names are normalized to lowercase and cache-token semantic-convention constants are exported. [#261](https://github.com/microsoft/opentelemetry-distro-javascript/pull/261)
+- Add privacy-safe Model Observation attributes to `InferenceScope`, including the canonical served response model and cache read/write input-token counts. Attributes can be supplied when the scope starts or recorded after the response is available; inference operations accept enum values or canonical strings and use canonical OpenTelemetry names for both operation attributes and span names. Cache-token semantic-convention constants are exported. [#261](https://github.com/microsoft/opentelemetry-distro-javascript/pull/261)
 
 ## [1.5.0] - 2026-10-06
 

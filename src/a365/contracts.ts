@@ -459,8 +459,8 @@ export interface ToolCallDetails {
 
 /** Details for an inference call. */
 export interface InferenceDetails {
-  /** The inference operation type (e.g. chat, text completion). */
-  operationName: InferenceOperationType;
+  /** The inference operation enum value or canonical OpenTelemetry operation name. */
+  operationName: InferenceOperationType | "chat" | "text_completion" | "generate_content";
   /** Name of the model used for inference. */
   model: string;
   /** Name of the provider serving the model. */

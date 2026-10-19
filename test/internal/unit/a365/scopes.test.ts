@@ -36,6 +36,7 @@ import type {
 } from "../../../../src/a365/index.js";
 import { InferenceOperationType, MessageRole } from "../../../../src/a365/index.js";
 import { safeSerializeToJson } from "../../../../src/a365/message-utils.js";
+import { partitionByIdentity } from "../../../../src/a365/exporter/utils.js";
 
 let sharedExporter: InMemorySpanExporter;
 let contextManager: AsyncLocalStorageContextManager;
@@ -866,23 +867,36 @@ describe("Scopes", () => {
       expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY]).toBe(7);
     });
 
-    it.each([
+    it.each<[InferenceDetails["operationName"], string]>([
       [InferenceOperationType.CHAT, "chat"],
       [InferenceOperationType.TEXT_COMPLETION, "text_completion"],
       [InferenceOperationType.GENERATE_CONTENT, "generate_content"],
-    ])("should map %s to canonical operation name %s", (operationName, expected) => {
-      const scope = InferenceScope.start(
-        testRequest,
-        { operationName, model: "gpt-4" },
-        testAgentDetails,
-      );
-      scope.dispose();
+      ["chat", "chat"],
+      ["text_completion", "text_completion"],
+      ["generate_content", "generate_content"],
+    ])(
+      "should normalize %s to %s and retain the inference span for export",
+      (operationName, expected) => {
+        const spanCountBefore = sharedExporter.getFinishedSpans().length;
+        const scope = InferenceScope.start(
+          testRequest,
+          { operationName, model: "gpt-4" },
+          testAgentDetails,
+        );
+        scope.dispose();
 
-      const spans = sharedExporter.getFinishedSpans();
-      expect(
-        spans[spans.length - 1].attributes[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY],
-      ).toBe(expected);
-    });
+        const spans = sharedExporter.getFinishedSpans();
+        expect(spans).toHaveLength(spanCountBefore + 1);
+        const span = spans[spans.length - 1];
+        expect(span.attributes[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]).toBe(expected);
+        expect(span.name).toBe(`${expected} gpt-4`);
+        const groups = partitionByIdentity([span]);
+        expect(groups.size).toBe(1);
+        expect(groups.get(`${testAgentDetails.tenantId}:${testAgentDetails.agentId}`)).toEqual([
+          span,
+        ]);
+      },
+    );
 
     it("should set conversationId and channel tags when provided", () => {
       const spy = vi.spyOn(OpenTelemetryScope.prototype as any, "setTagMaybe");
