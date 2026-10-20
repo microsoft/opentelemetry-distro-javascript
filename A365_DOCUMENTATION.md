@@ -303,14 +303,31 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
 ### Operational Notes
 
 - Durable records are stored as plaintext JSON files. On POSIX, the SDK creates owner-only durable
-  directories/files (`0700` / `0600`), rejects symlink roots, and requires the root to be owned by
-  the current user. Default POSIX storage probes `TMPDIR`, `/var/tmp`, then `/tmp` and atomically
+  directories/files (`0700` / `0600`), even with a restrictive umask. Existing base roots and
+  `app-<hash>` partitions must already be owned by the current user with mode `0700`; unsafe
+  existing directories are rejected, not chmodded. Use a dedicated private `storageDirectory`,
+  not a shared temporary directory or volume root. The SDK does not change existing configured
+  parents or shared temporary-directory permissions. Default POSIX storage probes `TMPDIR`,
+  `/var/tmp`, then `/tmp` and atomically
   creates one `a365-otel-durable-<uid>` leaf under each candidate; it does not create a
   multi-directory SDK-owned tree under a shared temp directory. Windows defaults use the per-user
-  `Microsoft/A365/otel-durable` location under the selected candidate and also reject a symlinked
-  final root. On Windows, the SDK removes inherited ACLs and grants full control only to the current
+  `Microsoft/A365/otel-durable` location under the selected candidate. All platforms reject symlinks
+  (including Windows junctions) anywhere in the storage directory path, before creating storage.
+  POSIX ancestors must be owned by root or the current user and must not be group/other-writable
+  unless sticky (such as `/tmp`). Directory paths and POSIX base/partition permissions are checked
+  again before persisting, claiming replay records, completing, or releasing claims. These checks
+  do not isolate telemetry from administrators or hostile processes running as the same user;
+  use storage on a trusted local filesystem. On Windows, the SDK removes inherited ACLs and grants
+  full control only to the current
   Windows identity and built-in Administrators. ACL hardening failures cause durable storage
   initialization to fail and the exporter to use network-only delivery.
+- Secure cache locations and application partition identities are unchanged, so existing secure
+  records remain available after restart. If an existing POSIX cache has unsafe permissions, an
+  operator must secure that SDK-owned directory out-of-band before replay can resume; the SDK
+  does not automatically repair or migrate it. Rejected default candidates produce warnings and
+  only another validated secure candidate may be used. Explicit-directory failures do not fall
+  back to a different directory. Runtime validation errors use the existing persistence/replay
+  error logs and prevent that disk operation; there is no insecure-storage fallback.
 - Every explicit or default durable root is partitioned again under a stable `app-<hash>` child
   derived from the process identity, so applications that share a base directory do not replay one
   another's telemetry. All retention, capacity, and pruning behavior described below operates only

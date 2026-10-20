@@ -290,7 +290,7 @@ describe("DurableDeliveryManager", () => {
       "durable-manager-test-artifacts",
       randomUUID(),
     );
-    await fs.mkdir(root, { recursive: true });
+    await fs.mkdir(root, { recursive: true, mode: 0o700 });
 
     try {
       const logger = makeLogger();

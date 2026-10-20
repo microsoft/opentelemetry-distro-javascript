@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ExportResultCode } from "@opentelemetry/core";
@@ -140,7 +140,7 @@ async function seedDurablePendingRecord(
   fileName: string,
   contents: string,
 ): Promise<void> {
-  await mkdir(durableStorageRoot(directory), { recursive: true });
+  await mkdir(durableStorageRoot(directory), { recursive: true, mode: 0o700 });
   await writeFile(join(durableStorageRoot(directory), fileName), contents, "utf8");
 }
 
@@ -1677,6 +1677,36 @@ describe("Agent365Exporter", () => {
       assert.strictEqual(fetchSpy.mock.calls.length, 1);
       await exporter.shutdown();
     });
+
+    it.skipIf(process.platform === "win32")(
+      "logs unsafe configured storage and fails retryable exports without writing or repairing it",
+      async () => {
+        const directory = await createStorageDirectory();
+        await chmod(directory, 0o755);
+        const customLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+        fetchSpy.mockResolvedValue({ status: 503, headers: new Headers() });
+        const exporter = new Agent365Exporter({
+          tokenResolver: () => "token",
+          durableDelivery: { enabled: true, storageDirectory: directory },
+        });
+
+        try {
+          assert.strictEqual(await exportResult(exporter, [makeSpan()]), ExportResultCode.FAILED);
+          assert.deepEqual(await readdir(directory), []);
+          assert.strictEqual((await stat(directory)).mode & 0o777, 0o755);
+          assert.isTrue(
+            customLogger.error.mock.calls.some(
+              ([message, error]) =>
+                String(message).includes("Durable delivery initialization failed") &&
+                String(error).includes("owner-only"),
+            ),
+          );
+        } finally {
+          await exporter.shutdown();
+        }
+      },
+    );
 
     it("fails retryable exports when durable initialization fails and records cannot be persisted", async () => {
       vi.spyOn(PersistentStore, "create").mockRejectedValue(new Error("disk unavailable"));

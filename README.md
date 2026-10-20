@@ -388,7 +388,14 @@ set `durableDelivery.enabled: false` to force legacy network-only delivery.
 Operational notes:
 
 - Durable records are stored as plaintext JSON files. On POSIX, the SDK creates owner-only durable
-  directories/files (`0700` / `0600`). On Windows, the SDK removes inherited ACLs and grants full
+  directories/files (`0700` / `0600`), accounting for umask. Existing base roots and application
+  partitions must already be current-user-owned `0700` directories; unsafe permissions and
+  symlinked directory paths (including ancestors) are rejected rather than repaired. Configure a
+  dedicated private directory, not a shared temp or volume root. Existing parent permissions are
+  never changed. Storage paths and POSIX base/partition permissions are revalidated before writes
+  and replay. Secure cache paths and restart/replay identities are unchanged. See
+  [storage security and recovery notes](./A365_DOCUMENTATION.md#operational-notes).
+  On Windows, the SDK removes inherited ACLs and grants full
   control only to the current Windows identity and built-in Administrators. ACL hardening failures
   cause durable storage initialization to fail and the exporter to use network-only delivery.
 - Durable delivery is enabled by default when the A365 HTTP exporter is active. Set

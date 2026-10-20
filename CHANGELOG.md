@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Bugs Fixed
+- Harden A365 offline/retry storage against CWE-379: create private POSIX cache directories with `0700` permissions accounting for umask, reject unsafe existing storage and symlinked directory paths, and revalidate before writes and replay without changing shared or existing parent permissions. Preserve secure cache locations and Windows ACL hardening.
+
 ### Features Added
 - Add privacy-safe Model Observation attributes to `InferenceScope`, including the canonical served response model and cache read/write input-token counts. Attributes can be supplied when the scope starts or recorded after the response is available; inference operations accept enum values or canonical strings and use canonical OpenTelemetry names for both operation attributes and span names. Cache-token semantic-convention constants are exported. [#261](https://github.com/microsoft/opentelemetry-distro-javascript/pull/261)
 

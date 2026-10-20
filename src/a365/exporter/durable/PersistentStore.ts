@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { createHash, randomUUID } from "node:crypto";
+import type { Stats } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -83,6 +84,7 @@ export class PersistentStore {
   }
 
   private async persistInternal(record: DurableRecordV1): Promise<string> {
+    await this.validateStorage();
     const serialized = JSON.stringify(record);
     const recordBytes = Buffer.byteLength(serialized, "utf8");
     if (recordBytes > this.options.maxStorageBytes) {
@@ -96,6 +98,9 @@ export class PersistentStore {
     const handle = await fs.open(temporaryPath, "wx", OWNER_FILE_MODE);
     try {
       try {
+        if (process.platform !== "win32") {
+          await handle.chmod(OWNER_FILE_MODE);
+        }
         await handle.writeFile(serialized, "utf8");
         await handle.sync();
       } finally {
@@ -118,6 +123,7 @@ export class PersistentStore {
         return [];
       }
 
+      await this.validateStorage();
       await this.recoverStaleLeases();
 
       const excludeRecordIds = options?.excludeRecordIds;
@@ -231,6 +237,7 @@ export class PersistentStore {
   }
 
   public async complete(claim: ClaimedRecord): Promise<void> {
+    await this.validateStorage();
     try {
       await fs.unlink(claim.leasePath);
       await syncDirectory(this.root);
@@ -242,6 +249,7 @@ export class PersistentStore {
   }
 
   public async release(claim: ClaimedRecord): Promise<void> {
+    await this.validateStorage();
     try {
       await fs.rename(claim.leasePath, this.pendingPath(claim.record, `release-${randomUUID()}`));
       await syncDirectory(this.root);
@@ -441,6 +449,10 @@ export class PersistentStore {
     }
   }
 
+  private async validateStorage(): Promise<void> {
+    await validateDirectoryPath(this.root, new Set([dirname(this.root), this.root]));
+  }
+
   private async withClaimLock<T>(callback: () => Promise<T>): Promise<T> {
     const previous = this.claimQueue;
     let release = () => {};
@@ -512,15 +524,43 @@ async function initializeRoot(
   recursive = true,
   directoryAccessControl?: DirectoryAccessControl,
 ): Promise<string> {
+  root = resolve(root);
+  await createDirectory(root, recursive);
+  return verifyRoot(root, directoryAccessControl);
+}
+
+async function createDirectory(root: string, recursive: boolean): Promise<void> {
+  if (recursive) {
+    try {
+      await fs.lstat(root);
+      return;
+    } catch (error) {
+      if (!isEnoent(error)) {
+        throw error;
+      }
+    }
+    await createDirectory(dirname(root), true);
+  }
+
+  await validateDirectoryPath(dirname(root));
   try {
-    await fs.mkdir(root, { recursive, mode: OWNER_DIRECTORY_MODE });
+    await fs.mkdir(root, { mode: OWNER_DIRECTORY_MODE });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
       throw error;
     }
+    return;
   }
 
-  return verifyRoot(root, directoryAccessControl);
+  if (process.platform !== "win32") {
+    const stats = await fs.lstat(root);
+    assertDirectory(root, stats);
+    // mkdir's mode is filtered by umask. Restore owner access only for the
+    // directory this call created, never an existing or shared parent.
+    if ((stats.mode & 0o777) !== OWNER_DIRECTORY_MODE) {
+      await fs.chmod(root, OWNER_DIRECTORY_MODE);
+    }
+  }
 }
 
 async function initializeExplicitRoot(
@@ -543,38 +583,56 @@ async function verifyRoot(
   root: string,
   directoryAccessControl?: DirectoryAccessControl,
 ): Promise<string> {
-  let stats = await fs.lstat(root);
-  if (stats.isSymbolicLink() || !stats.isDirectory()) {
-    throw new Error(`Durable storage root must be a real directory: ${root}`);
-  }
+  await validateDirectoryPath(root, new Set([root]));
 
   if (process.platform === "win32") {
     await directoryAccessControl?.hardenDirectory(root);
-    stats = await fs.lstat(root);
-    if (stats.isSymbolicLink() || !stats.isDirectory()) {
-      throw new Error(`Durable storage root must be a real directory: ${root}`);
-    }
-  } else {
-    const uid = process.getuid?.();
-    if (uid !== undefined && stats.uid !== uid) {
-      throw new Error(`Durable storage root must be owned by the current user: ${root}`);
-    }
-
-    await fs.chmod(root, OWNER_DIRECTORY_MODE);
-    stats = await fs.lstat(root);
-    if (
-      stats.isSymbolicLink() ||
-      !stats.isDirectory() ||
-      (uid !== undefined && stats.uid !== uid)
-    ) {
-      throw new Error(
-        `Durable storage root must be a real directory owned by the current user: ${root}`,
-      );
-    }
+    await validateDirectoryPath(root, new Set([root]));
   }
 
   await probeRoot(root);
   return root;
+}
+
+async function validateDirectoryPath(
+  root: string,
+  privateDirectories: ReadonlySet<string> = new Set(),
+): Promise<void> {
+  const directories = [root];
+  while (dirname(directories[0]) !== directories[0]) {
+    directories.unshift(dirname(directories[0]));
+  }
+
+  for (const directory of directories) {
+    assertDirectory(directory, await fs.lstat(directory), privateDirectories.has(directory));
+  }
+}
+
+function assertDirectory(directory: string, stats: Stats, privateDirectory = false): void {
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    throw new Error(`Durable storage root must be a real directory: ${directory}`);
+  }
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const uid = process.getuid?.();
+  if (privateDirectory) {
+    if (uid !== undefined && stats.uid !== uid) {
+      throw new Error(`Durable storage root must be owned by the current user: ${directory}`);
+    }
+    if ((stats.mode & 0o777) !== OWNER_DIRECTORY_MODE) {
+      throw new Error(`Durable storage root must have owner-only permissions (0700): ${directory}`);
+    }
+    return;
+  }
+
+  // A trusted sticky temp parent (for example /tmp) prevents other users
+  // replacing our private leaf. Other writable or foreign-owned parents do not.
+  const trustedOwner = stats.uid === 0 || uid === undefined || stats.uid === uid;
+  if (!trustedOwner || ((stats.mode & 0o022) !== 0 && (stats.mode & 0o1000) === 0)) {
+    throw new Error(`Durable storage ancestor has unsafe permissions or ownership: ${directory}`);
+  }
 }
 
 let defaultDirectoryAccessControl: DirectoryAccessControl | undefined;

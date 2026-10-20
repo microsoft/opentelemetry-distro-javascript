@@ -105,6 +105,149 @@ describe("PersistentStore", () => {
     );
   });
 
+  it("rejects symlink ancestors before creating storage in their targets", async () => {
+    const target = join(scratchRoot, "ancestor-target");
+    const link = join(scratchRoot, "ancestor-link");
+    await fs.mkdir(target, { mode: 0o700 });
+    await fs.symlink(target, link, nativePlatform === "win32" ? "junction" : "dir");
+
+    await expect(createStore(join(link, "store"))).rejects.toThrow(/real directory/);
+    assert.deepEqual(await fs.readdir(target), []);
+  });
+
+  it.skipIf(process.platform === "win32").each([0o755, 0o770, 0o777, 0o1777])(
+    "rejects an existing POSIX root with mode %s without changing it",
+    async (mode) => {
+      const root = join(scratchRoot, "unsafe-existing");
+      await fs.mkdir(root);
+      await fs.chmod(root, mode);
+
+      await expect(createStore(root)).rejects.toThrow(/owner-only/);
+      assert.strictEqual((await fs.stat(root)).mode & 0o7777, mode);
+      assert.deepEqual(await fs.readdir(root), []);
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "rejects an unsafe existing application partition without changing it",
+    async () => {
+      const root = join(scratchRoot, "unsafe-partition");
+      const partition = explicitStorageRoot(root);
+      await fs.mkdir(partition, { recursive: true, mode: 0o700 });
+      await fs.chmod(partition, 0o755);
+
+      await expect(createStore(root)).rejects.toThrow(/owner-only/);
+      assert.strictEqual((await fs.stat(partition)).mode & 0o777, 0o755);
+      assert.deepEqual(await fs.readdir(partition), []);
+    },
+  );
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() !== 0)(
+    "rejects a POSIX root owned by another user",
+    async () => {
+      const root = join(scratchRoot, "foreign-owner");
+      await fs.mkdir(root, { mode: 0o700 });
+      await fs.chown(root, 65534, 65534);
+
+      await expect(createStore(root)).rejects.toThrow(/owned by the current user/);
+      assert.strictEqual((await fs.stat(root)).uid, 65534);
+      assert.deepEqual(await fs.readdir(root), []);
+    },
+  );
+
+  it.skipIf(process.platform === "win32").each([0, 0o077, 0o777])(
+    "creates owner-only directories under umask %s without chmodding existing parents",
+    async (mask) => {
+      const parentMode = (await fs.stat(scratchRoot)).mode & 0o777;
+      const root = join(scratchRoot, "new-parent", "store");
+      const creationModes: number[] = [];
+      const actualMkdir = fs.mkdir.bind(fs);
+      vi.spyOn(fs, "mkdir").mockImplementation(async (path, options) => {
+        const result = await actualMkdir(path, options as never);
+        creationModes.push((await fs.lstat(path)).mode & 0o077);
+        return result;
+      });
+      const originalUmask = process.umask(mask);
+      try {
+        const storedPath = await (await createStore(root)).persist(makeRecord());
+        for (const directory of [dirname(root), root, dirname(storedPath)]) {
+          assert.strictEqual((await fs.stat(directory)).mode & 0o777, 0o700);
+        }
+        assert.strictEqual((await fs.stat(storedPath)).mode & 0o777, 0o600);
+        assert.deepEqual(
+          (await (await createStore(root)).claimBatch(1))[0].record.body,
+          makeRecord().body,
+        );
+        assert.isNotEmpty(creationModes);
+        assert.isTrue(creationModes.every((mode) => mode === 0));
+        assert.strictEqual((await fs.stat(scratchRoot)).mode & 0o777, parentMode);
+      } finally {
+        process.umask(originalUmask);
+      }
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "rejects a writable non-sticky ancestor without changing its permissions",
+    async () => {
+      const parent = join(scratchRoot, "shared-parent");
+      await fs.mkdir(parent);
+      await fs.chmod(parent, 0o777);
+
+      await expect(createStore(join(parent, "store"))).rejects.toThrow(/unsafe permissions/);
+      assert.strictEqual((await fs.stat(parent)).mode & 0o777, 0o777);
+      assert.deepEqual(await fs.readdir(parent), []);
+    },
+  );
+
+  it.skipIf(process.platform === "win32").each(["base", "partition"])(
+    "rejects writes and replay when the %s permissions become unsafe",
+    async (directory) => {
+      const root = join(scratchRoot, "changed-permissions");
+      const store = await createStore(root);
+      const storedPath = await store.persist(makeRecord());
+      const changedPath = directory === "base" ? root : dirname(storedPath);
+      await fs.chmod(changedPath, 0o755);
+
+      await expect(store.persist(makeRecord())).rejects.toThrow(/owner-only/);
+      await expect(store.claimBatch(1)).rejects.toThrow(/owner-only/);
+      await expect(createStore(root)).rejects.toThrow(/owner-only/);
+      assert.deepEqual(await fs.readdir(dirname(storedPath)), [basename(storedPath)]);
+      assert.strictEqual((await fs.stat(changedPath)).mode & 0o777, 0o755);
+    },
+  );
+
+  it.each(["base", "partition"])(
+    "rejects writes and replay after the %s path is replaced by a symlink",
+    async (directory) => {
+      const root = join(scratchRoot, "replaced-root");
+      const store = await createStore(root);
+      const storedPath = await store.persist(makeRecord());
+      const replacedPath = directory === "base" ? root : dirname(storedPath);
+      const movedRoot = join(scratchRoot, "moved-root");
+      await fs.rename(replacedPath, movedRoot);
+      await fs.symlink(movedRoot, replacedPath, nativePlatform === "win32" ? "junction" : "dir");
+
+      await expect(store.persist(makeRecord())).rejects.toThrow(/real directory/);
+      await expect(store.claimBatch(1)).rejects.toThrow(/real directory/);
+      const movedPartition = directory === "base" ? explicitStorageRoot(movedRoot) : movedRoot;
+      assert.deepEqual(await fs.readdir(movedPartition), [basename(storedPath)]);
+    },
+  );
+
+  it("reopens the same secure partition and replays persisted telemetry", async () => {
+    const root = join(scratchRoot, "restart-replay");
+    const record = makeRecord();
+    const storedPath = await (await createStore(root)).persist(record);
+
+    const restartedStore = await createStore(root);
+    const [claim] = await restartedStore.claimBatch(1);
+    assert.deepEqual(claim.record, record);
+    assert.strictEqual(dirname(claim.leasePath), dirname(storedPath));
+    await restartedStore.complete(claim);
+    assert.deepEqual(await listStoreFiles(root), []);
+  });
+
   it("surfaces explicit directory failures without fallback", async () => {
     const blockedParent = join(scratchRoot, "blocked-parent");
     const fallbackBase = join(scratchRoot, "fallback-base");
@@ -180,33 +323,33 @@ describe("PersistentStore", () => {
     }
   });
 
-  it("uses POSIX fallback candidates in exact de-duplicated order", async () => {
-    const restorePlatform = usePosixDefaultCandidates(nativePlatform);
-    const logger = makeLogger();
-    const actualMkdir = fs.mkdir.bind(fs);
-    const expectedAttempts = [defaultStorageRoot("/tmp"), defaultStorageRoot("/var/tmp")];
-    const blockedBaseRoots = [defaultStorageBaseRoot("/tmp"), defaultStorageBaseRoot("/var/tmp")];
+  it.skipIf(process.platform === "win32")(
+    "uses POSIX fallback candidates in exact de-duplicated order",
+    async () => {
+      const logger = makeLogger();
+      const actualMkdir = fs.mkdir.bind(fs);
+      const expectedAttempts = [defaultStorageRoot("/tmp"), defaultStorageRoot("/var/tmp")];
+      const blockedBaseRoots = [defaultStorageBaseRoot("/tmp"), defaultStorageBaseRoot("/var/tmp")];
 
-    tmpdirOverride.value = "/tmp";
-    vi.spyOn(fs, "mkdir").mockImplementation(async (path, options) => {
-      const normalizedPath = String(path);
-      if (
-        blockedBaseRoots.some(
-          (baseRoot) =>
-            normalizedPath === baseRoot ||
-            normalizedPath.startsWith(`${baseRoot}\\`) ||
-            normalizedPath.startsWith(`${baseRoot}/`),
-        )
-      ) {
-        const error = new Error("blocked default root") as NodeJS.ErrnoException;
-        error.code = "EACCES";
-        throw error;
-      }
+      tmpdirOverride.value = "/tmp";
+      vi.spyOn(fs, "mkdir").mockImplementation(async (path, options) => {
+        const normalizedPath = String(path);
+        if (
+          blockedBaseRoots.some(
+            (baseRoot) =>
+              normalizedPath === baseRoot ||
+              normalizedPath.startsWith(`${baseRoot}\\`) ||
+              normalizedPath.startsWith(`${baseRoot}/`),
+          )
+        ) {
+          const error = new Error("blocked default root") as NodeJS.ErrnoException;
+          error.code = "EACCES";
+          throw error;
+        }
 
-      return actualMkdir(path, options as never);
-    });
+        return actualMkdir(path, options as never);
+      });
 
-    try {
       process.env.TMPDIR = "/tmp";
 
       await expect(
@@ -223,10 +366,8 @@ describe("PersistentStore", () => {
         expectedAttempts,
       );
       assert.strictEqual(logger.warn.mock.calls.length, expectedAttempts.length);
-    } finally {
-      restorePlatform();
-    }
-  });
+    },
+  );
 
   it("rejects a symlinked default root before falling back", async () => {
     const firstCandidate = join(scratchRoot, "symlinked-default-candidate");
@@ -1099,19 +1240,5 @@ function useWindowsDefaultCandidates(nativePlatform: string): () => void {
   }
 
   Object.defineProperty(process, "platform", { ...descriptor, value: "win32" });
-  return () => Object.defineProperty(process, "platform", descriptor);
-}
-
-function usePosixDefaultCandidates(nativePlatform: string): () => void {
-  if (nativePlatform !== "win32") {
-    return () => {};
-  }
-
-  const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
-  if (!descriptor) {
-    throw new Error("Unable to override process.platform for this test");
-  }
-
-  Object.defineProperty(process, "platform", { ...descriptor, value: "linux" });
   return () => Object.defineProperty(process, "platform", descriptor);
 }
