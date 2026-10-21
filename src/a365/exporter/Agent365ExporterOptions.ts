@@ -86,7 +86,7 @@ export interface Agent365ExporterOptions {
   /** Maximum estimated payload size (bytes) per HTTP chunk. @default 900 * 1024 (900KB) */
   maxPayloadBytes?: number;
 
-  /** Durable delivery options for local spool-and-replay behavior. */
+  /** Local spool/replay options. Unix requires a customer-provisioned existing absolute storageDirectory. */
   durableDelivery?: Agent365DurableDeliveryOptions;
 }
 

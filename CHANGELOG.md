@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Bugs Fixed
-- Harden A365 offline/retry storage against CWE-379: create private POSIX cache directories with `0700` permissions accounting for umask, reject unsafe existing storage and symlinked directory paths, and revalidate before writes and replay without changing shared or existing parent permissions. Preserve secure cache locations and Windows ACL hardening.
+- **Breaking change on Unix (Linux/macOS):** Agent365 offline buffering/replay now requires an explicitly configured, existing, absolute `durableDelivery.storageDirectory`. No automatic Unix temporary-directory fallback or root creation. Missing/invalid roots are logged and disable only disk buffering/replay; online export continues. Customers provision and maintain ownership, permissions (normally a private service-account-owned `0700` root), ACLs, and path-replacement protection; the SDK does not inspect or repair Unix access controls. Windows behavior, explicit-root cache identities, record compatibility, and retention limits are unchanged. Old temporary backlogs are not automatically migrated; see [storage provisioning and migration](A365_DOCUMENTATION.md#storage-provisioning-and-migration).
 
 ### Features Added
 - Add privacy-safe Model Observation attributes to `InferenceScope`, including the canonical served response model and cache read/write input-token counts. Attributes can be supplied when the scope starts or recorded after the response is available; inference operations accept enum values or canonical strings and use canonical OpenTelemetry names for both operation attributes and span names. Cache-token semantic-convention constants are exported. [#261](https://github.com/microsoft/opentelemetry-distro-javascript/pull/261)

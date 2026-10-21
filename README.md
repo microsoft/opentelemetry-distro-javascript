@@ -88,7 +88,7 @@ useMicrosoftOpenTelemetry({
 });
 ```
 
-When you enable the A365 HTTP exporter, durable delivery is enabled by default. Tune the durable
+When you enable the A365 HTTP exporter, durable delivery is requested by default. Tune the durable
 store if you need a protected persistent volume or different bounds:
 
 ```typescript
@@ -112,13 +112,15 @@ With durable delivery enabled, retryable A365 exporter payloads (including HTTP 
 and 5xx responses) are stored as plaintext local files in a stable per-application partition and
 replayed with a freshly resolved token plus the exporter's current cluster/domain routing; durable
 files never store bearer tokens or authoritative route metadata. Delivery is at-least-once, so
-duplicates are possible. The SDK restricts durable storage to the current user and Administrators
-on Windows and uses owner-only `0700` directories and `0600` files on POSIX. Use a protected
+duplicates are possible. Unix requires an existing absolute customer-provisioned root; the customer
+maintains ownership, permissions, ACLs, and ancestor/path-replacement protection. The SDK does not
+inspect or repair Unix access controls. Windows retains its current-user/Administrators ACL behavior.
+Use a protected
 persistent volume if records must survive container or host restarts; ephemeral container storage
 only survives process restarts and still counts against the container's ephemeral-storage quota.
-If durable storage permissions cannot be secured, the exporter logs the initialization failure and
-degrades to network-only delivery; successful and non-retryable live sends still complete, but
-retryable results that cannot be persisted fail.
+Missing/invalid storage configuration or initialization failure is logged and disables only offline
+buffering/replay. Online export continues; failed sends that cannot be persisted are reported as failures.
+See [provisioning and migration](A365_DOCUMENTATION.md#storage-provisioning-and-migration).
 
 For A365 scenarios, scope APIs, baggage, hosting middleware, and official terminology alignment, see [A365_DOCUMENTATION.md](./A365_DOCUMENTATION.md).
 
@@ -370,13 +372,16 @@ new ObservabilityHostingManager().configure(adapter as unknown as { use(...m: un
 #### A365 durable delivery
 
 Durable delivery applies only to the A365 HTTP exporter, so set both `a365.enabled: true` and
-`a365.enableObservabilityExporter: true` when you use it. Durable delivery is enabled by default;
-set `durableDelivery.enabled: false` to force legacy network-only delivery.
+`a365.enableObservabilityExporter: true` when you use it. Durable delivery is requested by default;
+set `durableDelivery.enabled: false` to force legacy network-only delivery and bypass storage initialization.
+**Unix breaking change (Linux/macOS):** buffering requires an explicitly configured, existing,
+absolute `durableDelivery.storageDirectory`; otherwise an error is logged and only offline
+buffering/replay is disabled. Online export continues.
 
 | Option                               | Type      | Default                   | Description                                                                                                                                                                                                                                                                                |
 | ------------------------------------ | --------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `enabled`                            | `boolean` | `true`                    | Durable delivery stays on unless you explicitly disable it                                                                                                                                                                                                                                  |
-| `storageDirectory`                   | `string`  | auto                      | Root directory for durable records. When omitted, the SDK probes `LOCALAPPDATA`, then `TEMP`, then `os.tmpdir()` on Windows and appends `Microsoft/A365/otel-durable`; on POSIX it probes `TMPDIR`, then `/var/tmp`, then `/tmp` and uses the single `a365-otel-durable-<uid>` leaf. Every base root then gets a stable per-application `app-<hash>` child |
+| `enabled`                            | `boolean` | `true`                    | Requests buffering/replay; `false` bypasses storage initialization |
+| `storageDirectory`                   | `string`  | unset                     | Unix: required existing absolute customer-provisioned root; no fallback/root creation. Windows: unchanged `LOCALAPPDATA`, `TEMP`, `os.tmpdir()` defaults under `Microsoft/A365/otel-durable`. Stable `app-<hash>` cache child |
 | `maxStorageBytes`                    | `number`  | `50 * 1024 * 1024`        | Maximum total bytes retained for pending and quarantined durable records                                                                                                                                                                                                                   |
 | `maxRecordAgeMilliseconds`           | `number`  | `2 * 24 * 60 * 60 * 1000` | Maximum record age before expiry pruning                                                                                                                                                                                                                                                   |
 | `replayIntervalMilliseconds`         | `number`  | `2 * 60 * 1000`           | Delay between scheduled replay passes                                                                                                                                                                                                                                                      |
@@ -387,18 +392,17 @@ set `durableDelivery.enabled: false` to force legacy network-only delivery.
 
 Operational notes:
 
-- Durable records are stored as plaintext JSON files. On POSIX, the SDK creates owner-only durable
-  directories/files (`0700` / `0600`), accounting for umask. Existing base roots and application
-  partitions must already be current-user-owned `0700` directories; unsafe permissions and
-  symlinked directory paths (including ancestors) are rejected rather than repaired. Configure a
-  dedicated private directory, not a shared temp or volume root. Existing parent permissions are
-  never changed. Storage paths and POSIX base/partition permissions are revalidated before writes
-  and replay. Secure cache paths and restart/replay identities are unchanged. See
-  [storage security and recovery notes](./A365_DOCUMENTATION.md#operational-notes).
+- Durable records are plaintext JSON. Customers provision and maintain a private storage root,
+  normally owned by the service account with mode `0700`, and review ACLs and ancestors to prevent
+  path replacement. The SDK trusts configured Unix paths; it does not inspect or repair ownership,
+  permissions, ACLs, or symlinks. Explicitly configuring `/tmp` or another shared root is still
+  unsafe. No Unix temporary-directory fallback or automatic root creation occurs. Existing
+  explicitly configured cache identities and replay are preserved; old implicit backlogs are not
+  automatically migrated. See [provisioning and migration](./A365_DOCUMENTATION.md#storage-provisioning-and-migration).
   On Windows, the SDK removes inherited ACLs and grants full
   control only to the current Windows identity and built-in Administrators. ACL hardening failures
   cause durable storage initialization to fail and the exporter to use network-only delivery.
-- Durable delivery is enabled by default when the A365 HTTP exporter is active. Set
+- Durable delivery is requested by default when the A365 HTTP exporter is active. Set
   `durableDelivery.enabled: false` to force legacy network-only delivery.
 - Durable delivery is at-least-once. If a retryable request succeeds immediately before a crash or
   after replay, duplicates are possible and receivers must be idempotent.
@@ -406,8 +410,8 @@ Operational notes:
   current cluster/domain routing; durable files do not store bearer tokens or authoritative route
   metadata.
 - If durable storage cannot initialize, the exporter logs the error and continues in network-only
-  mode. Successful and non-retryable live sends still complete, but retryable results that cannot
-  be persisted are reported as failures.
+  mode. Successful online sends still succeed; failed sends that cannot be persisted are reported
+  as failures.
 - If token resolution returns no token, throws, or times out, live delivery attempts to persist the
   record for replay and replay releases the claim without extending the shared transmission backoff.
 - Storage is bounded by both `maxStorageBytes` and `maxRecordAgeMilliseconds`; expired records are

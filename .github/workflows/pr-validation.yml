@@ -91,6 +91,29 @@ jobs:
       - name: Run integration tests
         run: npm run test:integration
 
+  agent365-storage:
+    name: Agent365 storage (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Run Agent365 filesystem and exporter regressions
+        run: npm run test:unit -- test/internal/unit/a365/persistentStore.test.ts test/internal/unit/a365/durableDeliveryManager.test.ts test/internal/unit/a365/agent365Exporter.test.ts test/internal/unit/a365/windowsFileAccessControl.test.ts
+      - name: Verify cross-process persistence and replay
+        run: node --test test/integration/durable-storage.test.mjs
+
   changelog:
     name: CHANGELOG updated
     runs-on: ubuntu-latest

@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -20,9 +20,6 @@ const CHILD_SCRIPT = `
     ResolvedDurableDeliveryOptions,
   } from "./dist/esm/a365/exporter/durable/index.js";
 
-  if (process.platform !== "win32") {
-    process.umask(0o777);
-  }
   const store = await PersistentStore.create(
     new ResolvedDurableDeliveryOptions({
       storageDirectory: process.env.DURABLE_STORAGE_DIRECTORY,
@@ -64,6 +61,7 @@ const CHILD_SCRIPT = `
 test("durable telemetry replays from the same private cache across process restarts", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "a365-secure-restart-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
+  await mkdir(join(directory, "cache"), { mode: 0o700 });
   const roots = [];
 
   for (const action of ["persist", "replay"]) {

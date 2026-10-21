@@ -262,8 +262,9 @@ When both `tokenResolver` and `contextualTokenResolver` are set, `contextualToke
 
 ## Durable Delivery
 
-Durable delivery is enabled by default for the A365 HTTP exporter when retryable A365 HTTP exports
-must survive process restarts.
+Durable delivery is requested by default for the A365 HTTP exporter. **On Unix, including Linux
+and macOS, it requires an explicitly configured, existing, absolute storage root.** Missing or
+invalid configuration logs an error and disables only offline buffering/replay; online export continues.
 
 ```typescript
 import { useMicrosoftOpenTelemetry } from "@microsoft/opentelemetry";
@@ -282,7 +283,7 @@ useMicrosoftOpenTelemetry({
 });
 ```
 
-Durable delivery is enabled by default. Set `durableDelivery.enabled: false` to force legacy
+Durable delivery is requested by default. Set `durableDelivery.enabled: false` to force legacy
 network-only delivery. It applies only to the A365 HTTP exporter, so set
 `enableObservabilityExporter: true` alongside `a365.enabled: true`.
 
@@ -290,8 +291,8 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
 
 | Option                               | Default                   | Notes                                                                                                                                  |
 | ------------------------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `enabled`                            | `true`                    | Durable delivery stays on unless you explicitly disable it                                                                             |
-| `storageDirectory`                   | auto                      | Uses the configured directory, or creates a secure platform-specific default root plus a stable per-application `app-<hash>` partition |
+| `enabled`                            | `true`                    | Requests offline buffering/replay; `false` bypasses storage initialization entirely |
+| `storageDirectory`                   | unset                     | Unix: required existing absolute customer-provisioned root. Windows: existing platform defaults. Stable `app-<hash>` cache partition |
 | `maxStorageBytes`                    | `50 * 1024 * 1024`        | Bounds pending, quarantined, active leased, and non-stale temporary records within the current `app-<hash>` partition only             |
 | `maxRecordAgeMilliseconds`           | `2 * 24 * 60 * 60 * 1000` | Expired records are pruned before capacity eviction, within the current `app-<hash>` partition only                                    |
 | `replayIntervalMilliseconds`         | `2 * 60 * 1000`           | Scheduled replay cadence                                                                                                               |
@@ -302,32 +303,19 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
 
 ### Operational Notes
 
-- Durable records are stored as plaintext JSON files. On POSIX, the SDK creates owner-only durable
-  directories/files (`0700` / `0600`), even with a restrictive umask. Existing base roots and
-  `app-<hash>` partitions must already be owned by the current user with mode `0700`; unsafe
-  existing directories are rejected, not chmodded. Use a dedicated private `storageDirectory`,
-  not a shared temporary directory or volume root. The SDK does not change existing configured
-  parents or shared temporary-directory permissions. Default POSIX storage probes `TMPDIR`,
-  `/var/tmp`, then `/tmp` and atomically
-  creates one `a365-otel-durable-<uid>` leaf under each candidate; it does not create a
-  multi-directory SDK-owned tree under a shared temp directory. Windows defaults use the per-user
-  `Microsoft/A365/otel-durable` location under the selected candidate. All platforms reject symlinks
-  (including Windows junctions) anywhere in the storage directory path, before creating storage.
-  POSIX ancestors must be owned by root or the current user and must not be group/other-writable
-  unless sticky (such as `/tmp`). Directory paths and POSIX base/partition permissions are checked
-  again before persisting, claiming replay records, completing, or releasing claims. These checks
-  do not isolate telemetry from administrators or hostile processes running as the same user;
-  use storage on a trusted local filesystem. On Windows, the SDK removes inherited ACLs and grants
-  full control only to the current
-  Windows identity and built-in Administrators. ACL hardening failures cause durable storage
-  initialization to fail and the exporter to use network-only delivery.
-- Secure cache locations and application partition identities are unchanged, so existing secure
-  records remain available after restart. If an existing POSIX cache has unsafe permissions, an
-  operator must secure that SDK-owned directory out-of-band before replay can resume; the SDK
-  does not automatically repair or migrate it. Rejected default candidates produce warnings and
-  only another validated secure candidate may be used. Explicit-directory failures do not fall
-  back to a different directory. Runtime validation errors use the existing persistence/replay
-  error logs and prevent that disk operation; there is no insecure-storage fallback.
+- Durable records are plaintext JSON. On Unix the configured root is a customer-trusted security
+  boundary. The SDK checks configuration and directory existence, not confidentiality: it does not
+  inspect or rewrite ownership, permissions, ACLs, symlinks, or ancestors. Customers protect these
+  paths throughout the application's lifetime. Configuring `/tmp` explicitly is still unsafe.
+- Unix never selects `TMPDIR`, `/var/tmp`, `/tmp`, or the current directory implicitly and never
+  creates the configured root. It creates only the normal `app-<hash>` cache beneath a valid root.
+  Existing file/directory creation modes (`0600`/`0700`, filtered by umask) are retained without
+  chmod/chown or permission repair. Customers must use a compatible service umask; the SDK does not
+  override it. Existing customer root/cache permissions are unchanged.
+- Windows retains its existing `LOCALAPPDATA`, `TEMP`, and `os.tmpdir()` candidate behavior,
+  `Microsoft/A365/otel-durable` layout, final-root symlink rejection, and ACL helper. Inherited ACLs
+  are removed and full control granted to the current identity and Administrators as before this
+  issue. ACL initialization failures are logged and disable only offline buffering/replay.
 - Every explicit or default durable root is partitioned again under a stable `app-<hash>` child
   derived from the process identity, so applications that share a base directory do not replay one
   another's telemetry. All retention, capacity, and pruning behavior described below operates only
@@ -336,11 +324,12 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
   executable upgrade), the previous partition becomes orphaned and is not age-pruned, capacity-
   pruned, or otherwise cleaned up automatically. Operators who need to reclaim that space should
   remove stale `app-<hash>` directories under the durable root out-of-band.
-- Durable delivery is enabled by default when the A365 HTTP exporter is active. Set
+- Durable delivery is requested by default when the A365 HTTP exporter is active. Set
   `durableDelivery.enabled: false` to force legacy network-only delivery.
 - If durable storage initialization fails, the exporter logs the error and continues in network-only
-  mode. Successful and non-retryable live sends still complete, but retryable responses that cannot
-  be persisted are reported as failures.
+  mode. Successful online sends still succeed; failed network sends that cannot be persisted are
+  reported as failures. Initialization is shared by startup, export, flush, and shutdown paths;
+  missing/invalid configuration does not start replay or trigger a hidden storage fallback.
 - Delivery is at-least-once. A retryable request can be replayed after a crash, timeout, or
   shutdown race, so downstream consumers must tolerate duplicates.
 - HTTP 401, 408, 429, and 5xx responses plus transport failures are retryable. Live delivery
@@ -359,9 +348,33 @@ network-only delivery. It applies only to the A365 HTTP exporter, so set
   retryable response pauses both immediate sends and replay probes until the gate reopens. The
   effective delay is capped at one hour.
 - If records must survive container restarts, rescheduling, or host restarts, point
-  `storageDirectory` at a protected persistent volume. Default temp directories and container
-  filesystems are convenient for process restarts, but ephemeral storage can be lost when a
+  `storageDirectory` at a protected persistent volume. Ephemeral storage can be lost when a
   container is replaced and still counts against container ephemeral-storage limits.
+
+### Storage provisioning and migration
+
+**Unix breaking change:** applications that previously relied on implicit temporary storage must
+provision and configure a root or set `durableDelivery.enabled: false`. During deployment, create a
+dedicated private directory as the application's service account, normally mode `0700`, for example:
+
+```sh
+install -d -m 700 "$HOME/.local/state/my-agent/telemetry"
+```
+
+Review existing ownership, extended/inherited ACL grants, symlinks, and ancestor protection before
+reuse. Do not chmod shared system directories. Configure the absolute path through
+`a365.durableDelivery.storageDirectory` (or the exporter's `durableDelivery.storageDirectory`);
+the example's `A365_DURABLE_STORAGE_DIRECTORY` is application-read configuration, not an automatic
+SDK environment override. Root validation is not a security audit.
+
+Reusing the same explicit root, service identity, executable path, and application entry point
+preserves `app-<hash>` partition identity and existing record replay. Retention limits and the record
+format are unchanged. No old temporary-directory backlog is discovered or migrated automatically.
+For a controlled migration, stop all writers/replayers, review the old cache and provenance, secure
+the destination root and ACLs, and move the existing application partition intact. If executable or
+application identity changes, its partition hash also changes; review the intended destination
+partition before transferring records. Resume one instance first and confirm replay, allowing for
+at-least-once duplicates. Retain a protected backup until migration is verified.
 
 ## Shutdown
 

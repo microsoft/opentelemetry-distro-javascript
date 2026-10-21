@@ -10,7 +10,17 @@ export const DEFAULT_DURABLE_SHUTDOWN_TIMEOUT_MS = 10_000;
 export const DEFAULT_DURABLE_TOKEN_TIMEOUT_MS = 30_000;
 
 export interface Agent365DurableDeliveryOptions {
+  /** Enables disk buffering/replay when storage can initialize. False bypasses storage initialization. */
   enabled?: boolean;
+  /**
+   * Customer-provisioned storage root. Unix requires an existing absolute directory;
+   * missing/invalid roots disable only disk buffering/replay with an error log.
+   * Customers maintain ownership, permissions (normally service-account-owned 0700),
+   * ACLs, and protection against replacement of this path or its ancestors.
+   * The SDK does not inspect or repair Unix access controls; shared roots such as
+   * /tmp remain unsafe even when explicitly configured. Windows retains its defaults.
+   * Ignored when enabled is false. Reusing the same root preserves cache identity.
+   */
   storageDirectory?: string;
   maxStorageBytes?: number;
   maxRecordAgeMilliseconds?: number;
