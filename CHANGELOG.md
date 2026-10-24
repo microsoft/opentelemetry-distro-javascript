@@ -3,11 +3,15 @@
 ## [Unreleased]
 
 ### Bugs Fixed
+- Update OpenAI Agents to 0.15.0, Vitest and its coverage provider to 4.1.12, MSAL Node to 7.1.1, and vulnerable transitive dependencies across the distro and samples. OpenAI Agents 0.15.0 removes the vulnerable MCP/Express dependency chain.
 - Require Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on their respective release lines for security fixes.
 - **Breaking change on Unix (Linux/macOS):** Agent365 offline buffering/replay now requires an explicitly configured, existing, absolute `durableDelivery.storageDirectory`. No automatic Unix temporary-directory fallback or root creation. Missing/invalid roots are logged and disable only disk buffering/replay; online export continues. Customers provision and maintain ownership, permissions (normally a private service-account-owned `0700` root), ACLs, and path-replacement protection; the SDK does not inspect or repair Unix access controls. Windows behavior, explicit-root cache identities, record compatibility, and retention limits are unchanged. Old temporary backlogs are not automatically migrated; see [storage provisioning and migration](A365_DOCUMENTATION.md#storage-provisioning-and-migration).
 
 ### Features Added
 - Add privacy-safe Model Observation attributes to `InferenceScope`, including the canonical served response model and cache read/write input-token counts. Attributes can be supplied when the scope starts or recorded after the response is available; inference operations accept enum values or canonical strings and use canonical OpenTelemetry names for both operation attributes and span names. Cache-token semantic-convention constants are exported. [#261](https://github.com/microsoft/opentelemetry-distro-javascript/pull/261)
+
+### Other Changes
+- Consolidate Dependabot dependency updates, update `actions/setup-node` to 7.1.0 and `actions/upload-artifact` to 7.0.2, and add a reproducible Fabric sample lockfile. Vite 8.3.5 and the Fabric sample's body-parser security patch remain pending availability through the required Microsoft package proxy; Vite is updated to the available 8.3.4 release.
 
 ## [1.5.0] - 2026-10-06
 
