@@ -6,7 +6,8 @@ import type { ILogger } from "../../logging.js";
 import { ResolvedDurableDeliveryOptions } from "./DurableDeliveryOptions.js";
 import type { DurableRecordV1 } from "./DurableRecord.js";
 import { PersistentStore, type ClaimedRecord } from "./PersistentStore.js";
-import { TransmissionGate, type TransmissionPermit } from "./TransmissionGate.js";
+import type { TransmissionGate, TransmissionPermit } from "./TransmissionGate.js";
+import { TransmissionGateRegistry } from "./TransmissionGateRegistry.js";
 
 export type DeliveryAttempt =
   | { kind: "success"; correlationId: string }
@@ -30,15 +31,15 @@ type GateDecision =
 /**
  * Outcome of processing one claimed replay record:
  * - "advance": completed (success/permanent); safe to claim the next record.
- * - "exclude": token was unavailable; the claim was released and should be
- *   skipped on later claims in this same pass so later records are not
- *   starved by repeatedly reclaiming it.
- * - "stop": a retryable failure or backed-off gate; stop this replay pass.
+ * - "exclude": token unavailable or retryable response; count the attempt but
+ *   skip this released record on later claims in the same pass.
+ * - "deferred": tenant gate is backed off; skip without spending an attempt.
+ * - "stop": unknown fault or global misconfiguration; stop this replay pass.
  */
-type ReplayClaimOutcome = "advance" | "exclude" | "stop";
+type ReplayClaimOutcome = "advance" | "exclude" | "deferred" | "stop";
 
 export class DurableDeliveryManager {
-  private readonly gate = new TransmissionGate();
+  private readonly gates = new TransmissionGateRegistry();
   private readonly abortController = new AbortController();
   private readonly active = new Set<Promise<unknown>>();
   private replayTimer?: ReturnType<typeof setTimeout>;
@@ -186,8 +187,14 @@ export class DurableDeliveryManager {
 
   private async runReplayPassInternal(): Promise<void> {
     const skippedRecordIds = new Set<string>();
+    const scanBudget = Math.min(Number.MAX_SAFE_INTEGER, this.options.maxReplayBatchSize * 10);
+    let attempted = 0;
 
-    for (let index = 0; index < this.options.maxReplayBatchSize; index++) {
+    for (
+      let scanned = 0;
+      attempted < this.options.maxReplayBatchSize && scanned < scanBudget;
+      scanned++
+    ) {
       if (this.closed || this.replayStopped) {
         return;
       }
@@ -208,7 +215,10 @@ export class DurableDeliveryManager {
       if (outcome === "stop") {
         return;
       }
-      if (outcome === "exclude") {
+      if (outcome !== "deferred") {
+        attempted++;
+      }
+      if (outcome === "exclude" || outcome === "deferred") {
         skippedRecordIds.add(claim.record.id);
       }
     }
@@ -236,7 +246,9 @@ export class DurableDeliveryManager {
         );
       }
 
-      await this.releaseClaim(claim);
+      if (!(await this.releaseClaim(claim))) {
+        return "stop";
+      }
       // Exclude this record from later claims in the same pass instead of
       // stopping outright, so unrelated records that sort after it are not
       // starved by repeatedly reclaiming the same released record.
@@ -249,8 +261,13 @@ export class DurableDeliveryManager {
       );
     }
 
-    await this.releaseClaim(claim);
-    return "stop";
+    if (!(await this.releaseClaim(claim))) {
+      return "stop";
+    }
+    if (decision.kind === "deferred") {
+      return "deferred";
+    }
+    return decision.kind === "retryable" && decision.error === undefined ? "exclude" : "stop";
   }
 
   private async persist(record: DurableRecordV1): Promise<boolean> {
@@ -263,11 +280,13 @@ export class DurableDeliveryManager {
     }
   }
 
-  private async releaseClaim(claim: ClaimedRecord): Promise<void> {
+  private async releaseClaim(claim: ClaimedRecord): Promise<boolean> {
     try {
       await this.store.release(claim);
+      return true;
     } catch (error) {
       this.logger.error("[DurableDeliveryManager] Failed to release durable record", error);
+      return false;
     }
   }
 
@@ -318,57 +337,67 @@ export class DurableDeliveryManager {
     record: DurableRecordV1,
     mode: "live" | "replay",
   ): Promise<GateDecision> {
-    if (!this.gate.canAcquire()) {
-      return { kind: "deferred" };
-    }
-
-    if (mode === "replay") {
-      const decision = await this.validateReplay(record);
-      if (decision) {
-        return decision;
+    const lease = this.gates.acquire(record.tenantId);
+    const gate = lease.gate;
+    try {
+      if (!gate.canAcquire()) {
+        return { kind: "deferred" };
       }
-    }
 
-    let token: string | null;
-    try {
-      token = await this.withTimeout(
-        this.dependencies.resolveToken(record),
-        this.options.tokenResolutionTimeoutMilliseconds,
-        "token resolution",
-      );
-    } catch (error) {
-      return { kind: "tokenUnavailable", error };
-    }
+      if (mode === "replay") {
+        const decision = await this.validateReplay(record);
+        if (decision) {
+          return decision;
+        }
+      }
 
-    if (!token) {
-      return { kind: "tokenUnavailable" };
-    }
+      let token: string | null;
+      try {
+        token = await this.withTimeout(
+          this.dependencies.resolveToken(record),
+          this.options.tokenResolutionTimeoutMilliseconds,
+          "token resolution",
+        );
+      } catch (error) {
+        return { kind: "tokenUnavailable", error };
+      }
 
-    const permit = this.gate.acquire();
-    if (!permit) {
-      return { kind: "deferred" };
-    }
+      if (!token) {
+        return { kind: "tokenUnavailable" };
+      }
 
-    try {
-      const attempt = await this.dependencies.send(record, token, this.abortController.signal);
-      return this.classifyAttempt(permit, attempt);
-    } catch (error) {
-      this.gate.recordRetryableFailure(permit);
-      return { kind: "retryable", error };
+      const permit = gate.acquire();
+      if (!permit) {
+        return { kind: "deferred" };
+      }
+
+      try {
+        const attempt = await this.dependencies.send(record, token, this.abortController.signal);
+        return this.classifyAttempt(gate, permit, attempt);
+      } catch (error) {
+        gate.recordRetryableFailure(permit);
+        return { kind: "retryable", error };
+      }
+    } finally {
+      lease.release();
     }
   }
 
-  private classifyAttempt(permit: TransmissionPermit, attempt: DeliveryAttempt): GateDecision {
+  private classifyAttempt(
+    gate: TransmissionGate,
+    permit: TransmissionPermit,
+    attempt: DeliveryAttempt,
+  ): GateDecision {
     if (attempt.kind === "success") {
-      this.gate.recordSuccess(permit);
+      gate.recordSuccess(permit);
       return { kind: "success" };
     }
     if (attempt.kind === "permanent") {
-      this.gate.recordSuccess(permit);
+      gate.recordSuccess(permit);
       return { kind: "permanent" };
     }
 
-    this.gate.recordRetryableFailure(permit, attempt.retryAfterMs);
+    gate.recordRetryableFailure(permit, attempt.retryAfterMs);
     return { kind: "retryable" };
   }
 

@@ -383,7 +383,46 @@ export interface ServiceEndpoint {
   port?: number;
   /** Protocol scheme of the endpoint (e.g. `https`). */
   protocol?: string;
+  /** Complete endpoint URL, including path and query, recorded as `url.full` on tool spans. */
+  url?: string;
 }
+
+/** How control passes during an execute-tool transfer. */
+export enum TransferMode {
+  /** The source agent resumes after the target finishes. */
+  RETURN_TO_CALLER = "return_to_caller",
+  /** The target takes over the remaining work. */
+  PASS_CONTROL = "pass_control",
+}
+
+/** Kind of target receiving an execute-tool transfer. */
+export enum TransferTargetType {
+  /** Transfer to another agent. */
+  AGENT = "agent",
+  /** Transfer to a human. */
+  HUMAN = "human",
+  /** Transfer to a workflow. */
+  WORKFLOW = "workflow",
+}
+
+/** Explicit transfer metadata. Target agent details are only valid for agent targets. */
+export type TransferDetails =
+  | {
+      /** How control passes to the target. */
+      mode: TransferMode;
+      /** Target kind. Defaults to agent when omitted. */
+      targetType?: TransferTargetType.AGENT;
+      /** Target identity; only ID, name, blueprint, platform, and version are emitted. */
+      targetAgentDetails?: AgentDetails;
+    }
+  | {
+      /** How control passes to the target. */
+      mode: TransferMode;
+      /** Non-agent target kind. */
+      targetType: TransferTargetType.HUMAN | TransferTargetType.WORKFLOW;
+      /** Agent identity cannot be supplied for a non-agent target. */
+      targetAgentDetails?: never;
+    };
 
 // ---------------------------------------------------------------------------
 // Scope detail types
@@ -455,6 +494,8 @@ export interface ToolCallDetails {
   toolType?: string;
   /** Endpoint the tool is hosted on. */
   endpoint?: ServiceEndpoint;
+  /** Optional explicit transfer performed by this tool call. */
+  transferDetails?: TransferDetails;
 }
 
 /** Details for an inference call. */

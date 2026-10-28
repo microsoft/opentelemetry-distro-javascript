@@ -162,7 +162,10 @@ export class PersistentStore {
         }
 
         try {
-          parseDurableRecord(preflightText);
+          const preflightRecord = parseDurableRecord(preflightText);
+          if (excludeRecordIds?.has(preflightRecord.id)) {
+            continue;
+          }
         } catch (error) {
           await this.quarantinePendingFile(pendingPath);
           this.logger.warn("[PersistentStore] Quarantined malformed pending durable record", error);

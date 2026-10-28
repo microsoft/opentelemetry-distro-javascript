@@ -22,6 +22,8 @@ import {
   OpenTelemetryConstants,
   ToolCallAction,
   ToolCallOutcomeStatus,
+  TransferMode,
+  TransferTargetType,
 } from "../../../../src/a365/index.js";
 import type {
   AgentDetails,
@@ -489,6 +491,126 @@ describe("Scopes", () => {
   });
 
   describe("ExecuteToolScope", () => {
+    it("records the full tool URL without changing host and port attributes", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        {
+          toolName: "search",
+          endpoint: {
+            host: "tools.example.com",
+            port: 8443,
+            url: "https://tools.example.com:8443/search?q=hello#results",
+          },
+        },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const attributes = sharedExporter.getFinishedSpans().at(-1)!.attributes;
+      expect(attributes["url.full"]).toBe("https://tools.example.com:8443/search?q=hello#results");
+      expect(attributes["server.address"]).toBe("tools.example.com");
+      expect(attributes["server.port"]).toBe(8443);
+    });
+
+    it("does not invent a URL for a host-only tool endpoint", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        { toolName: "search", endpoint: { host: "tools.example.com", port: 443 } },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const attributes = sharedExporter.getFinishedSpans().at(-1)!.attributes;
+      expect(attributes["url.full"]).toBeUndefined();
+      expect(attributes["server.address"]).toBe("tools.example.com");
+      expect(attributes["server.port"]).toBeUndefined();
+      expect(attributes["microsoft.a365.transfer.mode"]).toBeUndefined();
+      expect(attributes["microsoft.a365.transfer.target.type"]).toBeUndefined();
+    });
+
+    it("records target-agent transfer attributes without replacing the source agent", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        {
+          toolName: "handoff",
+          transferDetails: {
+            mode: TransferMode.PASS_CONTROL,
+            targetAgentDetails: {
+              agentId: "target-agent",
+              agentName: "Target Agent",
+              agentBlueprintId: "target-blueprint",
+              platformId: "target-platform",
+              agentVersion: "2.0",
+              tenantId: "target-tenant",
+              agentEmail: "not-emitted@example.com",
+            },
+          },
+        },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const attributes = sharedExporter.getFinishedSpans().at(-1)!.attributes;
+      expect(attributes).toMatchObject({
+        "gen_ai.agent.id": testAgentDetails.agentId,
+        "gen_ai.agent.name": testAgentDetails.agentName,
+        "microsoft.tenant.id": testAgentDetails.tenantId,
+        "microsoft.a365.transfer.mode": "pass_control",
+        "microsoft.a365.transfer.target.type": "agent",
+        "microsoft.a365.transfer.target.agent.id": "target-agent",
+        "microsoft.a365.transfer.target.agent.name": "Target Agent",
+        "microsoft.a365.transfer.target.agent.blueprint.id": "target-blueprint",
+        "microsoft.a365.transfer.target.agent.platform.id": "target-platform",
+        "microsoft.a365.transfer.target.agent.version": "2.0",
+      });
+      expect(attributes["microsoft.a365.transfer.target.agent.email"]).toBeUndefined();
+      expect(attributes["microsoft.a365.transfer.target.agent.tenant.id"]).toBeUndefined();
+    });
+
+    it.each([TransferTargetType.AGENT, TransferTargetType.HUMAN, TransferTargetType.WORKFLOW])(
+      "records a %s transfer target without agent identity",
+      (targetType) => {
+        const scope = ExecuteToolScope.start(
+          testRequest,
+          {
+            toolName: "handoff",
+            transferDetails: { mode: TransferMode.RETURN_TO_CALLER, targetType },
+          },
+          testAgentDetails,
+        );
+        scope.dispose();
+
+        const attributes = sharedExporter.getFinishedSpans().at(-1)!.attributes;
+        expect(attributes["microsoft.a365.transfer.mode"]).toBe("return_to_caller");
+        expect(attributes["microsoft.a365.transfer.target.type"]).toBe(targetType);
+        expect(attributes["microsoft.a365.transfer.target.agent.id"]).toBeUndefined();
+      },
+    );
+
+    it.each([
+      { mode: "invalid" },
+      { mode: "pass_control", targetType: "invalid" },
+      {
+        mode: "pass_control",
+        targetType: "human",
+        targetAgentDetails: { agentId: "target" },
+      },
+    ])("rejects invalid transfer details before starting a span: %j", (transferDetails) => {
+      const startSpan = vi.spyOn(trace.getTracer(OpenTelemetryConstants.SOURCE_NAME), "startSpan");
+      try {
+        expect(() =>
+          ExecuteToolScope.start(
+            testRequest,
+            { toolName: "handoff", transferDetails } as ToolCallDetails,
+            testAgentDetails,
+          ),
+        ).toThrow(/transfer/i);
+        expect(startSpan).not.toHaveBeenCalled();
+      } finally {
+        startSpan.mockRestore();
+      }
+    });
+
     it("should create scope with tool details", () => {
       const spy = vi.spyOn(OpenTelemetryScope.prototype as any, "setTagMaybe");
       const callerDetails: UserDetails = {
