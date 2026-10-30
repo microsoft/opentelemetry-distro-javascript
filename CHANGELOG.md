@@ -4,7 +4,7 @@
 
 ### Bugs Fixed
 - Isolate Agent365 durable delivery backoff by tenant, shared across that tenant's agents and live/replay paths. Continue replay past retryable failures and backed-off tenants without spending the attempt limit on deferred records; bound replay scans and preserve active backoff during registry eviction.
-- Skip excluded durable records before leasing and quarantine blank-tenant records before replay, retaining post-claim content validation.
+- Skip excluded durable records and backed-off tenants before leasing so blocked prefixes larger than the scan budget cannot starve healthy tenants across replay passes. Quarantine blank-tenant records before replay, retaining post-claim content validation.
 - Preserve explicitly empty `extension_data` as nested `metadata: {}` in typed ExecuteTool payloads, including nested models, while continuing to omit absent/null metadata.
 - Update OpenAI Agents to 0.15.0, Vitest and its coverage provider to 4.1.12, MSAL Node to 7.1.1, and vulnerable transitive dependencies across the distro and samples. OpenAI Agents 0.15.0 removes the vulnerable MCP/Express dependency chain.
 - Require Node.js 22.23.4+, 24.22.1+, or 26.12.1+ on their respective release lines for security fixes.

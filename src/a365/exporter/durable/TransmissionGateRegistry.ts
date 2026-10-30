@@ -68,6 +68,16 @@ export class TransmissionGateRegistry {
     };
   }
 
+  getDeferredTenantIds(): ReadonlySet<string> {
+    const deferred = new Set<string>();
+    for (const [tenantId, entry] of this.entries) {
+      if (!entry.gate.canAcquire()) {
+        deferred.add(tenantId);
+      }
+    }
+    return deferred;
+  }
+
   private trim(now: number): void {
     const inactive: [string, GateEntry][] = [];
     for (const [tenantId, entry] of this.entries) {

@@ -5,6 +5,24 @@ import { describe, expect, it } from "vitest";
 import { TransmissionGateRegistry } from "../../../../src/a365/exporter/durable/TransmissionGateRegistry.js";
 
 describe("TransmissionGateRegistry", () => {
+  it("reports deferred tenants until backoff expires or their half-open probe finishes", () => {
+    let now = 0;
+    const registry = new TransmissionGateRegistry({ now: () => now });
+    const blocked = registry.acquire("a");
+    const healthy = registry.acquire("b");
+    blocked.gate.recordRetryableFailure(blocked.gate.acquire()!, 60_000);
+
+    expect(registry.getDeferredTenantIds()).toEqual(new Set(["a"]));
+    now = 60_000;
+    expect(registry.getDeferredTenantIds()).toEqual(new Set());
+    const probe = blocked.gate.acquire()!;
+    expect(registry.getDeferredTenantIds()).toEqual(new Set(["a"]));
+    blocked.gate.recordSuccess(probe);
+    expect(registry.getDeferredTenantIds()).toEqual(new Set());
+    blocked.release();
+    healthy.release();
+  });
+
   it("shares a tenant gate across concurrent leases but not across tenants", () => {
     const registry = new TransmissionGateRegistry();
     const first = registry.acquire("a");

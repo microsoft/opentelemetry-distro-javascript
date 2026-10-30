@@ -464,43 +464,59 @@ describe("PersistentStore", () => {
     assert.notStrictEqual(reclaimed.leasePath, claim.leasePath);
   });
 
-  it("skips excluded records before leasing them while claiming a later record", async () => {
-    const root = join(scratchRoot, "excluded-records-store");
-    const store = await createStore(root);
-    const now = Date.now();
-    const excluded = makeRecord({ id: "excluded", createdAt: now });
-    const deliverable = makeRecord({ id: "deliverable", createdAt: now + 1 });
-    const excludedPath = await store.persist(excluded);
-    await store.persist(deliverable);
-    const rename = vi.spyOn(fs, "rename");
+  it.each(["record", "tenant"] as const)(
+    "skips an excluded %s before leasing while claiming a later record",
+    async (exclusion) => {
+      const root = join(scratchRoot, "excluded-records-store");
+      const store = await createStore(root);
+      const now = Date.now();
+      const excluded = makeRecord({ id: "excluded", createdAt: now, tenantId: "a" });
+      const deliverable = makeRecord({ id: "deliverable", createdAt: now + 1, tenantId: "b" });
+      const excludedPath = await store.persist(excluded);
+      await store.persist(deliverable);
+      const rename = vi.spyOn(fs, "rename");
 
-    const [claim] = await store.claimBatch(1, { excludeRecordIds: new Set([excluded.id]) });
+      const [claim] = await store.claimBatch(
+        1,
+        exclusion === "record"
+          ? { excludeRecordIds: new Set([excluded.id]) }
+          : { excludeTenantIds: new Set([excluded.tenantId]) },
+      );
 
-    assert.strictEqual(claim.record.id, deliverable.id);
-    expect(rename).toHaveBeenCalledTimes(1);
-    assert.isTrue(await pathExists(excludedPath));
-  });
+      assert.strictEqual(claim.record.id, deliverable.id);
+      expect(rename).toHaveBeenCalledTimes(1);
+      assert.isTrue(await pathExists(excludedPath));
+    },
+  );
 
-  it("still excludes content replaced between preflight and the atomic claim", async () => {
-    const root = join(scratchRoot, "exclusion-race-store");
-    const store = await createStore(root);
-    const record = makeRecord({ id: "original" });
-    const replaced = makeRecord({ id: "excluded" });
-    const pendingPath = await store.persist(record);
-    const actualRename = fs.rename.bind(fs);
-    vi.spyOn(fs, "rename").mockImplementation(async (source, destination) => {
-      if (source === pendingPath) {
-        await fs.writeFile(pendingPath, JSON.stringify(replaced), "utf8");
-      }
-      await actualRename(source, destination);
-    });
+  it.each(["record", "tenant"] as const)(
+    "still excludes %s content replaced between preflight and the atomic claim",
+    async (exclusion) => {
+      const root = join(scratchRoot, "exclusion-race-store");
+      const store = await createStore(root);
+      const record = makeRecord({ id: "original", tenantId: "a" });
+      const replaced = makeRecord({ id: "excluded", tenantId: "b" });
+      const pendingPath = await store.persist(record);
+      const actualRename = fs.rename.bind(fs);
+      vi.spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+        if (source === pendingPath) {
+          await fs.writeFile(pendingPath, JSON.stringify(replaced), "utf8");
+        }
+        await actualRename(source, destination);
+      });
 
-    const claims = await store.claimBatch(1, { excludeRecordIds: new Set([replaced.id]) });
+      const claims = await store.claimBatch(
+        1,
+        exclusion === "record"
+          ? { excludeRecordIds: new Set([replaced.id]) }
+          : { excludeTenantIds: new Set([replaced.tenantId]) },
+      );
 
-    assert.deepEqual(claims, []);
-    const [retained] = await store.claimBatch(1);
-    assert.strictEqual(retained.record.id, replaced.id);
-  });
+      assert.deepEqual(claims, []);
+      const [retained] = await store.claimBatch(1);
+      assert.strictEqual(retained.record.id, replaced.id);
+    },
+  );
 
   it("recovers leases after their acquisition timestamp expires", async () => {
     let now = 1_000_000;

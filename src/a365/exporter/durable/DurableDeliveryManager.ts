@@ -201,7 +201,10 @@ export class DurableDeliveryManager {
 
       let claim: ClaimedRecord | undefined;
       try {
-        [claim] = await this.store.claimBatch(1, { excludeRecordIds: skippedRecordIds });
+        [claim] = await this.store.claimBatch(1, {
+          excludeRecordIds: skippedRecordIds,
+          excludeTenantIds: this.gates.getDeferredTenantIds(),
+        });
       } catch (error) {
         this.logger.error("[DurableDeliveryManager] Failed to claim durable records", error);
         return;

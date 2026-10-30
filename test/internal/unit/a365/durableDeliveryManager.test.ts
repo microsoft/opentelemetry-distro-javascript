@@ -335,7 +335,9 @@ describe("DurableDeliveryManager", () => {
     await firstSendStarted.promise;
 
     try {
-      assert.deepEqual(claimBatch.mock.calls, [[1, { excludeRecordIds: new Set() }]]);
+      assert.deepEqual(claimBatch.mock.calls, [
+        [1, { excludeRecordIds: new Set(), excludeTenantIds: new Set() }],
+      ]);
       assert.deepEqual(pendingClaims, [second]);
     } finally {
       finishFirstSend.resolve({ kind: "success", correlationId: first.record.id });
@@ -343,8 +345,8 @@ describe("DurableDeliveryManager", () => {
     }
 
     assert.deepEqual(claimBatch.mock.calls, [
-      [1, { excludeRecordIds: new Set() }],
-      [1, { excludeRecordIds: new Set() }],
+      [1, { excludeRecordIds: new Set(), excludeTenantIds: new Set() }],
+      [1, { excludeRecordIds: new Set(), excludeTenantIds: new Set() }],
     ]);
     assert.deepEqual(pendingClaims, []);
   });
@@ -444,6 +446,77 @@ describe("DurableDeliveryManager", () => {
       }
     },
   );
+
+  it("delivers later tenants across passes with a throttled prefix larger than the scan budget", async () => {
+    const root = join(
+      process.cwd(),
+      ".superpowers",
+      "sdd",
+      "durable-manager-test-artifacts",
+      randomUUID(),
+    );
+    await fs.mkdir(root, { recursive: true, mode: 0o700 });
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+
+    try {
+      const logger = makeLogger();
+      const options = new ResolvedDurableDeliveryOptions({
+        enabled: true,
+        storageDirectory: root,
+        maxReplayBatchSize: 2,
+        replayIntervalMilliseconds: 60_000,
+      });
+      const store = await PersistentStore.create(options, logger);
+      for (let index = 0; index < 25; index++) {
+        await store.persist(
+          makeRecord({ id: `blocked-${index}`, createdAt: now + index, tenantId: "a" }),
+        );
+      }
+
+      let throttled = true;
+      const send = vi.fn(async (record: DurableRecordV1): Promise<DeliveryAttempt> =>
+        record.tenantId === "a" && throttled
+          ? { kind: "retryable", correlationId: record.id, status: 429, retryAfterMs: 60_000 }
+          : { kind: "success", correlationId: record.id },
+      );
+      const manager = new DurableDeliveryManager(options, store, logger, {
+        resolveToken: async () => "fresh-token",
+        send,
+      });
+      managedInstances.push(manager);
+      const claimBatch = vi.spyOn(store, "claimBatch");
+      const complete = vi.spyOn(store, "complete");
+
+      for (let pass = 0; pass < 3; pass++) {
+        await store.persist(
+          makeRecord({ id: `healthy-${pass}`, createdAt: now + 100, tenantId: "b" }),
+        );
+        claimBatch.mockClear();
+        await manager.forceFlush();
+        expect(claimBatch.mock.calls.length).toBeLessThanOrEqual(20);
+        now += 60_001;
+      }
+
+      expect(complete.mock.calls.map(([claim]) => claim.record.id)).toEqual([
+        "healthy-0",
+        "healthy-1",
+        "healthy-2",
+      ]);
+      expect(send.mock.calls.filter(([record]) => record.tenantId === "a")).toHaveLength(3);
+
+      throttled = false;
+      for (let pass = 0; pass < 13; pass++) {
+        await manager.forceFlush();
+      }
+      expect(complete.mock.calls.filter(([claim]) => claim.record.tenantId === "a")).toHaveLength(
+        25,
+      );
+      expect(await store.claimBatch(1)).toEqual([]);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 
   it("stops replay after failing to release a token-unavailable record", async () => {
     const { claimBatch, logger, manager, release, resolveToken, send } = createManager();
@@ -626,7 +699,9 @@ describe("DurableDeliveryManager", () => {
       release.mock.calls.map(([releasedClaim]) => releasedClaim),
       [invalid],
     );
-    assert.deepEqual(claimBatch.mock.calls, [[1, { excludeRecordIds: new Set() }]]);
+    assert.deepEqual(claimBatch.mock.calls, [
+      [1, { excludeRecordIds: new Set(), excludeTenantIds: new Set() }],
+    ]);
   });
 
   it("closes the transmission gate after a permanent replay probe response", async () => {
