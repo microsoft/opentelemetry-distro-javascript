@@ -40,6 +40,8 @@ export interface ClaimBatchOptions {
    * temporarily unusable without starving unrelated records that sort later.
    */
   excludeRecordIds?: ReadonlySet<string>;
+  /** Skip tenants whose transmission gates currently defer replay. */
+  excludeTenantIds?: ReadonlySet<string>;
 }
 
 interface ManagedFile {
@@ -120,6 +122,7 @@ export class PersistentStore {
       await this.recoverStaleLeases();
 
       const excludeRecordIds = options?.excludeRecordIds;
+      const excludeTenantIds = options?.excludeTenantIds;
       const claims: ClaimedRecord[] = [];
       const pendingFiles = await this.listManagedFilePaths((name) => name.endsWith(PENDING_SUFFIX));
       pendingFiles.sort();
@@ -162,7 +165,13 @@ export class PersistentStore {
         }
 
         try {
-          parseDurableRecord(preflightText);
+          const preflightRecord = parseDurableRecord(preflightText);
+          if (
+            excludeRecordIds?.has(preflightRecord.id) ||
+            excludeTenantIds?.has(preflightRecord.tenantId)
+          ) {
+            continue;
+          }
         } catch (error) {
           await this.quarantinePendingFile(pendingPath);
           this.logger.warn("[PersistentStore] Quarantined malformed pending durable record", error);
@@ -215,7 +224,7 @@ export class PersistentStore {
           continue;
         }
 
-        if (excludeRecordIds?.has(record.id)) {
+        if (excludeRecordIds?.has(record.id) || excludeTenantIds?.has(record.tenantId)) {
           // Leave this record for a later pass instead of starving records
           // that sort after it: release it back to pending and keep scanning.
           await this.release({ record, leasePath });

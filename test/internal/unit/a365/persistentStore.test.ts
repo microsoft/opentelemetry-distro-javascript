@@ -464,6 +464,60 @@ describe("PersistentStore", () => {
     assert.notStrictEqual(reclaimed.leasePath, claim.leasePath);
   });
 
+  it.each(["record", "tenant"] as const)(
+    "skips an excluded %s before leasing while claiming a later record",
+    async (exclusion) => {
+      const root = join(scratchRoot, "excluded-records-store");
+      const store = await createStore(root);
+      const now = Date.now();
+      const excluded = makeRecord({ id: "excluded", createdAt: now, tenantId: "a" });
+      const deliverable = makeRecord({ id: "deliverable", createdAt: now + 1, tenantId: "b" });
+      const excludedPath = await store.persist(excluded);
+      await store.persist(deliverable);
+      const rename = vi.spyOn(fs, "rename");
+
+      const [claim] = await store.claimBatch(
+        1,
+        exclusion === "record"
+          ? { excludeRecordIds: new Set([excluded.id]) }
+          : { excludeTenantIds: new Set([excluded.tenantId]) },
+      );
+
+      assert.strictEqual(claim.record.id, deliverable.id);
+      expect(rename).toHaveBeenCalledTimes(1);
+      assert.isTrue(await pathExists(excludedPath));
+    },
+  );
+
+  it.each(["record", "tenant"] as const)(
+    "still excludes %s content replaced between preflight and the atomic claim",
+    async (exclusion) => {
+      const root = join(scratchRoot, "exclusion-race-store");
+      const store = await createStore(root);
+      const record = makeRecord({ id: "original", tenantId: "a" });
+      const replaced = makeRecord({ id: "excluded", tenantId: "b" });
+      const pendingPath = await store.persist(record);
+      const actualRename = fs.rename.bind(fs);
+      vi.spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+        if (source === pendingPath) {
+          await fs.writeFile(pendingPath, JSON.stringify(replaced), "utf8");
+        }
+        await actualRename(source, destination);
+      });
+
+      const claims = await store.claimBatch(
+        1,
+        exclusion === "record"
+          ? { excludeRecordIds: new Set([replaced.id]) }
+          : { excludeTenantIds: new Set([replaced.tenantId]) },
+      );
+
+      assert.deepEqual(claims, []);
+      const [retained] = await store.claimBatch(1);
+      assert.strictEqual(retained.record.id, replaced.id);
+    },
+  );
+
   it("recovers leases after their acquisition timestamp expires", async () => {
     let now = 1_000_000;
     vi.spyOn(Date, "now").mockImplementation(() => now);
@@ -687,6 +741,31 @@ describe("PersistentStore", () => {
     assert.isFalse(await pathExists(badPath));
     assert.isTrue(files.some((file) => file.endsWith(".quarantine")));
   });
+
+  it.each(["", " \t"])(
+    "quarantines a blank tenant %j before claiming a later valid record",
+    async (tenantId) => {
+      const root = join(scratchRoot, "blank-tenant-store");
+      const logger = makeLogger();
+      const store = await createStore(root, {}, logger);
+      const valid = makeRecord();
+      await store.persist(valid);
+      const badPath = join(explicitStorageRoot(root), "1-blank-tenant.pending");
+      await fs.writeFile(badPath, JSON.stringify(makeRecord({ tenantId })), "utf8");
+
+      const [claim] = await store.claimBatch(1);
+
+      assert.strictEqual(claim.record.id, valid.id);
+      assert.isFalse(await pathExists(badPath));
+      assert.isTrue((await listStoreFiles(root)).some((file) => file.endsWith(".quarantine")));
+      expect(logger.warn).toHaveBeenCalledWith(
+        "[PersistentStore] Quarantined malformed pending durable record",
+        expect.any(Error),
+      );
+      await store.complete(claim);
+      assert.deepEqual(await store.claimBatch(1), []);
+    },
+  );
 
   it.each(["../escape", "..\\escape"])(
     "quarantines records with unsafe ids (%j) to a short bounded name without creating files outside the storage root",

@@ -16,6 +16,7 @@ import {
 import type {
   Agent365DurableDeliveryOptions,
   ClaimedRecord,
+  ClaimBatchOptions,
   DeliveryAttempt,
   DurableDeliveryDependencies,
   DurableRecordV1,
@@ -68,6 +69,94 @@ describe("DurableDeliveryManager", () => {
     assert.isTrue(await manager.deliver(makeRecord({ id: "blocked" })));
     assert.strictEqual(send.mock.calls.length, 0);
     assert.strictEqual(persist.mock.calls.length, 2);
+  });
+
+  it("isolates live backoff by tenant while sharing it across that tenant's agents", async () => {
+    const { manager, persist, resolveToken, send } = createManager();
+    send.mockResolvedValueOnce({
+      kind: "retryable",
+      correlationId: "tenant-a-throttled",
+      retryAfterMs: 60_000,
+    });
+
+    await manager.deliver(makeRecord({ id: "a1", tenantId: "a", agentId: "one" }));
+    await manager.deliver(makeRecord({ id: "a2", tenantId: "a", agentId: "two" }));
+    await manager.deliver(makeRecord({ id: "b1", tenantId: "b", agentId: "one" }));
+
+    expect(send.mock.calls.map(([record]) => record.id)).toEqual(["a1", "b1"]);
+    expect(resolveToken.mock.calls.map(([record]) => record.id)).toEqual(["a1", "b1"]);
+    expect(persist.mock.calls.map(([record]) => record.id)).toEqual(["a1", "a2"]);
+  });
+
+  it("continues replay after a tenant's retryable failure and shares its backoff with live delivery", async () => {
+    const { claimBatch, complete, manager, persist, release, send } = createManager({
+      options: { maxReplayBatchSize: 2 },
+    });
+    const first = makeClaim(makeRecord({ id: "a1", tenantId: "a" }));
+    const blocked = makeClaim(makeRecord({ id: "a2", tenantId: "a" }));
+    const healthy = makeClaim(makeRecord({ id: "b1", tenantId: "b" }));
+    claimBatch
+      .mockResolvedValueOnce([first])
+      .mockResolvedValueOnce([blocked])
+      .mockResolvedValueOnce([healthy]);
+    send.mockResolvedValueOnce({
+      kind: "retryable",
+      correlationId: "throttled",
+      retryAfterMs: 60_000,
+    });
+
+    await manager.forceFlush();
+    await manager.deliver(makeRecord({ id: "a3", tenantId: "a" }));
+
+    expect(send.mock.calls.map(([record]) => record.id)).toEqual(["a1", "b1"]);
+    expect(complete.mock.calls.map(([claim]) => claim.record.id)).toEqual(["b1"]);
+    expect(release.mock.calls.map(([claim]) => claim.record.id)).toEqual(["a1", "a2"]);
+    expect(persist.mock.calls.map(([record]) => record.id)).toEqual(["a3"]);
+  });
+
+  it("scans past a backed-off prefix without spending the replay attempt budget", async () => {
+    const { claimBatch, complete, manager, release, send } = createManager({
+      options: { maxReplayBatchSize: 1 },
+    });
+    send.mockResolvedValueOnce({
+      kind: "retryable",
+      correlationId: "seed",
+      retryAfterMs: 60_000,
+    });
+    await manager.deliver(makeRecord({ tenantId: "a" }));
+    for (let index = 0; index < 3; index++) {
+      claimBatch.mockResolvedValueOnce([
+        makeClaim(makeRecord({ id: `blocked-${index}`, tenantId: "a" })),
+      ]);
+    }
+    claimBatch.mockResolvedValueOnce([makeClaim(makeRecord({ id: "healthy", tenantId: "b" }))]);
+
+    await manager.forceFlush();
+
+    expect(complete.mock.calls.map(([claim]) => claim.record.id)).toEqual(["healthy"]);
+    expect(release.mock.calls).toHaveLength(3);
+    expect(send.mock.calls).toHaveLength(2);
+  });
+
+  it("bounds replay scans when every queued tenant is backed off", async () => {
+    const { claimBatch, manager, send } = createManager({
+      options: { maxReplayBatchSize: 1 },
+    });
+    send.mockResolvedValueOnce({
+      kind: "retryable",
+      correlationId: "seed",
+      retryAfterMs: 60_000,
+    });
+    await manager.deliver(makeRecord());
+    let claimed = 0;
+    claimBatch.mockImplementation(async () => [
+      makeClaim(makeRecord({ id: `blocked-${claimed++}` })),
+    ]);
+
+    await manager.forceFlush();
+
+    expect(claimBatch.mock.calls).toHaveLength(10);
+    expect(send.mock.calls).toHaveLength(1);
   });
 
   it.each(["null", "throw", "timeout"] as const)(
@@ -246,7 +335,9 @@ describe("DurableDeliveryManager", () => {
     await firstSendStarted.promise;
 
     try {
-      assert.deepEqual(claimBatch.mock.calls, [[1, { excludeRecordIds: new Set() }]]);
+      assert.deepEqual(claimBatch.mock.calls, [
+        [1, { excludeRecordIds: new Set(), excludeTenantIds: new Set() }],
+      ]);
       assert.deepEqual(pendingClaims, [second]);
     } finally {
       finishFirstSend.resolve({ kind: "success", correlationId: first.record.id });
@@ -254,8 +345,8 @@ describe("DurableDeliveryManager", () => {
     }
 
     assert.deepEqual(claimBatch.mock.calls, [
-      [1, { excludeRecordIds: new Set() }],
-      [1, { excludeRecordIds: new Set() }],
+      [1, { excludeRecordIds: new Set(), excludeTenantIds: new Set() }],
+      [1, { excludeRecordIds: new Set(), excludeTenantIds: new Set() }],
     ]);
     assert.deepEqual(pendingClaims, []);
   });
@@ -266,7 +357,9 @@ describe("DurableDeliveryManager", () => {
     });
     const claim = makeClaim(makeRecord({ id: "released-replay-record" }));
 
-    claimBatch.mockResolvedValue([claim]);
+    claimBatch.mockImplementation(async (_limit, options) =>
+      options?.excludeRecordIds?.has(claim.record.id) ? [] : [claim],
+    );
     send.mockResolvedValue({
       kind: "retryable",
       correlationId: "retryable-replay-record",
@@ -275,14 +368,86 @@ describe("DurableDeliveryManager", () => {
 
     await manager.forceFlush();
 
-    assert.deepEqual(claimBatch.mock.calls, [[1, { excludeRecordIds: new Set() }]]);
+    expect(claimBatch.mock.calls).toHaveLength(2);
+    expect(claimBatch.mock.calls[1][1]?.excludeRecordIds).toEqual(new Set([claim.record.id]));
     assert.deepEqual(
       release.mock.calls.map(([releasedClaim]) => releasedClaim),
       [claim],
     );
   });
 
-  it("excludes a released token-unavailable record from later claims in the same real-store pass while later records are still delivered", async () => {
+  it.each(["token unavailable", "retryable response"] as const)(
+    "excludes a released %s record in a real-store pass while a later tenant is delivered",
+    async (failure) => {
+      const root = join(
+        process.cwd(),
+        ".superpowers",
+        "sdd",
+        "durable-manager-test-artifacts",
+        randomUUID(),
+      );
+      await fs.mkdir(root, { recursive: true, mode: 0o700 });
+
+      try {
+        const logger = makeLogger();
+        const store = await PersistentStore.create(
+          new ResolvedDurableDeliveryOptions({ enabled: true, storageDirectory: root }),
+          logger,
+        );
+
+        const now = Date.now();
+        const unavailable = makeRecord({ id: "unavailable-record", createdAt: now, tenantId: "a" });
+        const deliverable = makeRecord({
+          id: "deliverable-record",
+          createdAt: now + 1,
+          tenantId: "b",
+        });
+        await store.persist(unavailable);
+        await store.persist(deliverable);
+
+        const tokenCallCounts = new Map<string, number>();
+        const resolveToken = vi.fn(async (record: DurableRecordV1) => {
+          tokenCallCounts.set(record.id, (tokenCallCounts.get(record.id) ?? 0) + 1);
+          return failure === "token unavailable" && record.id === unavailable.id
+            ? null
+            : "fresh-token";
+        });
+        const send = vi.fn(async (record: DurableRecordV1): Promise<DeliveryAttempt> =>
+          record.id === unavailable.id
+            ? { kind: "retryable", correlationId: record.id, retryAfterMs: 60_000 }
+            : { kind: "success", correlationId: record.id },
+        );
+
+        const manager = new DurableDeliveryManager(
+          new ResolvedDurableDeliveryOptions({
+            enabled: true,
+            maxReplayBatchSize: 5,
+            replayIntervalMilliseconds: 60_000,
+          }),
+          store,
+          logger,
+          { resolveToken, send },
+        );
+        managedInstances.push(manager);
+
+        await manager.forceFlush();
+
+        assert.strictEqual(tokenCallCounts.get(unavailable.id), 1);
+        assert.deepEqual(
+          send.mock.calls.map(([record]) => record.id),
+          failure === "token unavailable" ? [deliverable.id] : [unavailable.id, deliverable.id],
+        );
+
+        const remaining = await store.claimBatch(5);
+        assert.strictEqual(remaining.length, 1);
+        assert.strictEqual(remaining[0].record.id, unavailable.id);
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("delivers later tenants across passes with a throttled prefix larger than the scan budget", async () => {
     const root = join(
       process.cwd(),
       ".superpowers",
@@ -291,56 +456,83 @@ describe("DurableDeliveryManager", () => {
       randomUUID(),
     );
     await fs.mkdir(root, { recursive: true, mode: 0o700 });
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
 
     try {
       const logger = makeLogger();
-      const store = await PersistentStore.create(
-        new ResolvedDurableDeliveryOptions({ enabled: true, storageDirectory: root }),
-        logger,
-      );
-
-      const now = Date.now();
-      const unavailable = makeRecord({ id: "token-unavailable-record", createdAt: now });
-      const deliverable = makeRecord({ id: "deliverable-record", createdAt: now + 1 });
-      await store.persist(unavailable);
-      await store.persist(deliverable);
-
-      const tokenCallCounts = new Map<string, number>();
-      const resolveToken = vi.fn(async (record: DurableRecordV1) => {
-        tokenCallCounts.set(record.id, (tokenCallCounts.get(record.id) ?? 0) + 1);
-        return record.id === unavailable.id ? null : "fresh-token";
+      const options = new ResolvedDurableDeliveryOptions({
+        enabled: true,
+        storageDirectory: root,
+        maxReplayBatchSize: 2,
+        replayIntervalMilliseconds: 60_000,
       });
-      const send = vi.fn(async (record: DurableRecordV1) => ({
-        kind: "success" as const,
-        correlationId: record.id,
-      }));
+      const store = await PersistentStore.create(options, logger);
+      for (let index = 0; index < 25; index++) {
+        await store.persist(
+          makeRecord({ id: `blocked-${index}`, createdAt: now + index, tenantId: "a" }),
+        );
+      }
 
-      const manager = new DurableDeliveryManager(
-        new ResolvedDurableDeliveryOptions({
-          enabled: true,
-          maxReplayBatchSize: 5,
-          replayIntervalMilliseconds: 60_000,
-        }),
-        store,
-        logger,
-        { resolveToken, send },
+      let throttled = true;
+      const send = vi.fn(async (record: DurableRecordV1): Promise<DeliveryAttempt> =>
+        record.tenantId === "a" && throttled
+          ? { kind: "retryable", correlationId: record.id, status: 429, retryAfterMs: 60_000 }
+          : { kind: "success", correlationId: record.id },
       );
+      const manager = new DurableDeliveryManager(options, store, logger, {
+        resolveToken: async () => "fresh-token",
+        send,
+      });
       managedInstances.push(manager);
+      const claimBatch = vi.spyOn(store, "claimBatch");
+      const complete = vi.spyOn(store, "complete");
 
-      await manager.forceFlush();
+      for (let pass = 0; pass < 3; pass++) {
+        await store.persist(
+          makeRecord({ id: `healthy-${pass}`, createdAt: now + 100, tenantId: "b" }),
+        );
+        claimBatch.mockClear();
+        await manager.forceFlush();
+        expect(claimBatch.mock.calls.length).toBeLessThanOrEqual(20);
+        now += 60_001;
+      }
 
-      assert.strictEqual(tokenCallCounts.get(unavailable.id), 1);
-      assert.deepEqual(
-        send.mock.calls.map(([record]) => record.id),
-        [deliverable.id],
+      expect(complete.mock.calls.map(([claim]) => claim.record.id)).toEqual([
+        "healthy-0",
+        "healthy-1",
+        "healthy-2",
+      ]);
+      expect(send.mock.calls.filter(([record]) => record.tenantId === "a")).toHaveLength(3);
+
+      throttled = false;
+      for (let pass = 0; pass < 13; pass++) {
+        await manager.forceFlush();
+      }
+      expect(complete.mock.calls.filter(([claim]) => claim.record.tenantId === "a")).toHaveLength(
+        25,
       );
-
-      const remaining = await store.claimBatch(5);
-      assert.strictEqual(remaining.length, 1);
-      assert.strictEqual(remaining[0].record.id, unavailable.id);
+      expect(await store.claimBatch(1)).toEqual([]);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("stops replay after failing to release a token-unavailable record", async () => {
+    const { claimBatch, logger, manager, release, resolveToken, send } = createManager();
+    claimBatch.mockResolvedValueOnce([makeClaim(makeRecord({ id: "first" }))]);
+    claimBatch.mockResolvedValueOnce([makeClaim(makeRecord({ id: "second" }))]);
+    resolveToken.mockResolvedValueOnce(null);
+    release.mockRejectedValueOnce(new Error("storage unavailable"));
+
+    await manager.forceFlush();
+
+    expect(claimBatch).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      "[DurableDeliveryManager] Failed to release durable record",
+      expect.any(Error),
+    );
   });
 
   it("releases replay claims without sending while the transmission gate is backing off", async () => {
@@ -507,7 +699,9 @@ describe("DurableDeliveryManager", () => {
       release.mock.calls.map(([releasedClaim]) => releasedClaim),
       [invalid],
     );
-    assert.deepEqual(claimBatch.mock.calls, [[1, { excludeRecordIds: new Set() }]]);
+    assert.deepEqual(claimBatch.mock.calls, [
+      [1, { excludeRecordIds: new Set(), excludeTenantIds: new Set() }],
+    ]);
   });
 
   it("closes the transmission gate after a permanent replay probe response", async () => {
@@ -855,7 +1049,9 @@ function createManager(
 ) {
   const logger = makeLogger();
   const persist = vi.fn(async (_record: DurableRecordV1) => "record.pending");
-  const claimBatch = vi.fn(async (_limit: number) => [] as ClaimedRecord[]);
+  const claimBatch = vi.fn(
+    async (_limit: number, _options?: ClaimBatchOptions) => [] as ClaimedRecord[],
+  );
   const complete = vi.fn(async (_claim: ClaimedRecord) => undefined);
   const release = vi.fn(async (_claim: ClaimedRecord) => undefined);
   const resolveToken = vi.fn(async (_record: DurableRecordV1) => "token");
