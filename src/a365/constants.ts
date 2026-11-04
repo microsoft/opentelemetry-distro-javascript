@@ -199,6 +199,21 @@ export class OpenTelemetryConstants {
   /** Attribute key for the tool type (`gen_ai.tool.type`). */
   public static readonly GEN_AI_TOOL_TYPE_KEY = "gen_ai.tool.type";
 
+  /** Skill name supplied by the tool runtime. */
+  public static readonly GEN_AI_SKILL_NAME_KEY = "gen_ai.skill.name";
+  /** Skill description supplied by the tool runtime. */
+  public static readonly GEN_AI_SKILL_DESCRIPTION_KEY = "gen_ai.skill.description";
+  /** Caller-scrubbed source URI of the skill. */
+  public static readonly GEN_AI_SKILL_SOURCE_URI_KEY = "gen_ai.skill.source.uri";
+  /** Skill-relative resource or script name. */
+  public static readonly GEN_AI_SKILL_RESOURCE_NAME_KEY = "gen_ai.skill.resource.name";
+  /** Name of a directly executed process. */
+  public static readonly PROCESS_EXECUTABLE_NAME_KEY = "process.executable.name";
+  /** Path of a directly executed process. */
+  public static readonly PROCESS_EXECUTABLE_PATH_KEY = "process.executable.path";
+  /** Reported exit code of a command or process. */
+  public static readonly PROCESS_EXIT_CODE_KEY = "process.exit.code";
+
   // ── Tenant ───────────────────────────────────────────────────────
 
   /** Attribute key for the tenant identifier (`microsoft.tenant.id`). */

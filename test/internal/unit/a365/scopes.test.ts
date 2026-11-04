@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from "vitest";
-import { trace, SpanKind, context as otelContext } from "@opentelemetry/api";
+import { trace, SpanKind, SpanStatusCode, context as otelContext } from "@opentelemetry/api";
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
@@ -31,6 +31,9 @@ import type {
   GenAiResponseParameters,
   InvokeAgentScopeDetails,
   ToolCallDetails,
+  ExecuteToolRefinementDetails,
+  SkillRefinementDetails,
+  ExecuteCommandRefinementDetails,
   InferenceDetails,
   UserDetails,
   OutputResponse,
@@ -39,6 +42,33 @@ import type {
 import { InferenceOperationType, MessageRole } from "../../../../src/a365/index.js";
 import { safeSerializeToJson } from "../../../../src/a365/message-utils.js";
 import { partitionByIdentity } from "../../../../src/a365/exporter/utils.js";
+import type {
+  ExecuteToolRefinementDetails as RootExecuteToolRefinementDetails,
+  SkillRefinementDetails as RootSkillRefinementDetails,
+  ExecuteCommandRefinementDetails as RootExecuteCommandRefinementDetails,
+} from "../../../../src/index.js";
+
+type Expect<T extends true> = T;
+type _RefinementRootExportMatches = Expect<
+  RootExecuteToolRefinementDetails extends ExecuteToolRefinementDetails ? true : false
+>;
+type _SkillRootExportMatches = Expect<
+  RootSkillRefinementDetails extends SkillRefinementDetails ? true : false
+>;
+type _CommandRootExportMatches = Expect<
+  RootExecuteCommandRefinementDetails extends ExecuteCommandRefinementDetails ? true : false
+>;
+type _SkillCannotAcceptProcessFields = Expect<
+  { kind: "load_skill"; executableName: string } extends SkillRefinementDetails ? false : true
+>;
+type _ResourceCannotAcceptProcessFields = Expect<
+  { kind: "read_skill_resource"; exitCode: number } extends ExecuteToolRefinementDetails
+    ? false
+    : true
+>;
+type _InvalidRefinementKindIsRejected = Expect<
+  { kind: "unknown" } extends ExecuteToolRefinementDetails ? false : true
+>;
 
 let sharedExporter: InMemorySpanExporter;
 let contextManager: AsyncLocalStorageContextManager;
@@ -491,6 +521,261 @@ describe("Scopes", () => {
   });
 
   describe("ExecuteToolScope", () => {
+    it.each<{ refinementDetails: ExecuteToolRefinementDetails; expectedName: string }>([
+      {
+        refinementDetails: { kind: "load_skill", skillName: "code-review" },
+        expectedName: "execute_tool custom_tool code-review",
+      },
+      {
+        refinementDetails: {
+          kind: "load_skill",
+          skillName: "code-review",
+          resourceName: "SKILL.md",
+        },
+        expectedName: "execute_tool custom_tool code-review",
+      },
+      {
+        refinementDetails: { kind: "load_skill", skillName: " " },
+        expectedName: "execute_tool custom_tool",
+      },
+      {
+        refinementDetails: {
+          kind: "read_skill_resource",
+          skillName: "code-review",
+          resourceName: "references/policy.md",
+        },
+        expectedName: "execute_tool custom_tool code-review references/policy.md",
+      },
+      {
+        refinementDetails: {
+          kind: "read_skill_resource",
+          resourceName: "references/policy.md",
+        },
+        expectedName: "execute_tool custom_tool references/policy.md",
+      },
+      {
+        refinementDetails: { kind: "read_skill_resource", skillName: "code-review" },
+        expectedName: "execute_tool custom_tool",
+      },
+      {
+        refinementDetails: {
+          kind: "execute_command",
+          skillName: "code-review",
+          resourceName: "scripts/check.py",
+          executableName: "python",
+        },
+        expectedName: "execute_tool custom_tool code-review scripts/check.py",
+      },
+      {
+        refinementDetails: {
+          kind: "execute_command",
+          resourceName: "scripts/check.py",
+          executableName: "python",
+        },
+        expectedName: "execute_tool custom_tool scripts/check.py",
+      },
+      {
+        refinementDetails: {
+          kind: "execute_command",
+          skillName: "code-review",
+          resourceName: " \t",
+          executableName: "python",
+        },
+        expectedName: "execute_tool custom_tool python",
+      },
+      {
+        refinementDetails: { kind: "execute_command", skillName: "code-review" },
+        expectedName: "execute_tool custom_tool",
+      },
+      {
+        refinementDetails: { kind: "execute_command" },
+        expectedName: "execute_tool custom_tool",
+      },
+    ])("uses refinement span-name rules: $expectedName", ({ refinementDetails, expectedName }) => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        { toolName: "custom_tool", refinementDetails },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.name).toBe(expectedName);
+      expect(span.kind).toBe(SpanKind.INTERNAL);
+      expect(span.attributes["gen_ai.operation.name"]).toBe("execute_tool");
+      expect(span.attributes["gen_ai.tool.name"]).toBe("custom_tool");
+    });
+
+    it.each(["load_skill", "read_skill_resource"] as const)(
+      "records explicit %s metadata without process attributes",
+      (kind) => {
+        const refinementDetails: SkillRefinementDetails = {
+          kind,
+          skillName: "code-review",
+          description: "Review changes",
+          sourceUri: "file:///opt/skills/code-review",
+          resourceName: "references/policy.md",
+        };
+        Object.assign(refinementDetails, {
+          executableName: "must-not-be-emitted",
+          executablePath: "/must-not-be-emitted",
+          exitCode: 2,
+        });
+        const scope = ExecuteToolScope.start(
+          testRequest,
+          { toolName: "custom_tool", refinementDetails },
+          testAgentDetails,
+        );
+        scope.dispose();
+
+        const attributes = sharedExporter.getFinishedSpans().at(-1)!.attributes;
+        expect(attributes).toMatchObject({
+          "gen_ai.skill.name": "code-review",
+          "gen_ai.skill.description": "Review changes",
+          "gen_ai.skill.source.uri": "file:///opt/skills/code-review",
+          "gen_ai.skill.resource.name": "references/policy.md",
+        });
+        expect(Object.keys(attributes).some((key) => key.startsWith("process."))).toBe(false);
+      },
+    );
+
+    it.each([0, 2])("records command metadata and numeric exit code %i on failure", (exitCode) => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        {
+          toolName: "run",
+          refinementDetails: {
+            kind: "execute_command",
+            skillName: "code-review",
+            description: "Review changes",
+            sourceUri: "file:///opt/skills/code-review",
+            resourceName: "scripts/check.py",
+            executableName: "python",
+            executablePath: "/usr/bin/python",
+            exitCode,
+          },
+          transferDetails: { mode: TransferMode.RETURN_TO_CALLER },
+        },
+        testAgentDetails,
+      );
+      scope.recordError(new Error("Command failed"));
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.attributes).toMatchObject({
+        "gen_ai.skill.name": "code-review",
+        "gen_ai.skill.description": "Review changes",
+        "gen_ai.skill.source.uri": "file:///opt/skills/code-review",
+        "gen_ai.skill.resource.name": "scripts/check.py",
+        "process.executable.name": "python",
+        "process.executable.path": "/usr/bin/python",
+        "process.exit.code": exitCode,
+        "microsoft.a365.transfer.mode": "return_to_caller",
+        "gen_ai.agent.id": testAgentDetails.agentId,
+      });
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+    });
+
+    it("omits blank refinement attributes without trimming supplied values", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        {
+          toolName: "shell",
+          refinementDetails: {
+            kind: "execute_command",
+            skillName: "",
+            description: " \t",
+            sourceUri: "\n",
+            resourceName: " ",
+            executableName: " python ",
+            executablePath: "",
+          },
+        },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.name).toBe("execute_tool shell  python ");
+      expect(span.attributes["process.executable.name"]).toBe(" python ");
+      expect(span.attributes["process.executable.path"]).toBeUndefined();
+      expect(span.attributes["process.exit.code"]).toBeUndefined();
+      expect(Object.keys(span.attributes).some((key) => key.startsWith("gen_ai.skill."))).toBe(
+        false,
+      );
+    });
+
+    it("does not infer refinements from tool names or arguments", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        { toolName: "load_skill", arguments: { name: "code-review", executableName: "python" } },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.name).toBe("execute_tool load_skill");
+      expect(
+        Object.keys(span.attributes).some(
+          (key) => key.startsWith("gen_ai.skill.") || key.startsWith("process."),
+        ),
+      ).toBe(false);
+    });
+
+    it.each([0, 2])("records late exit code %i without inferring an error", (exitCode) => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        {
+          toolName: "shell",
+          refinementDetails: { kind: "execute_command", executableName: "python", exitCode: 1 },
+        },
+        testAgentDetails,
+      );
+      scope.recordProcessExitCode(exitCode);
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.attributes["process.exit.code"]).toBe(exitCode);
+      expect(span.status.code).toBe(SpanStatusCode.UNSET);
+    });
+
+    it("preserves an explicit error when recording a successful process exit", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        { toolName: "shell", refinementDetails: { kind: "execute_command" } },
+        testAgentDetails,
+      );
+      scope.recordError(new Error("Tool failed after the command completed"));
+      scope.recordProcessExitCode(0);
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.attributes["process.exit.code"]).toBe(0);
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+    });
+
+    it.each(["unknown", "", undefined])(
+      "rejects an invalid refinement kind before starting a span: %s",
+      (kind) => {
+        const startSpan = vi.spyOn(
+          trace.getTracer(OpenTelemetryConstants.SOURCE_NAME),
+          "startSpan",
+        );
+        try {
+          expect(() =>
+            ExecuteToolScope.start(
+              testRequest,
+              { toolName: "custom_tool", refinementDetails: { kind } } as ToolCallDetails,
+              testAgentDetails,
+            ),
+          ).toThrow(/refinement/i);
+          expect(startSpan).not.toHaveBeenCalled();
+        } finally {
+          startSpan.mockRestore();
+        }
+      },
+    );
+
     it("records the full tool URL without changing host and port attributes", () => {
       const scope = ExecuteToolScope.start(
         testRequest,

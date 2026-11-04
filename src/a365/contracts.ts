@@ -480,6 +480,46 @@ export interface InvokeAgentScopeDetails {
   responseParameters?: GenAiResponseParameters;
 }
 
+/** Explicit metadata for skill loading or resource reading. Process fields are command-only. */
+export interface SkillRefinementDetails {
+  /** The skill operation performed by the tool. */
+  kind: "load_skill" | "read_skill_resource";
+  /** Skill name, when available. */
+  skillName?: string;
+  /** Skill description. May contain sensitive information. */
+  description?: string;
+  /** Skill source URI, not a temporary path. Callers must remove credentials and tokens. */
+  sourceUri?: string;
+  /** Skill-relative resource name, such as `references/policy.md`. */
+  resourceName?: string;
+  executableName?: never;
+  executablePath?: never;
+  exitCode?: never;
+}
+
+/** Explicit command metadata, optionally associated with a skill's bundled script. */
+export interface ExecuteCommandRefinementDetails {
+  /** Identifies a command-executing tool. */
+  kind: "execute_command";
+  /** Executable name, only when directly executing a single process. */
+  executableName?: string;
+  /** Executable path, only when directly executing a single process. */
+  executablePath?: string;
+  /** Reported exit code for a single command or process, including zero. */
+  exitCode?: number;
+  /** Skill name, when executing a skill's script. */
+  skillName?: string;
+  /** Skill description. May contain sensitive information. */
+  description?: string;
+  /** Skill source URI, not a temporary path. Callers must remove credentials and tokens. */
+  sourceUri?: string;
+  /** Skill-relative script name, such as `scripts/check.py`. */
+  resourceName?: string;
+}
+
+/** Explicit skill or command metadata; never inferred from tool names or arguments. */
+export type ExecuteToolRefinementDetails = SkillRefinementDetails | ExecuteCommandRefinementDetails;
+
 /** Details of a tool call made by an agent. */
 export interface ToolCallDetails {
   /** Name of the tool being called (required). */
@@ -496,6 +536,8 @@ export interface ToolCallDetails {
   endpoint?: ServiceEndpoint;
   /** Optional explicit transfer performed by this tool call. */
   transferDetails?: TransferDetails;
+  /** Optional explicit skill or command refinement, including on failed attempts. */
+  refinementDetails?: ExecuteToolRefinementDetails;
 }
 
 /** Details for an inference call. */
