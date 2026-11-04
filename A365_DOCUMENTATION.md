@@ -180,6 +180,68 @@ Provided agent ID, name, blueprint ID, platform ID, and version are recorded und
 `version`). Other target identity fields are not emitted, and the source agent and tenant
 attributes remain unchanged.
 
+### Tool skill and command refinements
+
+Supply explicit `ToolCallDetails.refinementDetails` from the tool API or runtime state,
+including on failed attempts. The exported `ExecuteToolRefinementDetails` union accepts
+`SkillRefinementDetails` (`kind: "load_skill"` or `"read_skill_resource"`) and
+`ExecuteCommandRefinementDetails` (`kind: "execute_command"`). Skill refinements do not
+accept process fields. An invalid `kind` throws before creating a span.
+
+All refinements accept `skillName`, `description`, `sourceUri`, and `resourceName`,
+emitted as `gen_ai.skill.name`, `gen_ai.skill.description`, `gen_ai.skill.source.uri`,
+and `gen_ai.skill.resource.name`. Command refinements additionally accept
+`executableName`, `executablePath`, and numeric `exitCode`, emitted as
+`process.executable.name`, `process.executable.path`, and `process.exit.code`.
+Only supply executable name/path when the tool directly executes a single process,
+not for an opaque shell expression or pipeline. String fields that are absent, empty,
+or whitespace-only are omitted; nonblank values are recorded unchanged.
+
+```typescript
+import { ExecuteToolScope } from "@microsoft/opentelemetry";
+import type { ToolCallDetails } from "@microsoft/opentelemetry";
+
+const details: ToolCallDetails = {
+  toolName: "shell",
+  refinementDetails: {
+    kind: "execute_command",
+    skillName: "code-review",
+    sourceUri: "file:///opt/skills/code-review",
+    resourceName: "scripts/check.py",
+    executableName: "python",
+    executablePath: "/usr/bin/python",
+  },
+};
+const scope = ExecuteToolScope.start(
+  { conversationId: "conv-123" },
+  details,
+  { agentId: "agent-1", tenantId: "tenant-1" },
+);
+// Record the actual exit code reported by the runtime, including zero for success.
+scope.recordProcessExitCode(0);
+scope.dispose();
+```
+
+For `load_skill`, the span name is `execute_tool {toolName} {skillName}`, falling back
+to `execute_tool {toolName}` without a nonblank skill name. For resource readers and
+commands, a nonblank resource name takes precedence:
+`execute_tool {toolName} {skillName} {resourceName}` (omit the skill name if unavailable).
+Without a resource name, commands append the executable name if available; resource
+readers retain the ordinary tool span name, even if a skill name is present.
+
+The operation remains `execute_tool`; no extra spans are created. No refinement is
+inferred from a tool name or opaque arguments. Existing tool, endpoint, transfer,
+source-agent, and tenant attributes are unchanged. `recordProcessExitCode()` records
+the reported numeric value, including zero, and can replace an initially supplied
+exit code. It does not infer failure or clear an existing error; use `recordError()`
+when the tool reports an error.
+
+Skill descriptions and source URIs may contain sensitive information. Supply the
+skill's source URI, not a temporary materialization path, and remove credentials,
+access tokens, and other sensitive components before recording it. Refinement metadata
+is explicitly supplied and is not automatically scrubbed or gated by `enableSensitiveData`.
+Skill identity/version and skill metrics proposals are not part of this API.
+
 ### Request and response attributes
 
 `InvokeAgentScope`, `InferenceScope`, and `ExecuteToolScope` accept `request.sessionId`.

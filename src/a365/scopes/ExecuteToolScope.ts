@@ -63,6 +63,31 @@ export class ExecuteToolScope extends OpenTelemetryScope {
       }
     }
 
+    const refinement = details.refinementDetails;
+    if (
+      refinement &&
+      refinement.kind !== "load_skill" &&
+      refinement.kind !== "read_skill_resource" &&
+      refinement.kind !== "execute_command"
+    ) {
+      throw new RangeError("ExecuteToolScope: invalid refinement kind");
+    }
+
+    let spanName = `${OpenTelemetryConstants.EXECUTE_TOOL_OPERATION_NAME} ${details.toolName}`;
+    if (refinement?.kind === "load_skill") {
+      if (refinement.skillName?.trim()) {
+        spanName += ` ${refinement.skillName}`;
+      }
+    } else if (refinement) {
+      if (refinement.resourceName?.trim()) {
+        spanName += refinement.skillName?.trim()
+          ? ` ${refinement.skillName} ${refinement.resourceName}`
+          : ` ${refinement.resourceName}`;
+      } else if (refinement.kind === "execute_command" && refinement.executableName?.trim()) {
+        spanName += ` ${refinement.executableName}`;
+      }
+    }
+
     const resolvedSpanDetails: SpanDetails = {
       spanKind: SpanKind.INTERNAL,
       ...spanDetails,
@@ -70,7 +95,7 @@ export class ExecuteToolScope extends OpenTelemetryScope {
 
     super(
       OpenTelemetryConstants.EXECUTE_TOOL_OPERATION_NAME,
-      `${OpenTelemetryConstants.EXECUTE_TOOL_OPERATION_NAME} ${details.toolName}`,
+      spanName,
       agentDetails,
       resolvedSpanDetails,
       userDetails,
@@ -89,6 +114,27 @@ export class ExecuteToolScope extends OpenTelemetryScope {
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_TOOL_TYPE_KEY, toolType);
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_TOOL_CALL_ID_KEY, toolCallId);
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_TOOL_DESCRIPTION_KEY, description);
+
+    if (refinement) {
+      const textAttributes: [string, string | undefined][] = [
+        [OpenTelemetryConstants.GEN_AI_SKILL_NAME_KEY, refinement.skillName],
+        [OpenTelemetryConstants.GEN_AI_SKILL_DESCRIPTION_KEY, refinement.description],
+        [OpenTelemetryConstants.GEN_AI_SKILL_SOURCE_URI_KEY, refinement.sourceUri],
+        [OpenTelemetryConstants.GEN_AI_SKILL_RESOURCE_NAME_KEY, refinement.resourceName],
+      ];
+      if (refinement.kind === "execute_command") {
+        textAttributes.push(
+          [OpenTelemetryConstants.PROCESS_EXECUTABLE_NAME_KEY, refinement.executableName],
+          [OpenTelemetryConstants.PROCESS_EXECUTABLE_PATH_KEY, refinement.executablePath],
+        );
+        this.setTagMaybe(OpenTelemetryConstants.PROCESS_EXIT_CODE_KEY, refinement.exitCode);
+      }
+      for (const [key, value] of textAttributes) {
+        if (value?.trim()) {
+          this.setTagMaybe(key, value);
+        }
+      }
+    }
 
     if (transfer) {
       this.setTagMaybe(OpenTelemetryConstants.TRANSFER_MODE_KEY, transfer.mode);
@@ -117,6 +163,11 @@ export class ExecuteToolScope extends OpenTelemetryScope {
         this.setTagMaybe(OpenTelemetryConstants.SERVER_PORT_KEY, endpoint.port);
       }
     }
+  }
+
+  /** Records a reported command or process exit code without changing the span's error status. */
+  public recordProcessExitCode(exitCode: number): void {
+    this.setTagMaybe(OpenTelemetryConstants.PROCESS_EXIT_CODE_KEY, exitCode);
   }
 
   /**
