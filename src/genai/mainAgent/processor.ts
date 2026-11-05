@@ -5,16 +5,19 @@
  * Span and log-record processors that propagate
  * `microsoft.gen_ai.main_agent.*` attributes from the top-level (user-facing)
  * GenAI agent so that all downstream telemetry is attributed to the main
- * agent rather than internal sub-agents in a multi-agent system.
+ * agent rather than internal sub-agents in a multi-agent system. Project IDs
+ * (`gen_ai.azure_ai_project.id` and `microsoft.foundry.project.id`) are also
+ * propagated independently from parent spans and onto logs.
  *
  * Mirrors `microsoft/opentelemetry-distro-python`
  * (`src/microsoft/opentelemetry/_genai/main_agent/_processor.py`).
  */
 
-import type { Context, Span } from "@opentelemetry/api";
+import type { Attributes, Context, Span } from "@opentelemetry/api";
 import { isSpanContextValid, trace } from "@opentelemetry/api";
 import type {
   ReadableSpan,
+  Span as SdkSpan,
   SpanProcessor as BaseSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import type { LogRecordProcessor, SdkLogRecord } from "@opentelemetry/sdk-logs";
@@ -31,6 +34,7 @@ import {
   GEN_AI_MAIN_AGENT_ID_KEY,
   GEN_AI_MAIN_AGENT_NAME_KEY,
   GEN_AI_MAIN_AGENT_VERSION_KEY,
+  GEN_AI_PROJECT_ID_KEYS,
 } from "./constants.js";
 
 // `gen_ai.agent.version` is not exported by ./semconv.ts; declare locally
@@ -59,24 +63,28 @@ const SELF_COPY_TABLE: ReadonlyArray<readonly [string, string]> = PROPAGATION_TA
 );
 
 interface ReadableSpanLike {
-  attributes?: Record<string, unknown>;
+  attributes?: Attributes;
 }
 
 /**
- * Propagates `microsoft.gen_ai.main_agent.*` attributes onto spans.
+ * Propagates `microsoft.gen_ai.main_agent.*` and project-ID attributes onto spans.
  *
  * - `onStart`: copies main-agent attributes from the parent span (or falls
  *   back to the parent's `gen_ai.agent.*` / `gen_ai.conversation.id`
- *   attributes) onto the new span.
+ *   attributes) and each existing project ID onto the new span.
+ * - `onEnding`: recovers missing project IDs from the parent if it was stamped
+ *   after the child started. Existing child project IDs are preserved.
  * - `onEnd`: when the span is itself an `invoke_agent` operation and has not
  *   already been enriched, copies its own `gen_ai.agent.*` /
  *   `gen_ai.conversation.id` attributes onto `microsoft.gen_ai.main_agent.*`
  *   so the top-level agent identifies itself as the main agent.
  */
 export class GenAIMainAgentSpanProcessor implements BaseSpanProcessor {
+  private _parentSpans = new WeakMap<Span, Span>();
+
   /**
    * Copies main-agent attributes from the parent span (or its `gen_ai.agent.*`
-   * fallbacks) onto a span when it starts.
+   * fallbacks) and each existing project ID onto a span when it starts.
    *
    * @param span The span that is starting.
    * @param parentContext The context containing the parent span, if any.
@@ -87,11 +95,42 @@ export class GenAIMainAgentSpanProcessor implements BaseSpanProcessor {
       return;
     }
 
-    const parentAttributes = (parent as unknown as ReadableSpanLike).attributes ?? {};
+    this._parentSpans.set(span, parent);
+
+    const parentAttributes = (parent as Span & ReadableSpanLike).attributes ?? {};
     for (const [target, primary, fallback] of PROPAGATION_TABLE) {
       const value = parentAttributes[primary] ?? parentAttributes[fallback];
       if (value !== undefined && value !== null) {
-        span.setAttribute(target, value as never);
+        span.setAttribute(target, value);
+      }
+    }
+
+    for (const key of GEN_AI_PROJECT_ID_KEYS) {
+      const value = parentAttributes[key];
+      if (value !== undefined && value !== null) {
+        span.setAttribute(key, value);
+      }
+    }
+  }
+
+  /**
+   * Recovers missing project IDs while the child is still writable, before
+   * export. Weak keys avoid retaining children that are never ended.
+   *
+   * @param span The span that is ending.
+   */
+  onEnding(span: SdkSpan): void {
+    const parent = this._parentSpans.get(span);
+    this._parentSpans.delete(span);
+    if (!parent) {
+      return;
+    }
+
+    const parentAttributes = (parent as Span & ReadableSpanLike).attributes ?? {};
+    for (const key of GEN_AI_PROJECT_ID_KEYS) {
+      const value = parentAttributes[key];
+      if (span.attributes[key] == null && value !== undefined && value !== null) {
+        span.setAttribute(key, value);
       }
     }
   }
@@ -127,9 +166,9 @@ export class GenAIMainAgentSpanProcessor implements BaseSpanProcessor {
     }
   }
 
-  /** Shuts down the processor. No-op for this processor. */
+  /** Releases any remaining parent references. */
   async shutdown(): Promise<void> {
-    // no-op
+    this._parentSpans = new WeakMap();
   }
 
   /** Flushes pending work. No-op for this processor. */
@@ -144,13 +183,13 @@ interface LogRecordAttributesLike {
 }
 
 /**
- * Copies any `microsoft.gen_ai.main_agent.*` attributes from the current
- * span onto every emitted log record.
+ * Copies any `microsoft.gen_ai.main_agent.*` and project-ID attributes from
+ * the current span onto every emitted log record.
  */
 export class GenAIMainAgentLogRecordProcessor implements LogRecordProcessor {
   /**
-   * Copies any `microsoft.gen_ai.main_agent.*` attributes from the active span
-   * onto the emitted log record.
+   * Copies main-agent and project-ID attributes from the active span onto the
+   * emitted log record.
    *
    * @param logRecord The log record being emitted.
    * @param contextArg Optional context used to resolve the current span.
@@ -161,7 +200,7 @@ export class GenAIMainAgentLogRecordProcessor implements LogRecordProcessor {
       return;
     }
 
-    const spanAttributes = (span as unknown as ReadableSpanLike).attributes ?? {};
+    const spanAttributes = (span as Span & ReadableSpanLike).attributes ?? {};
     const target = logRecord as unknown as LogRecordAttributesLike;
 
     let setAttribute: ((key: string, value: unknown) => unknown) | undefined;
@@ -180,7 +219,8 @@ export class GenAIMainAgentLogRecordProcessor implements LogRecordProcessor {
 
     for (const [key, value] of Object.entries(spanAttributes)) {
       if (
-        key.startsWith(GEN_AI_MAIN_AGENT_ATTRIBUTE_PREFIX) &&
+        (key.startsWith(GEN_AI_MAIN_AGENT_ATTRIBUTE_PREFIX) ||
+          GEN_AI_PROJECT_ID_KEYS.includes(key)) &&
         value !== undefined &&
         value !== null
       ) {
