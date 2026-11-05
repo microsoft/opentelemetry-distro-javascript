@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-[1.6.0] - 2026-11-05
+## [1.6.0] - 2026-11-05
 
 ### Bugs Fixed
 - Isolate Agent365 durable delivery backoff by tenant, shared across that tenant's agents and live/replay paths. Continue replay past retryable failures and backed-off tenants without spending the attempt limit on deferred records; bound replay scans and preserve active backoff during registry eviction.
