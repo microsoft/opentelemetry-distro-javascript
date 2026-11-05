@@ -22,6 +22,10 @@ export class TransmissionGate {
     } = {},
   ) {}
 
+  get hasPendingBackoff(): boolean {
+    return this.now() < this.blockedUntil;
+  }
+
   canAcquire(): boolean {
     const currentTime = this.now();
     if (currentTime < this.blockedUntil) return false;

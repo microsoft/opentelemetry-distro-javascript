@@ -120,6 +120,6 @@ export interface A365Options {
   /** Maximum estimated payload size (bytes) per HTTP chunk. */
   maxPayloadBytes?: number;
 
-  /** Durable delivery options for local spool-and-replay behavior. */
+  /** Local spool/replay options. Unix requires a customer-provisioned existing absolute storageDirectory. */
   durableDelivery?: Agent365DurableDeliveryOptions;
 }

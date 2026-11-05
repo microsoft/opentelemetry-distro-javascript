@@ -74,6 +74,7 @@ export function parseDurableRecord(text: string): DurableRecordV1 {
     !isSafeDurableRecordId(value.id) ||
     !isValidCreatedAt(value.createdAt) ||
     typeof value.tenantId !== "string" ||
+    value.tenantId.trim().length === 0 ||
     typeof value.agentId !== "string" ||
     typeof value.useS2SEndpoint !== "boolean" ||
     typeof value.body !== "string" ||

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from "vitest";
-import { trace, SpanKind, context as otelContext } from "@opentelemetry/api";
+import { trace, SpanKind, SpanStatusCode, context as otelContext } from "@opentelemetry/api";
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
@@ -22,6 +22,8 @@ import {
   OpenTelemetryConstants,
   ToolCallAction,
   ToolCallOutcomeStatus,
+  TransferMode,
+  TransferTargetType,
 } from "../../../../src/a365/index.js";
 import type {
   AgentDetails,
@@ -29,6 +31,9 @@ import type {
   GenAiResponseParameters,
   InvokeAgentScopeDetails,
   ToolCallDetails,
+  ExecuteToolRefinementDetails,
+  SkillRefinementDetails,
+  ExecuteCommandRefinementDetails,
   InferenceDetails,
   UserDetails,
   OutputResponse,
@@ -36,6 +41,34 @@ import type {
 } from "../../../../src/a365/index.js";
 import { InferenceOperationType, MessageRole } from "../../../../src/a365/index.js";
 import { safeSerializeToJson } from "../../../../src/a365/message-utils.js";
+import { partitionByIdentity } from "../../../../src/a365/exporter/utils.js";
+import type {
+  ExecuteToolRefinementDetails as RootExecuteToolRefinementDetails,
+  SkillRefinementDetails as RootSkillRefinementDetails,
+  ExecuteCommandRefinementDetails as RootExecuteCommandRefinementDetails,
+} from "../../../../src/index.js";
+
+type Expect<T extends true> = T;
+type _RefinementRootExportMatches = Expect<
+  RootExecuteToolRefinementDetails extends ExecuteToolRefinementDetails ? true : false
+>;
+type _SkillRootExportMatches = Expect<
+  RootSkillRefinementDetails extends SkillRefinementDetails ? true : false
+>;
+type _CommandRootExportMatches = Expect<
+  RootExecuteCommandRefinementDetails extends ExecuteCommandRefinementDetails ? true : false
+>;
+type _SkillCannotAcceptProcessFields = Expect<
+  { kind: "load_skill"; executableName: string } extends SkillRefinementDetails ? false : true
+>;
+type _ResourceCannotAcceptProcessFields = Expect<
+  { kind: "read_skill_resource"; exitCode: number } extends ExecuteToolRefinementDetails
+    ? false
+    : true
+>;
+type _InvalidRefinementKindIsRejected = Expect<
+  { kind: "unknown" } extends ExecuteToolRefinementDetails ? false : true
+>;
 
 let sharedExporter: InMemorySpanExporter;
 let contextManager: AsyncLocalStorageContextManager;
@@ -488,6 +521,381 @@ describe("Scopes", () => {
   });
 
   describe("ExecuteToolScope", () => {
+    it.each<{ refinementDetails: ExecuteToolRefinementDetails; expectedName: string }>([
+      {
+        refinementDetails: { kind: "load_skill", skillName: "code-review" },
+        expectedName: "execute_tool custom_tool code-review",
+      },
+      {
+        refinementDetails: {
+          kind: "load_skill",
+          skillName: "code-review",
+          resourceName: "SKILL.md",
+        },
+        expectedName: "execute_tool custom_tool code-review",
+      },
+      {
+        refinementDetails: { kind: "load_skill", skillName: " " },
+        expectedName: "execute_tool custom_tool",
+      },
+      {
+        refinementDetails: {
+          kind: "read_skill_resource",
+          skillName: "code-review",
+          resourceName: "references/policy.md",
+        },
+        expectedName: "execute_tool custom_tool code-review references/policy.md",
+      },
+      {
+        refinementDetails: {
+          kind: "read_skill_resource",
+          resourceName: "references/policy.md",
+        },
+        expectedName: "execute_tool custom_tool references/policy.md",
+      },
+      {
+        refinementDetails: { kind: "read_skill_resource", skillName: "code-review" },
+        expectedName: "execute_tool custom_tool",
+      },
+      {
+        refinementDetails: {
+          kind: "execute_command",
+          skillName: "code-review",
+          resourceName: "scripts/check.py",
+          executableName: "python",
+        },
+        expectedName: "execute_tool custom_tool code-review scripts/check.py",
+      },
+      {
+        refinementDetails: {
+          kind: "execute_command",
+          resourceName: "scripts/check.py",
+          executableName: "python",
+        },
+        expectedName: "execute_tool custom_tool scripts/check.py",
+      },
+      {
+        refinementDetails: {
+          kind: "execute_command",
+          skillName: "code-review",
+          resourceName: " \t",
+          executableName: "python",
+        },
+        expectedName: "execute_tool custom_tool python",
+      },
+      {
+        refinementDetails: { kind: "execute_command", skillName: "code-review" },
+        expectedName: "execute_tool custom_tool",
+      },
+      {
+        refinementDetails: { kind: "execute_command" },
+        expectedName: "execute_tool custom_tool",
+      },
+    ])("uses refinement span-name rules: $expectedName", ({ refinementDetails, expectedName }) => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        { toolName: "custom_tool", refinementDetails },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.name).toBe(expectedName);
+      expect(span.kind).toBe(SpanKind.INTERNAL);
+      expect(span.attributes["gen_ai.operation.name"]).toBe("execute_tool");
+      expect(span.attributes["gen_ai.tool.name"]).toBe("custom_tool");
+    });
+
+    it.each(["load_skill", "read_skill_resource"] as const)(
+      "records explicit %s metadata without process attributes",
+      (kind) => {
+        const refinementDetails: SkillRefinementDetails = {
+          kind,
+          skillName: "code-review",
+          description: "Review changes",
+          sourceUri: "file:///opt/skills/code-review",
+          resourceName: "references/policy.md",
+        };
+        Object.assign(refinementDetails, {
+          executableName: "must-not-be-emitted",
+          executablePath: "/must-not-be-emitted",
+          exitCode: 2,
+        });
+        const scope = ExecuteToolScope.start(
+          testRequest,
+          { toolName: "custom_tool", refinementDetails },
+          testAgentDetails,
+        );
+        scope.dispose();
+
+        const attributes = sharedExporter.getFinishedSpans().at(-1)!.attributes;
+        expect(attributes).toMatchObject({
+          "gen_ai.skill.name": "code-review",
+          "gen_ai.skill.description": "Review changes",
+          "gen_ai.skill.source.uri": "file:///opt/skills/code-review",
+          "gen_ai.skill.resource.name": "references/policy.md",
+        });
+        expect(Object.keys(attributes).some((key) => key.startsWith("process."))).toBe(false);
+      },
+    );
+
+    it.each([0, 2])("records command metadata and numeric exit code %i on failure", (exitCode) => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        {
+          toolName: "run",
+          refinementDetails: {
+            kind: "execute_command",
+            skillName: "code-review",
+            description: "Review changes",
+            sourceUri: "file:///opt/skills/code-review",
+            resourceName: "scripts/check.py",
+            executableName: "python",
+            executablePath: "/usr/bin/python",
+            exitCode,
+          },
+          transferDetails: { mode: TransferMode.RETURN_TO_CALLER },
+        },
+        testAgentDetails,
+      );
+      scope.recordError(new Error("Command failed"));
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.attributes).toMatchObject({
+        "gen_ai.skill.name": "code-review",
+        "gen_ai.skill.description": "Review changes",
+        "gen_ai.skill.source.uri": "file:///opt/skills/code-review",
+        "gen_ai.skill.resource.name": "scripts/check.py",
+        "process.executable.name": "python",
+        "process.executable.path": "/usr/bin/python",
+        "process.exit.code": exitCode,
+        "microsoft.a365.transfer.mode": "return_to_caller",
+        "gen_ai.agent.id": testAgentDetails.agentId,
+      });
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+    });
+
+    it("omits blank refinement attributes without trimming supplied values", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        {
+          toolName: "shell",
+          refinementDetails: {
+            kind: "execute_command",
+            skillName: "",
+            description: " \t",
+            sourceUri: "\n",
+            resourceName: " ",
+            executableName: " python ",
+            executablePath: "",
+          },
+        },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.name).toBe("execute_tool shell  python ");
+      expect(span.attributes["process.executable.name"]).toBe(" python ");
+      expect(span.attributes["process.executable.path"]).toBeUndefined();
+      expect(span.attributes["process.exit.code"]).toBeUndefined();
+      expect(Object.keys(span.attributes).some((key) => key.startsWith("gen_ai.skill."))).toBe(
+        false,
+      );
+    });
+
+    it("does not infer refinements from tool names or arguments", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        { toolName: "load_skill", arguments: { name: "code-review", executableName: "python" } },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.name).toBe("execute_tool load_skill");
+      expect(
+        Object.keys(span.attributes).some(
+          (key) => key.startsWith("gen_ai.skill.") || key.startsWith("process."),
+        ),
+      ).toBe(false);
+    });
+
+    it.each([0, 2])("records late exit code %i without inferring an error", (exitCode) => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        {
+          toolName: "shell",
+          refinementDetails: { kind: "execute_command", executableName: "python", exitCode: 1 },
+        },
+        testAgentDetails,
+      );
+      scope.recordProcessExitCode(exitCode);
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.attributes["process.exit.code"]).toBe(exitCode);
+      expect(span.status.code).toBe(SpanStatusCode.UNSET);
+    });
+
+    it("preserves an explicit error when recording a successful process exit", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        { toolName: "shell", refinementDetails: { kind: "execute_command" } },
+        testAgentDetails,
+      );
+      scope.recordError(new Error("Tool failed after the command completed"));
+      scope.recordProcessExitCode(0);
+      scope.dispose();
+
+      const span = sharedExporter.getFinishedSpans().at(-1)!;
+      expect(span.attributes["process.exit.code"]).toBe(0);
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+    });
+
+    it.each(["unknown", "", undefined])(
+      "rejects an invalid refinement kind before starting a span: %s",
+      (kind) => {
+        const startSpan = vi.spyOn(
+          trace.getTracer(OpenTelemetryConstants.SOURCE_NAME),
+          "startSpan",
+        );
+        try {
+          expect(() =>
+            ExecuteToolScope.start(
+              testRequest,
+              { toolName: "custom_tool", refinementDetails: { kind } } as ToolCallDetails,
+              testAgentDetails,
+            ),
+          ).toThrow(/refinement/i);
+          expect(startSpan).not.toHaveBeenCalled();
+        } finally {
+          startSpan.mockRestore();
+        }
+      },
+    );
+
+    it("records the full tool URL without changing host and port attributes", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        {
+          toolName: "search",
+          endpoint: {
+            host: "tools.example.com",
+            port: 8443,
+            url: "https://tools.example.com:8443/search?q=hello#results",
+          },
+        },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const attributes = sharedExporter.getFinishedSpans().at(-1)!.attributes;
+      expect(attributes["url.full"]).toBe("https://tools.example.com:8443/search?q=hello#results");
+      expect(attributes["server.address"]).toBe("tools.example.com");
+      expect(attributes["server.port"]).toBe(8443);
+    });
+
+    it("does not invent a URL for a host-only tool endpoint", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        { toolName: "search", endpoint: { host: "tools.example.com", port: 443 } },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const attributes = sharedExporter.getFinishedSpans().at(-1)!.attributes;
+      expect(attributes["url.full"]).toBeUndefined();
+      expect(attributes["server.address"]).toBe("tools.example.com");
+      expect(attributes["server.port"]).toBeUndefined();
+      expect(attributes["microsoft.a365.transfer.mode"]).toBeUndefined();
+      expect(attributes["microsoft.a365.transfer.target.type"]).toBeUndefined();
+    });
+
+    it("records target-agent transfer attributes without replacing the source agent", () => {
+      const scope = ExecuteToolScope.start(
+        testRequest,
+        {
+          toolName: "handoff",
+          transferDetails: {
+            mode: TransferMode.PASS_CONTROL,
+            targetAgentDetails: {
+              agentId: "target-agent",
+              agentName: "Target Agent",
+              agentBlueprintId: "target-blueprint",
+              platformId: "target-platform",
+              agentVersion: "2.0",
+              tenantId: "target-tenant",
+              agentEmail: "not-emitted@example.com",
+            },
+          },
+        },
+        testAgentDetails,
+      );
+      scope.dispose();
+
+      const attributes = sharedExporter.getFinishedSpans().at(-1)!.attributes;
+      expect(attributes).toMatchObject({
+        "gen_ai.agent.id": testAgentDetails.agentId,
+        "gen_ai.agent.name": testAgentDetails.agentName,
+        "microsoft.tenant.id": testAgentDetails.tenantId,
+        "microsoft.a365.transfer.mode": "pass_control",
+        "microsoft.a365.transfer.target.type": "agent",
+        "microsoft.a365.transfer.target.agent.id": "target-agent",
+        "microsoft.a365.transfer.target.agent.name": "Target Agent",
+        "microsoft.a365.transfer.target.agent.blueprint.id": "target-blueprint",
+        "microsoft.a365.transfer.target.agent.platform.id": "target-platform",
+        "microsoft.a365.transfer.target.agent.version": "2.0",
+      });
+      expect(attributes["microsoft.a365.transfer.target.agent.email"]).toBeUndefined();
+      expect(attributes["microsoft.a365.transfer.target.agent.tenant.id"]).toBeUndefined();
+    });
+
+    it.each([TransferTargetType.AGENT, TransferTargetType.HUMAN, TransferTargetType.WORKFLOW])(
+      "records a %s transfer target without agent identity",
+      (targetType) => {
+        const scope = ExecuteToolScope.start(
+          testRequest,
+          {
+            toolName: "handoff",
+            transferDetails: { mode: TransferMode.RETURN_TO_CALLER, targetType },
+          },
+          testAgentDetails,
+        );
+        scope.dispose();
+
+        const attributes = sharedExporter.getFinishedSpans().at(-1)!.attributes;
+        expect(attributes["microsoft.a365.transfer.mode"]).toBe("return_to_caller");
+        expect(attributes["microsoft.a365.transfer.target.type"]).toBe(targetType);
+        expect(attributes["microsoft.a365.transfer.target.agent.id"]).toBeUndefined();
+      },
+    );
+
+    it.each([
+      { mode: "invalid" },
+      { mode: "pass_control", targetType: "invalid" },
+      {
+        mode: "pass_control",
+        targetType: "human",
+        targetAgentDetails: { agentId: "target" },
+      },
+    ])("rejects invalid transfer details before starting a span: %j", (transferDetails) => {
+      const startSpan = vi.spyOn(trace.getTracer(OpenTelemetryConstants.SOURCE_NAME), "startSpan");
+      try {
+        expect(() =>
+          ExecuteToolScope.start(
+            testRequest,
+            { toolName: "handoff", transferDetails } as ToolCallDetails,
+            testAgentDetails,
+          ),
+        ).toThrow(/transfer/i);
+        expect(startSpan).not.toHaveBeenCalled();
+      } finally {
+        startSpan.mockRestore();
+      }
+    });
+
     it("should create scope with tool details", () => {
       const spy = vi.spyOn(OpenTelemetryScope.prototype as any, "setTagMaybe");
       const callerDetails: UserDetails = {
@@ -751,6 +1159,9 @@ describe("Scopes", () => {
         providerName: "openai",
         inputTokens: 100,
         outputTokens: 150,
+        responseModel: "gpt-4-2024-11-20",
+        cacheReadInputTokens: 12,
+        cacheWriteInputTokens: 7,
         finishReasons: ["stop"],
       };
 
@@ -783,6 +1194,22 @@ describe("Scopes", () => {
       expect(keySet).toContain("user.name");
       expect(keySet).toContain("user.email");
       expect(keySet).toContain("client.address");
+      expect(calls).toEqual(
+        expect.arrayContaining([
+          {
+            key: OpenTelemetryConstants.GEN_AI_RESPONSE_MODEL_KEY,
+            val: "gpt-4-2024-11-20",
+          },
+          {
+            key: OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY,
+            val: 12,
+          },
+          {
+            key: OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY,
+            val: 7,
+          },
+        ]),
+      );
       scope?.dispose();
       spy.mockRestore();
     });
@@ -834,9 +1261,49 @@ describe("Scopes", () => {
       expect(() => scope?.recordOutputMessages(["Generated response"])).not.toThrow();
       expect(() => scope?.recordInputTokens(50)).not.toThrow();
       expect(() => scope?.recordOutputTokens(100)).not.toThrow();
+      expect(() => scope?.recordResponseModel("gpt-4-2024-11-20")).not.toThrow();
+      expect(() => scope?.recordCacheReadInputTokens(12)).not.toThrow();
+      expect(() => scope?.recordCacheWriteInputTokens(7)).not.toThrow();
       expect(() => scope?.recordFinishReasons(["stop", "length"])).not.toThrow();
       scope?.dispose();
+
+      const spans = sharedExporter.getFinishedSpans();
+      const attributes = spans[spans.length - 1].attributes;
+      expect(attributes[OpenTelemetryConstants.GEN_AI_RESPONSE_MODEL_KEY]).toBe("gpt-4-2024-11-20");
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY]).toBe(12);
+      expect(attributes[OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY]).toBe(7);
     });
+
+    it.each<[InferenceDetails["operationName"], string]>([
+      [InferenceOperationType.CHAT, "chat"],
+      [InferenceOperationType.TEXT_COMPLETION, "text_completion"],
+      [InferenceOperationType.GENERATE_CONTENT, "generate_content"],
+      ["chat", "chat"],
+      ["text_completion", "text_completion"],
+      ["generate_content", "generate_content"],
+    ])(
+      "should normalize %s to %s and retain the inference span for export",
+      (operationName, expected) => {
+        const spanCountBefore = sharedExporter.getFinishedSpans().length;
+        const scope = InferenceScope.start(
+          testRequest,
+          { operationName, model: "gpt-4" },
+          testAgentDetails,
+        );
+        scope.dispose();
+
+        const spans = sharedExporter.getFinishedSpans();
+        expect(spans).toHaveLength(spanCountBefore + 1);
+        const span = spans[spans.length - 1];
+        expect(span.attributes[OpenTelemetryConstants.GEN_AI_OPERATION_NAME_KEY]).toBe(expected);
+        expect(span.name).toBe(`${expected} gpt-4`);
+        const groups = partitionByIdentity([span]);
+        expect(groups.size).toBe(1);
+        expect(groups.get(`${testAgentDetails.tenantId}:${testAgentDetails.agentId}`)).toEqual([
+          span,
+        ]);
+      },
+    );
 
     it("should set conversationId and channel tags when provided", () => {
       const spy = vi.spyOn(OpenTelemetryScope.prototype as any, "setTagMaybe");

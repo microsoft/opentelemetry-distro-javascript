@@ -38,6 +38,45 @@ jobs:
               return matching[0];
             }
 
+            function hasLabel(item, name) {
+              return (item.labels || []).some(label => (typeof label === "string" ? label : label.name) === name);
+            }
+
+            async function getEvents(issue_number) {
+              return github.paginate(github.rest.issues.listEvents, {
+                owner,
+                repo,
+                issue_number,
+                per_page: 100
+              });
+            }
+
+            function latestEvent(events, type, match = () => true) {
+              return events
+                .filter(event => event.event === type && match(event))
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+            }
+
+            // Time the needs-author-feedback label was most recently applied, so a
+            // marker from an earlier feedback round is never reused for a new one.
+            function getLatestLabeledAt(events) {
+              const labeled = latestEvent(events, "labeled", event => event.label?.name === "needs-author-feedback");
+              return labeled ? new Date(labeled.created_at) : null;
+            }
+
+            async function removeFeedbackLabel(issue_number) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number,
+                  name: "needs-author-feedback"
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            }
+
             function hasReminderSince(comments, appliedAt) {
               return comments.some(comment =>
                 comment.user?.type === "Bot" &&
@@ -56,6 +95,10 @@ jobs:
 
             for (const issue of issues) {
               if (issue.pull_request) continue;
+              // `keep` opts an issue out of all automatic closure.
+              if (hasLabel(issue, "keep")) continue;
+              // Bot-authored issues cannot answer, and the bot's own comments would look like replies.
+              if (issue.user?.type === "Bot") continue;
 
               const issue_number = issue.number;
               const author = issue.user.login;
@@ -68,9 +111,14 @@ jobs:
               });
 
               const latestAppliedComment = getLatestAppliedMarker(comments);
-              if (!latestAppliedComment) {
+              const events = await getEvents(issue_number);
+              const labeledAt = getLatestLabeledAt(events);
+              const markerIsCurrent = latestAppliedComment &&
+                (!labeledAt || new Date(latestAppliedComment.created_at) >= labeledAt);
+              if (!markerIsCurrent) {
                 // Backfill an applied marker for issues labeled before this
-                // workflow existed (or where the marker comment was deleted).
+                // workflow existed, or where the marker for the current label
+                // round is missing (notification failed or was deleted).
                 // Without this, such issues would stay labeled forever because
                 // the reminder/close logic below keys off the marker timestamp.
                 // The backfilled comment uses today's date as the start of the
@@ -90,10 +138,21 @@ jobs:
               }
 
               const appliedAt = new Date(latestAppliedComment.created_at);
+              // Replies count from the start of the label round, so an answer posted before a
+              // backfilled marker is not ignored. The marker still drives the 7/14-day clock.
+              const repliesSince = labeledAt && labeledAt < appliedAt ? labeledAt : appliedAt;
+
+              // This round already ended in an automatic close and the issue was reopened
+              // since (e.g. label cleanup failed after closing). Only finish the cleanup;
+              // a new label application starts a fresh round.
+              if (events.some(event => event.event === "closed" && event.actor?.type === "Bot" && new Date(event.created_at) >= appliedAt)) {
+                await removeFeedbackLabel(issue_number);
+                continue;
+              }
 
               const authorReplied = comments.some(comment =>
                 comment.user?.login === author &&
-                new Date(comment.created_at) > appliedAt
+                new Date(comment.created_at) > repliesSince
               );
 
               if (authorReplied) {
@@ -121,6 +180,25 @@ jobs:
               const ageInDays = daysBetween(appliedAt, now);
 
               if (ageInDays >= 14) {
+                // Re-check the current state right before closing: the snapshot
+                // above may be stale if the author replied or a maintainer added
+                // `keep` / removed the label since this run started.
+                const { data: current } = await github.rest.issues.get({ owner, repo, issue_number });
+                if (current.state !== "open" || !hasLabel(current, "needs-author-feedback") || hasLabel(current, "keep")) continue;
+
+                // Skip if the label was removed and reapplied (a new feedback round) since it was inspected.
+                const currentLabeledAt = getLatestLabeledAt(await getEvents(issue_number));
+                if (String(currentLabeledAt) !== String(labeledAt)) continue;
+
+                const recentComments = await github.paginate(github.rest.issues.listComments, {
+                  owner,
+                  repo,
+                  issue_number,
+                  since: repliesSince.toISOString(),
+                  per_page: 100
+                });
+                if (recentComments.some(comment => comment.user?.login === author && new Date(comment.created_at) > repliesSince)) continue;
+
                 await github.rest.issues.createComment({
                   owner,
                   repo,
@@ -134,28 +212,54 @@ jobs:
                   ].join("\n")
                 });
 
-                // Remove the label before closing so that if a maintainer later
-                // reopens the issue, this workflow does not immediately re-close
-                // it based on the stale `applied` marker.  When the label is
-                // re-applied to gather more info, a fresh `applied` marker
-                // restarts the 14-day clock.
-                try {
-                  await github.rest.issues.removeLabel({
-                    owner,
-                    repo,
-                    issue_number,
-                    name: "needs-author-feedback"
-                  });
-                } catch (error) {
-                  if (error.status !== 404) throw error;
-                }
-
+                const closeRequestedAt = new Date();
                 await github.rest.issues.update({
                   owner,
                   repo,
                   issue_number,
-                  state: "closed"
+                  state: "closed",
+                  state_reason: "not_planned"
                 });
+
+                // Remove the label only after a successful close so a failed close is
+                // retried on the next run. If this removal fails, the completed-round
+                // check above cleans it up after any reopen instead of re-closing.
+                await removeFeedbackLabel(issue_number);
+
+                // An author reply that landed between the final check and the close
+                // may have been handled while the issue was still open; reopen it, but
+                // only if the current closure is still this run's own automatic close.
+                const lateComments = await github.paginate(github.rest.issues.listComments, {
+                  owner,
+                  repo,
+                  issue_number,
+                  since: repliesSince.toISOString(),
+                  per_page: 100
+                });
+                if (lateComments.some(comment => comment.user?.login === author && new Date(comment.created_at) > repliesSince)) {
+                  const { data: after } = await github.rest.issues.get({ owner, repo, issue_number });
+                  const afterEvents = await getEvents(issue_number);
+                  const lastClosed = latestEvent(afterEvents, "closed");
+                  const lastReopened = latestEvent(afterEvents, "reopened");
+                  const ownClose = after.state === "closed" &&
+                    lastClosed?.actor?.type === "Bot" &&
+                    new Date(lastClosed.created_at) >= new Date(closeRequestedAt.getTime() - 60 * 1000) &&
+                    (!lastReopened || new Date(lastReopened.created_at) < new Date(lastClosed.created_at));
+                  if (!ownClose) continue;
+
+                  await github.rest.issues.update({
+                    owner,
+                    repo,
+                    issue_number,
+                    state: "open"
+                  });
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number,
+                    body: "Thanks for the response. Reopening this issue."
+                  });
+                }
 
                 continue;
               }

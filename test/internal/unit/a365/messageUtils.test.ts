@@ -442,6 +442,22 @@ describe("serializeToolPayload", () => {
     });
   });
 
+  it("preserves explicitly empty metadata at the top level and in nested models", () => {
+    const payload = new ExecuteToolCallArguments({
+      extension_data: {},
+      resources: [{ extension_data: {}, container: { extension_data: {} } }],
+    });
+
+    expect(JSON.parse(serializeToolPayload(payload) as string)).toEqual({
+      schema_version: "1.0",
+      metadata: {},
+      resources: [{ metadata: {}, container: { metadata: {} } }],
+    });
+    expect(
+      JSON.parse(serializeToolPayload(new ExecuteToolCallResult({ extension_data: {} })) as string),
+    ).toEqual({ schema_version: "1.0", metadata: {} });
+  });
+
   it("omits explicit null schema versions", () => {
     const payload = new ExecuteToolCallArguments({ schema_version: null as any });
 
