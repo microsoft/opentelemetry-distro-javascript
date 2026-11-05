@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Features Added
+- Propagate `gen_ai.azure_ai_project.id` and `microsoft.foundry.project.id` independently from parent spans to child spans and from active spans to logs. Recover missing IDs before child spans end, including when main-agent attribution is already present. Enabled automatically with Azure Monitor.
+
 ## [1.5.0] - 2026-10-06
 
 ### Bugs Fixed

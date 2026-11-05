@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { context, SpanKind, trace } from "@opentelemetry/api";
+import { context, ROOT_CONTEXT, SpanKind, trace, TraceFlags } from "@opentelemetry/api";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 import { logs as logsApi } from "@opentelemetry/api-logs";
 import {
@@ -33,15 +33,23 @@ import {
 } from "../../../../../src/genai/semconv.js";
 
 const ATTR_GEN_AI_AGENT_VERSION = "gen_ai.agent.version";
+const PROJECT_IDS = {
+  "gen_ai.azure_ai_project.id": "/subscriptions/sub/resourceGroups/rg/providers/x/projects/azure",
+  "microsoft.foundry.project.id":
+    "/subscriptions/sub/resourceGroups/rg/providers/x/projects/foundry",
+};
+const PROJECT_ID_KEYS = Object.keys(PROJECT_IDS);
 
 describe("GenAIMainAgentSpanProcessor", () => {
   let provider: BasicTracerProvider;
   let memoryExporter: InMemorySpanExporter;
+  let processor: GenAIMainAgentSpanProcessor;
 
   beforeEach(() => {
     memoryExporter = new InMemorySpanExporter();
+    processor = new GenAIMainAgentSpanProcessor();
     provider = new BasicTracerProvider({
-      spanProcessors: [new GenAIMainAgentSpanProcessor(), new SimpleSpanProcessor(memoryExporter)],
+      spanProcessors: [processor, new SimpleSpanProcessor(memoryExporter)],
     });
   });
 
@@ -191,6 +199,241 @@ describe("GenAIMainAgentSpanProcessor", () => {
       expect(attrs[GEN_AI_MAIN_AGENT_NAME_KEY]).toBe("already");
     });
   });
+
+  describe("project ID propagation", () => {
+    it.each(PROJECT_ID_KEYS)("copies %s at start without synthesizing the other key", (key) => {
+      const tracer = provider.getTracer("test");
+      const parent = tracer.startSpan("server", {
+        kind: SpanKind.SERVER,
+        attributes: { [key]: "parent-project" },
+      });
+      const child = tracer.startSpan(
+        "invoke_agent child",
+        { attributes: { [ATTR_GEN_AI_OPERATION_NAME]: GEN_AI_OPERATION_INVOKE_AGENT } },
+        trace.setSpan(ROOT_CONTEXT, parent),
+      );
+
+      expect(child).toHaveProperty("attributes", {
+        [ATTR_GEN_AI_OPERATION_NAME]: GEN_AI_OPERATION_INVOKE_AGENT,
+        [key]: "parent-project",
+      });
+      child.end();
+      parent.end();
+      expect(memoryExporter.getFinishedSpans()[0].attributes).toEqual({
+        [ATTR_GEN_AI_OPERATION_NAME]: GEN_AI_OPERATION_INVOKE_AGENT,
+        [key]: "parent-project",
+      });
+    });
+
+    it("propagates both IDs independently through nested spans alongside main-agent attributes", () => {
+      const tracer = provider.getTracer("test");
+      const parent = tracer.startSpan("server", {
+        attributes: { ...PROJECT_IDS, [ATTR_GEN_AI_AGENT_NAME]: "main" },
+      });
+      const child = tracer.startSpan(
+        "invoke_agent child",
+        {
+          attributes: {
+            [ATTR_GEN_AI_OPERATION_NAME]: GEN_AI_OPERATION_INVOKE_AGENT,
+            [ATTR_GEN_AI_AGENT_NAME]: "child",
+          },
+        },
+        trace.setSpan(ROOT_CONTEXT, parent),
+      );
+      const grandchild = tracer.startSpan("chat", {}, trace.setSpan(ROOT_CONTEXT, child));
+
+      for (const span of [child, grandchild]) {
+        expect(span).toHaveProperty(
+          "attributes",
+          expect.objectContaining({ ...PROJECT_IDS, [GEN_AI_MAIN_AGENT_NAME_KEY]: "main" }),
+        );
+      }
+      grandchild.end();
+      child.end();
+      parent.end();
+      for (const span of memoryExporter.getFinishedSpans().slice(0, 2)) {
+        expect(span.attributes).toMatchObject({
+          ...PROJECT_IDS,
+          [GEN_AI_MAIN_AGENT_NAME_KEY]: "main",
+        });
+      }
+    });
+
+    it.each([GEN_AI_OPERATION_INVOKE_AGENT, "chat", "execute_tool"])(
+      "recovers late project IDs for %s even when main-agent attributes are already present",
+      (operation) => {
+        const tracer = provider.getTracer("test");
+        const parent = tracer.startSpan("server", {
+          attributes: { [ATTR_GEN_AI_AGENT_NAME]: "main" },
+        });
+        const child = tracer.startSpan(
+          operation,
+          { attributes: { [ATTR_GEN_AI_OPERATION_NAME]: operation } },
+          trace.setSpan(ROOT_CONTEXT, parent),
+        );
+        expect(child).toHaveProperty("attributes", {
+          [ATTR_GEN_AI_OPERATION_NAME]: operation,
+          [GEN_AI_MAIN_AGENT_NAME_KEY]: "main",
+        });
+
+        parent.setAttributes(PROJECT_IDS);
+        child.end();
+        parent.end();
+
+        expect(memoryExporter.getFinishedSpans()[0].attributes).toMatchObject({
+          ...PROJECT_IDS,
+          [GEN_AI_MAIN_AGENT_NAME_KEY]: "main",
+        });
+      },
+    );
+
+    it.each(PROJECT_ID_KEYS)("recovers only %s when stamped after child start", (key) => {
+      const tracer = provider.getTracer("test");
+      const parent = tracer.startSpan("server");
+      const child = tracer.startSpan("chat", {}, trace.setSpan(ROOT_CONTEXT, parent));
+      parent.setAttribute(key, "late-project");
+      // The reference must remain usable even if the parent ends first.
+      parent.end();
+      child.end();
+
+      expect(memoryExporter.getFinishedSpans()[1].attributes).toEqual({
+        [key]: "late-project",
+      });
+    });
+
+    it.each(PROJECT_ID_KEYS)(
+      "preserves an existing %s at end while recovering the missing key",
+      (key) => {
+        const tracer = provider.getTracer("test");
+        const parent = tracer.startSpan("server");
+        const child = tracer.startSpan(
+          "invoke_agent child",
+          {
+            attributes: {
+              [key]: "child-project",
+              [ATTR_GEN_AI_OPERATION_NAME]: GEN_AI_OPERATION_INVOKE_AGENT,
+              [ATTR_GEN_AI_AGENT_NAME]: "child",
+            },
+          },
+          trace.setSpan(ROOT_CONTEXT, parent),
+        );
+        parent.setAttributes(PROJECT_IDS);
+        child.end();
+        parent.end();
+
+        expect(memoryExporter.getFinishedSpans()[0].attributes).toMatchObject({
+          ...PROJECT_IDS,
+          [key]: "child-project",
+          [GEN_AI_MAIN_AGENT_NAME_KEY]: "child",
+        });
+      },
+    );
+
+    it("matches Python's parent precedence at start and preserves those IDs at end", () => {
+      const tracer = provider.getTracer("test");
+      const parent = tracer.startSpan("server", { attributes: PROJECT_IDS });
+      const child = tracer.startSpan(
+        "chat",
+        { attributes: Object.fromEntries(PROJECT_ID_KEYS.map((key) => [key, "child-project"])) },
+        trace.setSpan(ROOT_CONTEXT, parent),
+      );
+      parent.setAttributes(Object.fromEntries(PROJECT_ID_KEYS.map((key) => [key, "changed"])));
+      child.end();
+      parent.end();
+
+      expect(memoryExporter.getFinishedSpans()[0].attributes).toEqual(PROJECT_IDS);
+    });
+
+    it("does not derive project IDs from other parent attributes", () => {
+      const tracer = provider.getTracer("test");
+      const parent = tracer.startSpan("server", {
+        attributes: {
+          [ATTR_GEN_AI_AGENT_ID]: "agent-id",
+          "server.address": "project.services.ai.azure.com",
+          "microsoft.foundry.project.name": "project",
+        },
+      });
+      const child = tracer.startSpan("chat", {}, trace.setSpan(ROOT_CONTEXT, parent));
+      child.end();
+      parent.end();
+
+      for (const key of PROJECT_ID_KEYS) {
+        expect(memoryExporter.getFinishedSpans()[0].attributes[key]).toBeUndefined();
+      }
+    });
+
+    it.each([
+      ROOT_CONTEXT,
+      trace.setSpanContext(ROOT_CONTEXT, {
+        traceId: "0123456789abcdef0123456789abcdef",
+        spanId: "0123456789abcdef",
+        traceFlags: TraceFlags.SAMPLED,
+        isRemote: true,
+      }),
+      trace.setSpanContext(ROOT_CONTEXT, {
+        traceId: "00000000000000000000000000000000",
+        spanId: "0000000000000000",
+        traceFlags: TraceFlags.NONE,
+      }),
+    ])(
+      "handles absent, remote, and invalid parents without inventing IDs (%#)",
+      (parentContext) => {
+        const child = provider.getTracer("test").startSpan("chat", {}, parentContext);
+        child.end();
+
+        expect(memoryExporter.getFinishedSpans()[0].attributes).toEqual({});
+      },
+    );
+
+    it("does not add IDs after the child has already been exported", () => {
+      const tracer = provider.getTracer("test");
+      const parent = tracer.startSpan("server");
+      const child = tracer.startSpan("chat", {}, trace.setSpan(ROOT_CONTEXT, parent));
+      child.end();
+      parent.setAttributes(PROJECT_IDS);
+      parent.end();
+
+      expect(memoryExporter.getFinishedSpans()[0].attributes).toEqual({});
+    });
+
+    it("releases pending parent references on shutdown", async () => {
+      const tracer = provider.getTracer("test");
+      const parent = tracer.startSpan("server");
+      const child = tracer.startSpan("chat", {}, trace.setSpan(ROOT_CONTEXT, parent));
+      await processor.shutdown();
+      parent.setAttributes(PROJECT_IDS);
+      child.end();
+      parent.end();
+
+      expect(memoryExporter.getFinishedSpans()[0].attributes).toEqual({});
+    });
+
+    it("respects SDK attribute limits when recovering late IDs", async () => {
+      const exporter = new InMemorySpanExporter();
+      const limitedProvider = new BasicTracerProvider({
+        spanLimits: { attributeCountLimit: 1 },
+        spanProcessors: [new GenAIMainAgentSpanProcessor(), new SimpleSpanProcessor(exporter)],
+      });
+      try {
+        const tracer = limitedProvider.getTracer("test");
+        const parent = tracer.startSpan("server");
+        const child = tracer.startSpan(
+          "chat",
+          { attributes: { existing: "keep" } },
+          trace.setSpan(ROOT_CONTEXT, parent),
+        );
+        parent.setAttribute(PROJECT_ID_KEYS[0], "late-project");
+        child.end();
+        parent.end();
+
+        const [exported] = exporter.getFinishedSpans();
+        expect(exported.attributes).toEqual({ existing: "keep" });
+        expect(exported.droppedAttributesCount).toBe(1);
+      } finally {
+        await limitedProvider.shutdown();
+      }
+    });
+  });
 });
 
 describe("GenAIMainAgentLogRecordProcessor", () => {
@@ -213,7 +456,7 @@ describe("GenAIMainAgentLogRecordProcessor", () => {
       ],
     });
     logsApi.setGlobalLoggerProvider(logProvider);
-    provider = new BasicTracerProvider();
+    provider = new BasicTracerProvider({ spanProcessors: [new GenAIMainAgentSpanProcessor()] });
     trace.setGlobalTracerProvider(provider);
   });
 
@@ -256,5 +499,75 @@ describe("GenAIMainAgentLogRecordProcessor", () => {
     expect(records).toHaveLength(1);
     const attrs = records[0].attributes ?? {};
     expect(attrs[GEN_AI_MAIN_AGENT_NAME_KEY]).toBeUndefined();
+    for (const key of PROJECT_ID_KEYS) {
+      expect(attrs[key]).toBeUndefined();
+    }
+  });
+
+  it.each(PROJECT_ID_KEYS)("copies only the existing %s to logs", (key) => {
+    const span = provider.getTracer("test").startSpan("server", {
+      attributes: { [key]: "project-from-span", unrelated: "skip" },
+    });
+    context.with(trace.setSpan(ROOT_CONTEXT, span), () => {
+      logsApi.getLogger("test").emit({
+        body: "project log",
+        attributes: { existing: "keep", [key]: "project-from-log" },
+      });
+    });
+    span.end();
+
+    expect(memoryLogExporter.getFinishedLogRecords()[0].attributes).toEqual({
+      existing: "keep",
+      [key]: "project-from-span",
+    });
+  });
+
+  it.each(["active", "explicit"])(
+    "copies both IDs and main-agent attributes from a child span using %s context",
+    (contextSource) => {
+      const tracer = provider.getTracer("test");
+      const parent = tracer.startSpan("server", {
+        attributes: { ...PROJECT_IDS, [ATTR_GEN_AI_AGENT_NAME]: "main", unrelated: "skip" },
+      });
+      const child = tracer.startSpan(
+        "invoke_agent child",
+        { attributes: { [ATTR_GEN_AI_OPERATION_NAME]: GEN_AI_OPERATION_INVOKE_AGENT } },
+        trace.setSpan(ROOT_CONTEXT, parent),
+      );
+      const childContext = trace.setSpan(ROOT_CONTEXT, child);
+      const logger = logsApi.getLogger("test");
+      if (contextSource === "active") {
+        context.with(childContext, () => logger.emit({ body: "child log" }));
+      } else {
+        const other = tracer.startSpan("other", {
+          attributes: Object.fromEntries(PROJECT_ID_KEYS.map((key) => [key, "wrong-project"])),
+        });
+        context.with(trace.setSpan(ROOT_CONTEXT, other), () => {
+          logger.emit({ body: "child log", context: childContext });
+        });
+        other.end();
+      }
+      child.end();
+      parent.end();
+
+      expect(memoryLogExporter.getFinishedLogRecords()[0].attributes).toEqual({
+        ...PROJECT_IDS,
+        [GEN_AI_MAIN_AGENT_NAME_KEY]: "main",
+      });
+    },
+  );
+
+  it("does not invent project IDs on logs from an unstamped span", () => {
+    const span = provider.getTracer("test").startSpan("server", {
+      attributes: { [GEN_AI_MAIN_AGENT_NAME_KEY]: "main" },
+    });
+    context.with(trace.setSpan(ROOT_CONTEXT, span), () => {
+      logsApi.getLogger("test").emit({ body: "no project" });
+    });
+    span.end();
+
+    expect(memoryLogExporter.getFinishedLogRecords()[0].attributes).toEqual({
+      [GEN_AI_MAIN_AGENT_NAME_KEY]: "main",
+    });
   });
 });

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Constants for the GenAI "main agent" propagation feature.
+ * Constants for GenAI main-agent and project-ID propagation.
  *
  * Target attribute keys written by {@link GenAIMainAgentSpanProcessor} and
  * {@link GenAIMainAgentLogRecordProcessor} so that downstream telemetry
@@ -23,3 +23,13 @@ export const GEN_AI_MAIN_AGENT_CONVERSATION_ID_KEY =
   "microsoft.gen_ai.main_agent.conversation_id" as const;
 /** Common prefix shared by all main-agent attribute keys. */
 export const GEN_AI_MAIN_AGENT_ATTRIBUTE_PREFIX = "microsoft.gen_ai.main_agent." as const;
+
+/** Attribute key for the Azure AI project identifier. */
+export const GEN_AI_AZURE_AI_PROJECT_ID_KEY = "gen_ai.azure_ai_project.id" as const;
+/** Attribute key for the Foundry project identifier. */
+export const GEN_AI_FOUNDRY_PROJECT_ID_KEY = "microsoft.foundry.project.id" as const;
+/** Project identifiers propagated independently, without translating between keys. */
+export const GEN_AI_PROJECT_ID_KEYS: ReadonlyArray<string> = [
+  GEN_AI_AZURE_AI_PROJECT_ID_KEY,
+  GEN_AI_FOUNDRY_PROJECT_ID_KEY,
+];

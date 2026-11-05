@@ -2,8 +2,14 @@
 // Licensed under the MIT License.
 
 import type { Context, TracerProvider } from "@opentelemetry/api";
-import { metrics, trace } from "@opentelemetry/api";
+import { metrics, ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
+import { ExportResultCode } from "@opentelemetry/core";
+import {
+  AzureMonitorLogExporter,
+  AzureMonitorMetricExporter,
+  AzureMonitorTraceExporter,
+} from "@azure/monitor-opentelemetry-exporter";
 import type { MicrosoftOpenTelemetryOptions } from "../../../src/index.js";
 import {
   useMicrosoftOpenTelemetry,
@@ -33,6 +39,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OpenAIAgentsTraceInstrumentor } from "../../../src/genai/instrumentations/openai/openAIAgentsTraceInstrumentor.js";
 import { LangChainTraceInstrumentor } from "../../../src/genai/instrumentations/langchain/langchainTraceInstrumentor.js";
+import {
+  GEN_AI_AZURE_AI_PROJECT_ID_KEY,
+  GEN_AI_FOUNDRY_PROJECT_ID_KEY,
+  GEN_AI_MAIN_AGENT_NAME_KEY,
+} from "../../../src/index.js";
 
 const testInstrumentation: Instrumentation = {
   instrumentationName: "@opentelemetry/instrumentation-fs",
@@ -298,6 +309,102 @@ describe("Main functions", () => {
     logs.getLogger("testLogger").emit({ body: "testLog" });
     expect(spyonEmit).toHaveBeenCalled();
   });
+
+  it.each([true, false])(
+    "automatically propagates project IDs only with Azure Monitor enabled (%s)",
+    async (enabled) => {
+      process.env = {
+        ...process.env,
+        APPLICATIONINSIGHTS_STATSBEAT_DISABLED: "true",
+        APPLICATIONINSIGHTS_SDKSTATS_DISABLED: "true",
+        OTEL_NODE_RESOURCE_DETECTORS: "none",
+      };
+      vi.spyOn(AzureMonitorTraceExporter.prototype, "export").mockImplementation(
+        async (_spans, callback) => callback({ code: ExportResultCode.SUCCESS }),
+      );
+      vi.spyOn(AzureMonitorLogExporter.prototype, "export").mockImplementation(
+        async (_records, callback) => callback({ code: ExportResultCode.SUCCESS }),
+      );
+      vi.spyOn(AzureMonitorMetricExporter.prototype, "export").mockImplementation(
+        async (_metrics, callback) => callback({ code: ExportResultCode.SUCCESS }),
+      );
+      const onEnd = vi.fn<(span: ReadableSpan) => void>();
+      const onEmit = vi.fn<(record: SdkLogRecord) => void>();
+      const lifecycle = {
+        forceFlush: async () => {},
+        shutdown: async () => {},
+      };
+      useMicrosoftOpenTelemetry({
+        azureMonitor: {
+          enabled,
+          azureMonitorExporterOptions: {
+            connectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+            disableOfflineStorage: true,
+          },
+          enableLiveMetrics: false,
+          enableStandardMetrics: false,
+          enablePerformanceCounters: false,
+        },
+        a365: { enabled: false },
+        tracesPerSecond: 0,
+        samplingRatio: 1,
+        enableConsoleExporters: false,
+        instrumentationOptions: {
+          openaiAgents: { enabled: false },
+          langchain: { enabled: false },
+        },
+        spanProcessors: [{ ...lifecycle, onStart: () => {}, onEnd }],
+        logRecordProcessors: [{ ...lifecycle, onEmit }],
+      });
+
+      try {
+        const tracer = trace.getTracer("project-propagation");
+        const parent = tracer.startSpan("server", {
+          attributes: {
+            [GEN_AI_AZURE_AI_PROJECT_ID_KEY]: "azure-project",
+            "gen_ai.agent.name": "main",
+          },
+        });
+        const child = tracer.startSpan(
+          "invoke_agent child",
+          { attributes: { "gen_ai.operation.name": "invoke_agent" } },
+          trace.setSpan(ROOT_CONTEXT, parent),
+        );
+        logs.getLogger("project-propagation").emit({
+          body: "child log",
+          context: trace.setSpan(ROOT_CONTEXT, child),
+        });
+        parent.setAttribute(GEN_AI_FOUNDRY_PROJECT_ID_KEY, "foundry-project");
+        child.end();
+        parent.end();
+
+        const childSpan = onEnd.mock.calls.find(
+          ([span]) => span.name === "invoke_agent child",
+        )?.[0];
+        expect(childSpan?.attributes).toEqual(
+          enabled
+            ? {
+                "gen_ai.operation.name": "invoke_agent",
+                [GEN_AI_AZURE_AI_PROJECT_ID_KEY]: "azure-project",
+                [GEN_AI_FOUNDRY_PROJECT_ID_KEY]: "foundry-project",
+                [GEN_AI_MAIN_AGENT_NAME_KEY]: "main",
+              }
+            : { "gen_ai.operation.name": "invoke_agent" },
+        );
+        expect(onEmit).toHaveBeenCalledOnce();
+        expect(onEmit.mock.calls[0][0].attributes).toEqual(
+          enabled
+            ? {
+                [GEN_AI_AZURE_AI_PROJECT_ID_KEY]: "azure-project",
+                [GEN_AI_MAIN_AGENT_NAME_KEY]: "main",
+              }
+            : {},
+        );
+      } finally {
+        await shutdownMicrosoftOpenTelemetry();
+      }
+    },
+  );
 
   it("should add custom metric views", () => {
     const customView: ViewOptions = { meterName: "custom-meter" };
