@@ -12,6 +12,28 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 - Open an issue before starting large changes so the scope and direction can be discussed.
 - Keep changes focused and include tests when behavior changes.
 
+## AI-Assisted Contributions
+
+AI-assisted contributions are permitted. AI tooling has made it easier to contribute
+and has increased submission volume, so contributors should expect longer wait times
+for pull requests to receive maintainer attention and review. The contributor remains
+responsible for understanding, verifying, and supporting everything submitted.
+
+When AI materially generates or transforms submitted code, tests, documentation,
+issue reports, or pull request content:
+
+- Disclose the assistance in the issue or pull request description and identify
+  which parts were assisted. Do not include prompts or sensitive information.
+- Review and understand all generated content. Be prepared to explain design
+  choices, respond to feedback, and maintain the change through review.
+- Verify behavior against the supported Node.js versions and run the relevant
+  tests, formatting, linting, and type checks. Never claim checks that were not run.
+- Do not provide AI services with credentials, connection strings, tokens,
+  customer telemetry, private code, or non-public security information without
+  explicit authorization. Report vulnerabilities through [SECURITY.md](./SECURITY.md).
+- Confirm that submitted content can be contributed under this repository's
+  [license](./LICENSE), and keep changes focused on a real, documented problem.
+
 ## Development Setup
 
 1. Install [Node.js](https://nodejs.org/) 22 or later.
