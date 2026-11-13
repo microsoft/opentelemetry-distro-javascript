@@ -14,9 +14,11 @@ import {
   ATTR_MICROSOFT_TENANT_ID,
   GEN_AI_OPERATION_APPLY_GUARDRAIL,
   GEN_AI_OPERATION_CHAT,
+  GEN_AI_OPERATION_GENERATE_CONTENT,
   GEN_AI_OPERATION_EXECUTE_TOOL,
   GEN_AI_OPERATION_INVOKE_AGENT,
   GEN_AI_OPERATION_OUTPUT_MESSAGES,
+  GEN_AI_OPERATION_TEXT_COMPLETION,
 } from "../../genai/semconv.js";
 // Message attribute keys that receive special truncation handling
 const MESSAGE_ATTR_KEYS: Set<string> = new Set([
@@ -36,9 +38,11 @@ export const GEN_AI_OPERATION_NAMES: ReadonlySet<string> = new Set([
   GEN_AI_OPERATION_OUTPUT_MESSAGES, // 'output_messages'
   GEN_AI_OPERATION_APPLY_GUARDRAIL, // 'apply_guardrail'
   GEN_AI_OPERATION_CHAT, // 'chat'
-  "Chat", // InferenceOperationType.CHAT
-  "TextCompletion", // InferenceOperationType.TEXT_COMPLETION
-  "GenerateContent", // InferenceOperationType.GENERATE_CONTENT
+  GEN_AI_OPERATION_TEXT_COMPLETION, // 'text_completion'
+  GEN_AI_OPERATION_GENERATE_CONTENT, // 'generate_content'
+  "Chat", // Legacy InferenceOperationType.CHAT value
+  "TextCompletion", // Legacy InferenceOperationType.TEXT_COMPLETION value
+  "GenerateContent", // Legacy InferenceOperationType.GENERATE_CONTENT value
 ]);
 
 /**

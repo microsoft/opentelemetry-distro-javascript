@@ -383,7 +383,46 @@ export interface ServiceEndpoint {
   port?: number;
   /** Protocol scheme of the endpoint (e.g. `https`). */
   protocol?: string;
+  /** Complete endpoint URL, including path and query, recorded as `url.full` on tool spans. */
+  url?: string;
 }
+
+/** How control passes during an execute-tool transfer. */
+export enum TransferMode {
+  /** The source agent resumes after the target finishes. */
+  RETURN_TO_CALLER = "return_to_caller",
+  /** The target takes over the remaining work. */
+  PASS_CONTROL = "pass_control",
+}
+
+/** Kind of target receiving an execute-tool transfer. */
+export enum TransferTargetType {
+  /** Transfer to another agent. */
+  AGENT = "agent",
+  /** Transfer to a human. */
+  HUMAN = "human",
+  /** Transfer to a workflow. */
+  WORKFLOW = "workflow",
+}
+
+/** Explicit transfer metadata. Target agent details are only valid for agent targets. */
+export type TransferDetails =
+  | {
+      /** How control passes to the target. */
+      mode: TransferMode;
+      /** Target kind. Defaults to agent when omitted. */
+      targetType?: TransferTargetType.AGENT;
+      /** Target identity; only ID, name, blueprint, platform, and version are emitted. */
+      targetAgentDetails?: AgentDetails;
+    }
+  | {
+      /** How control passes to the target. */
+      mode: TransferMode;
+      /** Non-agent target kind. */
+      targetType: TransferTargetType.HUMAN | TransferTargetType.WORKFLOW;
+      /** Agent identity cannot be supplied for a non-agent target. */
+      targetAgentDetails?: never;
+    };
 
 // ---------------------------------------------------------------------------
 // Scope detail types
@@ -441,6 +480,46 @@ export interface InvokeAgentScopeDetails {
   responseParameters?: GenAiResponseParameters;
 }
 
+/** Explicit metadata for skill loading or resource reading. Process fields are command-only. */
+export interface SkillRefinementDetails {
+  /** The skill operation performed by the tool. */
+  kind: "load_skill" | "read_skill_resource";
+  /** Skill name, when available. */
+  skillName?: string;
+  /** Skill description. May contain sensitive information. */
+  description?: string;
+  /** Skill source URI, not a temporary path. Callers must remove credentials and tokens. */
+  sourceUri?: string;
+  /** Skill-relative resource name, such as `references/policy.md`. */
+  resourceName?: string;
+  executableName?: never;
+  executablePath?: never;
+  exitCode?: never;
+}
+
+/** Explicit command metadata, optionally associated with a skill's bundled script. */
+export interface ExecuteCommandRefinementDetails {
+  /** Identifies a command-executing tool. */
+  kind: "execute_command";
+  /** Executable name, only when directly executing a single process. */
+  executableName?: string;
+  /** Executable path, only when directly executing a single process. */
+  executablePath?: string;
+  /** Reported exit code for a single command or process, including zero. */
+  exitCode?: number;
+  /** Skill name, when executing a skill's script. */
+  skillName?: string;
+  /** Skill description. May contain sensitive information. */
+  description?: string;
+  /** Skill source URI, not a temporary path. Callers must remove credentials and tokens. */
+  sourceUri?: string;
+  /** Skill-relative script name, such as `scripts/check.py`. */
+  resourceName?: string;
+}
+
+/** Explicit skill or command metadata; never inferred from tool names or arguments. */
+export type ExecuteToolRefinementDetails = SkillRefinementDetails | ExecuteCommandRefinementDetails;
+
 /** Details of a tool call made by an agent. */
 export interface ToolCallDetails {
   /** Name of the tool being called (required). */
@@ -455,12 +534,16 @@ export interface ToolCallDetails {
   toolType?: string;
   /** Endpoint the tool is hosted on. */
   endpoint?: ServiceEndpoint;
+  /** Optional explicit transfer performed by this tool call. */
+  transferDetails?: TransferDetails;
+  /** Optional explicit skill or command refinement, including on failed attempts. */
+  refinementDetails?: ExecuteToolRefinementDetails;
 }
 
 /** Details for an inference call. */
 export interface InferenceDetails {
-  /** The inference operation type (e.g. chat, text completion). */
-  operationName: InferenceOperationType;
+  /** The inference operation enum value or canonical OpenTelemetry operation name. */
+  operationName: InferenceOperationType | "chat" | "text_completion" | "generate_content";
   /** Name of the model used for inference. */
   model: string;
   /** Name of the provider serving the model. */
@@ -469,6 +552,12 @@ export interface InferenceDetails {
   inputTokens?: number;
   /** Number of output (completion) tokens. */
   outputTokens?: number;
+  /** Canonical model name returned by the provider. */
+  responseModel?: string;
+  /** Number of input tokens read from cache. */
+  cacheReadInputTokens?: number;
+  /** Number of input tokens written to cache. */
+  cacheWriteInputTokens?: number;
   /** Finish reasons returned by the model. */
   finishReasons?: string[];
   /** The model's thought process / reasoning trace. */

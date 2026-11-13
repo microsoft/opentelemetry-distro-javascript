@@ -12,6 +12,7 @@ import { Agent365Exporter } from "../../../../src/a365/exporter/Agent365Exporter
 import { applicationPartition } from "../../../../src/a365/exporter/durable/PersistentStore.js";
 import {
   DURABLE_RECORD_VERSION,
+  DurableDeliveryManager,
   PersistentStore,
 } from "../../../../src/a365/exporter/durable/index.js";
 import {
@@ -140,7 +141,7 @@ async function seedDurablePendingRecord(
   fileName: string,
   contents: string,
 ): Promise<void> {
-  await mkdir(durableStorageRoot(directory), { recursive: true });
+  await mkdir(durableStorageRoot(directory), { recursive: true, mode: 0o700 });
   await writeFile(join(durableStorageRoot(directory), fileName), contents, "utf8");
 }
 
@@ -1678,6 +1679,69 @@ describe("Agent365Exporter", () => {
       await exporter.shutdown();
     });
 
+    it
+      .skipIf(process.platform === "win32")
+      .each(["absent", "blank", "relative", "missing", "file"])(
+      "logs and disables only offline delivery for a Unix %s root, including subsequent exports and flush",
+      async (kind) => {
+        const directory = await createStorageDirectory();
+        const file = join(directory, "file");
+        await writeFile(file, "not a directory");
+        const storageDirectory =
+          kind === "absent"
+            ? undefined
+            : kind === "blank"
+              ? " \t"
+              : kind === "relative"
+                ? "relative"
+                : kind === "missing"
+                  ? join(directory, "missing")
+                  : file;
+        const customLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        configureA365Logger({ logger: customLogger, logLevel: "info|warn|error" });
+        const create = vi.spyOn(PersistentStore, "create");
+        const replay = vi.spyOn(DurableDeliveryManager.prototype, "startReplay");
+        fetchSpy.mockResolvedValue({ status: 200, headers: new Headers() });
+        const exporter = new Agent365Exporter({
+          tokenResolver: () => "token",
+          durableDelivery: { enabled: true, storageDirectory },
+        });
+
+        try {
+          assert.strictEqual(await exportResult(exporter, [makeSpan()]), ExportResultCode.SUCCESS);
+          await exporter.forceFlush();
+          assert.strictEqual(await exportResult(exporter, [makeSpan()]), ExportResultCode.SUCCESS);
+          expect(create).toHaveBeenCalledTimes(1);
+          expect(replay).not.toHaveBeenCalled();
+          expect(fetchSpy).toHaveBeenCalledTimes(2);
+          assert.deepEqual(await readdir(directory), ["file"]);
+          assert.isTrue(
+            customLogger.error.mock.calls.some(([message]) =>
+              String(message).includes("Durable delivery initialization failed"),
+            ),
+          );
+        } finally {
+          await exporter.shutdown();
+        }
+      },
+    );
+
+    it("bypasses all storage initialization when explicitly disabled", async () => {
+      const create = vi.spyOn(PersistentStore, "create");
+      const replay = vi.spyOn(DurableDeliveryManager.prototype, "startReplay");
+      const exporter = new Agent365Exporter({
+        tokenResolver: () => "token",
+        durableDelivery: { enabled: false, storageDirectory: "invalid-relative-root" },
+      });
+      try {
+        assert.strictEqual(await exportResult(exporter, [makeSpan()]), ExportResultCode.SUCCESS);
+        await exporter.forceFlush();
+      } finally {
+        await exporter.shutdown();
+      }
+      expect(create).not.toHaveBeenCalled();
+      expect(replay).not.toHaveBeenCalled();
+    });
     it("fails retryable exports when durable initialization fails and records cannot be persisted", async () => {
       vi.spyOn(PersistentStore, "create").mockRejectedValue(new Error("disk unavailable"));
       fetchSpy.mockResolvedValue({
@@ -1804,6 +1868,22 @@ describe("Exporter utils", () => {
       assert.strictEqual(groups.size, 2);
       assert.strictEqual(groups.get("t1:a1")?.length, 2);
       assert.strictEqual(groups.get("t2:a2")?.length, 1);
+    });
+
+    it("should retain inference spans with canonical multiword operation names", () => {
+      const spans = ["text_completion", "generate_content"].map((operationName) =>
+        makeSpan({
+          attributes: {
+            "microsoft.tenant.id": "t1",
+            "gen_ai.agent.id": "a1",
+            "gen_ai.operation.name": operationName,
+          },
+        }),
+      );
+
+      const groups = partitionByIdentity(spans);
+
+      assert.strictEqual(groups.get("t1:a1")?.length, 2);
     });
 
     it("should skip spans without identity attributes", () => {

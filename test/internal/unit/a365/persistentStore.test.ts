@@ -94,7 +94,7 @@ describe("PersistentStore", () => {
     }
   });
 
-  it("rejects symlink roots", async () => {
+  it.skipIf(process.platform !== "win32")("rejects Windows symlink roots", async () => {
     const target = join(scratchRoot, "target");
     const link = join(scratchRoot, "link");
     await fs.mkdir(target, { recursive: true });
@@ -103,6 +103,92 @@ describe("PersistentStore", () => {
     await expect(createStore(link)).rejects.toThrow(
       /Durable storage root must be a real directory/,
     );
+  });
+
+  it.skipIf(process.platform === "win32").each([undefined, "", " \t", "relative", "./relative"])(
+    "rejects invalid Unix configuration %s without attempting temporary storage",
+    async (storageDirectory) => {
+      process.env.TMPDIR = scratchRoot;
+      const mkdir = vi.spyOn(fs, "mkdir").mockRejectedValue(new Error("unexpected mkdir"));
+      const logger = makeLogger();
+      await expect(
+        PersistentStore.create(new ResolvedDurableDeliveryOptions({ storageDirectory }), logger),
+      ).rejects.toThrow(/storageDirectory/);
+      expect(mkdir).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+      assert.deepEqual(await fs.readdir(scratchRoot), []);
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "rejects nonexistent and non-directory Unix roots without creating them or falling back",
+    async () => {
+      const missing = join(scratchRoot, "missing", "root");
+      const file = join(scratchRoot, "file");
+      await fs.writeFile(file, "not a directory");
+      process.env.TMPDIR = scratchRoot;
+      for (const storageDirectory of [missing, file]) {
+        await expect(
+          PersistentStore.create(
+            new ResolvedDurableDeliveryOptions({ storageDirectory }),
+            makeLogger(),
+          ),
+        ).rejects.toThrow();
+      }
+      assert.isFalse(await pathExists(dirname(missing)));
+      assert.deepEqual(await fs.readdir(scratchRoot), ["file"]);
+    },
+  );
+
+  it.skipIf(process.platform === "win32").each([0o755, 0o770, 0o777, 0o1777])(
+    "trusts customer-managed Unix root and partition permissions without modifying mode %s",
+    async (mode) => {
+      const root = join(scratchRoot, "customer-root");
+      const partition = explicitStorageRoot(root);
+      await fs.mkdir(partition, { recursive: true });
+      await fs.chmod(root, mode);
+      await fs.chmod(partition, mode);
+      const chmod = vi.spyOn(fs, "chmod");
+      const chown = vi.spyOn(fs, "chown");
+      const accessControl = { hardenDirectory: vi.fn(async () => {}) };
+      const store = await createStore(root, {}, makeLogger(), accessControl);
+      await store.persist(makeRecord());
+      const restarted = await createStore(root);
+      const [claim] = await restarted.claimBatch(1);
+      await restarted.complete(claim);
+      assert.strictEqual((await fs.stat(root)).mode & 0o7777, mode);
+      assert.strictEqual((await fs.stat(partition)).mode & 0o7777, mode);
+      expect(chmod).not.toHaveBeenCalled();
+      expect(chown).not.toHaveBeenCalled();
+      expect(accessControl.hardenDirectory).not.toHaveBeenCalled();
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "trusts customer-protected Unix symlinks and preserves the configured cache identity",
+    async () => {
+      const target = join(scratchRoot, "target");
+      const link = join(scratchRoot, "link");
+      await fs.mkdir(target);
+      await fs.symlink(target, link, "dir");
+      const storedPath = await (await createStore(link)).persist(makeRecord());
+      assert.strictEqual(dirname(dirname(storedPath)), link);
+      const restarted = await createStore(link);
+      assert.strictEqual((await restarted.claimBatch(1)).length, 1);
+    },
+  );
+
+  it("reopens the same secure partition and replays persisted telemetry", async () => {
+    const root = join(scratchRoot, "restart-replay");
+    const record = makeRecord();
+    const storedPath = await (await createStore(root)).persist(record);
+
+    const restartedStore = await createStore(root);
+    const [claim] = await restartedStore.claimBatch(1);
+    assert.deepEqual(claim.record, record);
+    assert.strictEqual(dirname(claim.leasePath), dirname(storedPath));
+    await restartedStore.complete(claim);
+    assert.deepEqual(await listStoreFiles(root), []);
   });
 
   it("surfaces explicit directory failures without fallback", async () => {
@@ -180,54 +266,6 @@ describe("PersistentStore", () => {
     }
   });
 
-  it("uses POSIX fallback candidates in exact de-duplicated order", async () => {
-    const restorePlatform = usePosixDefaultCandidates(nativePlatform);
-    const logger = makeLogger();
-    const actualMkdir = fs.mkdir.bind(fs);
-    const expectedAttempts = [defaultStorageRoot("/tmp"), defaultStorageRoot("/var/tmp")];
-    const blockedBaseRoots = [defaultStorageBaseRoot("/tmp"), defaultStorageBaseRoot("/var/tmp")];
-
-    tmpdirOverride.value = "/tmp";
-    vi.spyOn(fs, "mkdir").mockImplementation(async (path, options) => {
-      const normalizedPath = String(path);
-      if (
-        blockedBaseRoots.some(
-          (baseRoot) =>
-            normalizedPath === baseRoot ||
-            normalizedPath.startsWith(`${baseRoot}\\`) ||
-            normalizedPath.startsWith(`${baseRoot}/`),
-        )
-      ) {
-        const error = new Error("blocked default root") as NodeJS.ErrnoException;
-        error.code = "EACCES";
-        throw error;
-      }
-
-      return actualMkdir(path, options as never);
-    });
-
-    try {
-      process.env.TMPDIR = "/tmp";
-
-      await expect(
-        PersistentStore.create(
-          new ResolvedDurableDeliveryOptions({
-            enabled: true,
-          }),
-          logger,
-        ),
-      ).rejects.toThrow(/blocked default root/);
-
-      assert.deepEqual(
-        logger.warn.mock.calls.map((call) => call[1]),
-        expectedAttempts,
-      );
-      assert.strictEqual(logger.warn.mock.calls.length, expectedAttempts.length);
-    } finally {
-      restorePlatform();
-    }
-  });
-
   it("rejects a symlinked default root before falling back", async () => {
     const firstCandidate = join(scratchRoot, "symlinked-default-candidate");
     const fallbackBase = join(scratchRoot, "fallback-base");
@@ -250,28 +288,6 @@ describe("PersistentStore", () => {
     } finally {
       restorePlatform();
     }
-  });
-
-  it("uses a single owner-only per-user leaf for a POSIX default root", async () => {
-    if (nativePlatform === "win32") {
-      return;
-    }
-
-    const candidate = join(scratchRoot, "posix-default-candidate");
-    await fs.mkdir(candidate, { recursive: true });
-    process.env.TMPDIR = candidate;
-
-    const storedPath = await (await createDefaultStore()).persist(makeRecord());
-    const root = defaultStorageRoot(candidate);
-    const baseRoot = defaultStorageBaseRoot(candidate);
-
-    assert.ok(storedPath.startsWith(root));
-    assert.strictEqual(dirname(root), baseRoot);
-    assert.strictEqual(dirname(baseRoot), candidate);
-    assert.match(basename(baseRoot), /^a365-otel-durable-\d+$/);
-    assert.match(basename(root), /^app-[0-9a-f]{16}$/);
-    assert.strictEqual((await fs.stat(root)).mode & 0o777, 0o700);
-    assert.strictEqual((await fs.stat(root)).uid, process.getuid!());
   });
 
   it("applies Windows ACL hardening to explicit durable roots before persisting records", async () => {
@@ -447,6 +463,60 @@ describe("PersistentStore", () => {
     assert.strictEqual(reclaimed.record.id, record.id);
     assert.notStrictEqual(reclaimed.leasePath, claim.leasePath);
   });
+
+  it.each(["record", "tenant"] as const)(
+    "skips an excluded %s before leasing while claiming a later record",
+    async (exclusion) => {
+      const root = join(scratchRoot, "excluded-records-store");
+      const store = await createStore(root);
+      const now = Date.now();
+      const excluded = makeRecord({ id: "excluded", createdAt: now, tenantId: "a" });
+      const deliverable = makeRecord({ id: "deliverable", createdAt: now + 1, tenantId: "b" });
+      const excludedPath = await store.persist(excluded);
+      await store.persist(deliverable);
+      const rename = vi.spyOn(fs, "rename");
+
+      const [claim] = await store.claimBatch(
+        1,
+        exclusion === "record"
+          ? { excludeRecordIds: new Set([excluded.id]) }
+          : { excludeTenantIds: new Set([excluded.tenantId]) },
+      );
+
+      assert.strictEqual(claim.record.id, deliverable.id);
+      expect(rename).toHaveBeenCalledTimes(1);
+      assert.isTrue(await pathExists(excludedPath));
+    },
+  );
+
+  it.each(["record", "tenant"] as const)(
+    "still excludes %s content replaced between preflight and the atomic claim",
+    async (exclusion) => {
+      const root = join(scratchRoot, "exclusion-race-store");
+      const store = await createStore(root);
+      const record = makeRecord({ id: "original", tenantId: "a" });
+      const replaced = makeRecord({ id: "excluded", tenantId: "b" });
+      const pendingPath = await store.persist(record);
+      const actualRename = fs.rename.bind(fs);
+      vi.spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+        if (source === pendingPath) {
+          await fs.writeFile(pendingPath, JSON.stringify(replaced), "utf8");
+        }
+        await actualRename(source, destination);
+      });
+
+      const claims = await store.claimBatch(
+        1,
+        exclusion === "record"
+          ? { excludeRecordIds: new Set([replaced.id]) }
+          : { excludeTenantIds: new Set([replaced.tenantId]) },
+      );
+
+      assert.deepEqual(claims, []);
+      const [retained] = await store.claimBatch(1);
+      assert.strictEqual(retained.record.id, replaced.id);
+    },
+  );
 
   it("recovers leases after their acquisition timestamp expires", async () => {
     let now = 1_000_000;
@@ -671,6 +741,31 @@ describe("PersistentStore", () => {
     assert.isFalse(await pathExists(badPath));
     assert.isTrue(files.some((file) => file.endsWith(".quarantine")));
   });
+
+  it.each(["", " \t"])(
+    "quarantines a blank tenant %j before claiming a later valid record",
+    async (tenantId) => {
+      const root = join(scratchRoot, "blank-tenant-store");
+      const logger = makeLogger();
+      const store = await createStore(root, {}, logger);
+      const valid = makeRecord();
+      await store.persist(valid);
+      const badPath = join(explicitStorageRoot(root), "1-blank-tenant.pending");
+      await fs.writeFile(badPath, JSON.stringify(makeRecord({ tenantId })), "utf8");
+
+      const [claim] = await store.claimBatch(1);
+
+      assert.strictEqual(claim.record.id, valid.id);
+      assert.isFalse(await pathExists(badPath));
+      assert.isTrue((await listStoreFiles(root)).some((file) => file.endsWith(".quarantine")));
+      expect(logger.warn).toHaveBeenCalledWith(
+        "[PersistentStore] Quarantined malformed pending durable record",
+        expect.any(Error),
+      );
+      await store.complete(claim);
+      assert.deepEqual(await store.claimBatch(1), []);
+    },
+  );
 
   it.each(["../escape", "..\\escape"])(
     "quarantines records with unsafe ids (%j) to a short bounded name without creating files outside the storage root",
@@ -949,6 +1044,9 @@ async function createStore(
     hardenDirectory(directory: string): Promise<void>;
   },
 ): Promise<PersistentStore> {
+  if (process.platform !== "win32") {
+    await fs.mkdir(storageDirectory, { recursive: true, mode: 0o700 });
+  }
   return PersistentStore.create(
     new ResolvedDurableDeliveryOptions({
       enabled: true,
@@ -1099,19 +1197,5 @@ function useWindowsDefaultCandidates(nativePlatform: string): () => void {
   }
 
   Object.defineProperty(process, "platform", { ...descriptor, value: "win32" });
-  return () => Object.defineProperty(process, "platform", descriptor);
-}
-
-function usePosixDefaultCandidates(nativePlatform: string): () => void {
-  if (nativePlatform !== "win32") {
-    return () => {};
-  }
-
-  const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
-  if (!descriptor) {
-    throw new Error("Unable to override process.platform for this test");
-  }
-
-  Object.defineProperty(process, "platform", { ...descriptor, value: "linux" });
   return () => Object.defineProperty(process, "platform", descriptor);
 }

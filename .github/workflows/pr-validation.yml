@@ -17,9 +17,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "22.23.4"
+
+      - name: Verify Node.js security baseline
+        run: node scripts/check-node-version.cjs
 
       - name: Install dependencies
         run: npm ci
@@ -42,16 +45,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["22", "24"]
+        node-version: ["22.23.4", "24.22.1"]
 
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node-version }}
+
+      - name: Verify Node.js security baseline
+        run: node scripts/check-node-version.cjs
+
+      - name: Test Node.js security baseline guard
+        run: node --test test/integration/node-version.test.mjs
 
       - name: Install dependencies
         run: npm ci
@@ -77,10 +86,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "22.23.4"
           cache: npm
+
+      - name: Verify Node.js security baseline
+        run: node scripts/check-node-version.cjs
 
       - name: Install dependencies
         run: npm ci
@@ -90,6 +102,31 @@ jobs:
 
       - name: Run integration tests
         run: npm run test:integration
+
+  agent365-storage:
+    name: Agent365 storage (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.23.4"
+      - name: Verify Node.js security baseline
+        run: node scripts/check-node-version.cjs
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Run Agent365 filesystem and exporter regressions
+        run: npm run test:unit -- test/internal/unit/a365/persistentStore.test.ts test/internal/unit/a365/durableDeliveryManager.test.ts test/internal/unit/a365/agent365Exporter.test.ts test/internal/unit/a365/windowsFileAccessControl.test.ts
+      - name: Verify cross-process persistence and replay
+        run: node --test test/integration/durable-storage.test.mjs
 
   changelog:
     name: CHANGELOG updated

@@ -4,6 +4,7 @@
 import { SpanKind } from "@opentelemetry/api";
 import { OpenTelemetryScope } from "./OpenTelemetryScope.js";
 import { OpenTelemetryConstants } from "../constants.js";
+import { InferenceOperationType } from "../contracts.js";
 import type {
   InferenceDetails,
   AgentDetails,
@@ -50,10 +51,11 @@ export class InferenceScope extends OpenTelemetryScope {
 
     // spanKind for InferenceScope is always CLIENT
     const resolvedSpanDetails: SpanDetails = { ...spanDetails, spanKind: SpanKind.CLIENT };
+    const operationName = getOperationName(details.operationName);
 
     super(
-      details.operationName.toString(),
-      `${details.operationName} ${details.model}`,
+      operationName,
+      `${operationName} ${details.model}`,
       agentDetails,
       resolvedSpanDetails,
       userDetails,
@@ -62,9 +64,18 @@ export class InferenceScope extends OpenTelemetryScope {
 
     // Core inference information
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_REQUEST_MODEL_KEY, details.model);
+    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_RESPONSE_MODEL_KEY, details.responseModel);
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_PROVIDER_NAME_KEY, details.providerName);
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_USAGE_INPUT_TOKENS_KEY, details.inputTokens);
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_USAGE_OUTPUT_TOKENS_KEY, details.outputTokens);
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY,
+      details.cacheReadInputTokens,
+    );
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY,
+      details.cacheWriteInputTokens,
+    );
     this.setTagMaybe(
       OpenTelemetryConstants.GEN_AI_RESPONSE_FINISH_REASONS_KEY,
       details.finishReasons,
@@ -81,6 +92,19 @@ export class InferenceScope extends OpenTelemetryScope {
         this.setTagMaybe(OpenTelemetryConstants.SERVER_PORT_KEY, details.endpoint.port);
       }
     }
+
+    function getOperationName(operationName: InferenceDetails["operationName"]): string {
+      switch (operationName) {
+        case InferenceOperationType.CHAT:
+          return "chat";
+        case InferenceOperationType.TEXT_COMPLETION:
+          return "text_completion";
+        case InferenceOperationType.GENERATE_CONTENT:
+          return "generate_content";
+        default:
+          return operationName;
+      }
+    }
   }
 
   /** Records the number of input tokens. */
@@ -91,6 +115,27 @@ export class InferenceScope extends OpenTelemetryScope {
   /** Records the number of output tokens. */
   public recordOutputTokens(outputTokens: number): void {
     this.setTagMaybe(OpenTelemetryConstants.GEN_AI_USAGE_OUTPUT_TOKENS_KEY, outputTokens);
+  }
+
+  /** Records the canonical model name returned by the provider. */
+  public recordResponseModel(responseModel: string): void {
+    this.setTagMaybe(OpenTelemetryConstants.GEN_AI_RESPONSE_MODEL_KEY, responseModel);
+  }
+
+  /** Records the number of input tokens read from cache. */
+  public recordCacheReadInputTokens(cacheReadInputTokens: number): void {
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_KEY,
+      cacheReadInputTokens,
+    );
+  }
+
+  /** Records the number of input tokens written to cache. */
+  public recordCacheWriteInputTokens(cacheWriteInputTokens: number): void {
+    this.setTagMaybe(
+      OpenTelemetryConstants.GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_KEY,
+      cacheWriteInputTokens,
+    );
   }
 
   /** Records the finish reasons. */

@@ -20,14 +20,14 @@ otelcol-contrib --config collector-config.yaml
 In a second terminal:
 
 ```bash
-npm install
+npm ci
 npm start
 ```
 
 Or run directly:
 
 ```bash
-npm install
+npm ci
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node --import @microsoft/opentelemetry/loader app.mjs
 ```
 

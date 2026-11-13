@@ -71,6 +71,17 @@ describe("DurableRecord", () => {
     assert.throws(() => parseDurableRecord('{"version":2}'), /Unsupported durable record version/);
   });
 
+  it.each(["", " \t"])("rejects blank tenant identifiers: %j", (tenantId) => {
+    const record = createDurableRecord({
+      tenantId,
+      agentId: "agent",
+      useS2SEndpoint: false,
+      body: "{}",
+    });
+
+    assert.throws(() => parseDurableRecord(JSON.stringify(record)), /Invalid durable record/);
+  });
+
   it("rejects invalid record shapes", () => {
     assert.throws(
       () =>

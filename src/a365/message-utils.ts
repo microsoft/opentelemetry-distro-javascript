@@ -393,10 +393,7 @@ function withMetadata(
     if (!isPlainRecord(extensionData)) {
       throw new TypeError("Execute tool extension data must be a plain object.");
     }
-    const metadata = toJsonRecord(extensionData, stack);
-    if (Object.keys(metadata).length > 0) {
-      serialized.metadata = metadata;
-    }
+    serialized.metadata = toJsonRecord(extensionData, stack);
   }
   return serialized;
 }

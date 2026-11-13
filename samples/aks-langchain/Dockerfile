@@ -1,4 +1,6 @@
-FROM node:22-bookworm-slim
+FROM node:22.23.4-bookworm-slim
+
+RUN node -e "if (process.versions.node !== '22.23.4') throw new Error('Expected Node.js 22.23.4');"
 
 ENV NODE_ENV=production \
     PORT=3000

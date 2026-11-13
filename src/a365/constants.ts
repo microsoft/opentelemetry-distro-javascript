@@ -42,6 +42,26 @@ export class OpenTelemetryConstants {
   public static readonly SERVER_ADDRESS_KEY = "server.address";
   /** Attribute key for the destination server port (`server.port`). */
   public static readonly SERVER_PORT_KEY = "server.port";
+  /** Attribute key for the complete tool endpoint URL (`url.full`). */
+  public static readonly URL_FULL_KEY = "url.full";
+  /** How control passes during an execute-tool transfer. */
+  public static readonly TRANSFER_MODE_KEY = "microsoft.a365.transfer.mode";
+  /** Kind of target receiving an execute-tool transfer. */
+  public static readonly TRANSFER_TARGET_TYPE_KEY = "microsoft.a365.transfer.target.type";
+  /** Target agent identifier for an execute-tool transfer. */
+  public static readonly TRANSFER_TARGET_AGENT_ID_KEY = "microsoft.a365.transfer.target.agent.id";
+  /** Target agent display name for an execute-tool transfer. */
+  public static readonly TRANSFER_TARGET_AGENT_NAME_KEY =
+    "microsoft.a365.transfer.target.agent.name";
+  /** Target agent blueprint identifier for an execute-tool transfer. */
+  public static readonly TRANSFER_TARGET_AGENT_BLUEPRINT_ID_KEY =
+    "microsoft.a365.transfer.target.agent.blueprint.id";
+  /** Target agent platform identifier for an execute-tool transfer. */
+  public static readonly TRANSFER_TARGET_AGENT_PLATFORM_ID_KEY =
+    "microsoft.a365.transfer.target.agent.platform.id";
+  /** Target agent version for an execute-tool transfer. */
+  public static readonly TRANSFER_TARGET_AGENT_VERSION_KEY =
+    "microsoft.a365.transfer.target.agent.version";
   /** Azure resource provider namespace value for Cognitive Services. */
   public static readonly AZURE_RP_NAMESPACE_VALUE = "Microsoft.CognitiveServices";
 
@@ -178,6 +198,21 @@ export class OpenTelemetryConstants {
   public static readonly GEN_AI_TOOL_CALL_RESULT_KEY = "gen_ai.tool.call.result";
   /** Attribute key for the tool type (`gen_ai.tool.type`). */
   public static readonly GEN_AI_TOOL_TYPE_KEY = "gen_ai.tool.type";
+
+  /** Skill name supplied by the tool runtime. */
+  public static readonly GEN_AI_SKILL_NAME_KEY = "gen_ai.skill.name";
+  /** Skill description supplied by the tool runtime. */
+  public static readonly GEN_AI_SKILL_DESCRIPTION_KEY = "gen_ai.skill.description";
+  /** Caller-scrubbed source URI of the skill. */
+  public static readonly GEN_AI_SKILL_SOURCE_URI_KEY = "gen_ai.skill.source.uri";
+  /** Skill-relative resource or script name. */
+  public static readonly GEN_AI_SKILL_RESOURCE_NAME_KEY = "gen_ai.skill.resource.name";
+  /** Name of a directly executed process. */
+  public static readonly PROCESS_EXECUTABLE_NAME_KEY = "process.executable.name";
+  /** Path of a directly executed process. */
+  public static readonly PROCESS_EXECUTABLE_PATH_KEY = "process.executable.path";
+  /** Reported exit code of a command or process. */
+  public static readonly PROCESS_EXIT_CODE_KEY = "process.exit.code";
 
   // ── Tenant ───────────────────────────────────────────────────────
 
