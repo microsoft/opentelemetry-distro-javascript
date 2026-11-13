@@ -20,6 +20,22 @@ const AKS_MANAGED_CLUSTER_RESOURCE_ID_REGEX =
   /^\/subscriptions\/[^/\s]+\/resourceGroups\/[^/\s]+\/providers\/Microsoft\.ContainerService\/managedClusters\/[^/\s]+\/?$/i;
 
 export function ignoreOutgoingRequestHook(request: http.RequestOptions): boolean {
+  // SDK stats probes IMDS without the exporter's identifying User-Agent.
+  if (
+    request?.method === "GET" &&
+    (request.hostname ?? request.host) === "169.254.169.254" &&
+    (request.protocol === undefined || request.protocol === "http:") &&
+    (request.port === undefined || request.port === "" || Number(request.port) === 80)
+  ) {
+    const [pathname, query] = request.path?.split("?") ?? [];
+    if (pathname === "/metadata/instance/compute") {
+      const parameters = new URLSearchParams(query);
+      if (parameters.get("api-version") === "2017-12-01" && parameters.get("format") === "json") {
+        return true;
+      }
+    }
+  }
+
   if (request && request.headers && !Array.isArray(request.headers)) {
     const outgoingHeaders = request.headers as http.OutgoingHttpHeaders;
     if (

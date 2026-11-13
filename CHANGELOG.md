@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Bugs Fixed
+- Detect Azure Container Apps resources by default and skip VM metadata detection when an Azure platform is already identified.
+- Keep the Azure Monitor SDK-stats compute-metadata lookup out of dependency and exception telemetry without disabling SDK stats.
+
 ## [1.5.0] - 2026-10-06
 
 ### Bugs Fixed

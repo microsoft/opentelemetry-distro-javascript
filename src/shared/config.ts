@@ -20,9 +20,11 @@ import { isAksResourceDetectorPopulated } from "../azureMonitor/utils/common.js"
 import {
   azureAksDetector,
   azureAppServiceDetector,
+  azureContainerAppsDetector,
   azureFunctionsDetector,
   azureVmDetector,
 } from "@opentelemetry/resource-detector-azure";
+import { SEMRESATTRS_CLOUD_PLATFORM } from "@opentelemetry/semantic-conventions";
 
 /**
  * Internal configuration that merges global and Azure Monitor-scoped options.
@@ -180,13 +182,17 @@ export class InternalConfig {
     this._aksResourceDetectorPopulated = isAksResourceDetectorPopulated(aksResource.attributes);
 
     const azureResource: Resource = detectResources({
-      detectors: [azureAppServiceDetector, azureFunctionsDetector],
+      detectors: [azureAppServiceDetector, azureContainerAppsDetector, azureFunctionsDetector],
     });
     this._resource = resource.merge(aksResource).merge(azureResource);
 
-    // Handle VM resource detection asynchronously to avoid warnings
-    // about accessing resource attributes before async attributes are settled
-    this._initializeVmResourceAsync();
+    // IMDS is unavailable on managed app platforms and describes the node VM on AKS.
+    const platformDetected =
+      aksResource.attributes[SEMRESATTRS_CLOUD_PLATFORM] ??
+      azureResource.attributes[SEMRESATTRS_CLOUD_PLATFORM];
+    if (!platformDetected) {
+      this._initializeVmResourceAsync();
+    }
   }
 
   /**
