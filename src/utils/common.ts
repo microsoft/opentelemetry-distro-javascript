@@ -12,6 +12,7 @@ import { diag } from "@opentelemetry/api";
 import {
   azureAksDetector,
   azureAppServiceDetector,
+  azureContainerAppsDetector,
   azureFunctionsDetector,
   azureVmDetector,
 } from "@opentelemetry/resource-detector-azure";
@@ -32,6 +33,7 @@ export function parseResourceDetectorsFromEnvVar(): Array<ResourceDetector> {
     ["serviceinstance", serviceInstanceIdDetector],
     ["azure_aks", azureAksDetector],
     ["azure_app_service", azureAppServiceDetector],
+    ["azure_container_apps", azureContainerAppsDetector],
     ["azure_functions", azureFunctionsDetector],
     ["azure_vm", azureVmDetector],
   ]);

@@ -10,7 +10,14 @@ import {
 import type { MicrosoftOpenTelemetryOptions } from "../../../../src/types.js";
 import type { MockInstance } from "vitest";
 import { assert, expect, afterEach, describe, it, vi, beforeEach } from "vitest";
-import { azureVmDetector } from "@opentelemetry/resource-detector-azure";
+import {
+  azureAksDetector,
+  azureAppServiceDetector,
+  azureContainerAppsDetector,
+  azureFunctionsDetector,
+  azureVmDetector,
+} from "@opentelemetry/resource-detector-azure";
+import { parseResourceDetectorsFromEnvVar } from "../../../../src/utils/common.js";
 
 const testAttributes: Record<string, string> = {
   "azure.vm.scaleset.name": "crpteste9vflji9",
@@ -301,6 +308,105 @@ describe("Library/Config", () => {
 });
 
 describe("OpenTelemetry Resource", () => {
+  describe("Azure platform detection", () => {
+    const containerAppsEnvironment = {
+      CONTAINER_APP_NAME: "checkout",
+      CONTAINER_APP_REVISION: "checkout--0000042",
+      CONTAINER_APP_HOSTNAME: "checkout.internal.example",
+      CONTAINER_APP_ENV_DNS_SUFFIX: "internal.example",
+      CONTAINER_APP_PORT: "8080",
+      CONTAINER_APP_REPLICA_NAME: "checkout--0000042-abcd",
+    };
+
+    beforeEach(() => {
+      for (const name of [
+        ...Object.keys(containerAppsEnvironment),
+        "WEBSITE_SITE_NAME",
+        "FUNCTIONS_EXTENSION_VERSION",
+        "WEBSITE_SKU",
+        "OTEL_RESOURCE_ATTRIBUTES",
+        "OTEL_NODE_RESOURCE_DETECTORS",
+      ]) {
+        vi.stubEnv(name, undefined);
+      }
+      vi.spyOn(azureAksDetector, "detect").mockReturnValue({ attributes: {} });
+      vi.spyOn(azureVmDetector, "detect").mockReturnValue({ attributes: {} });
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    });
+
+    function stubContainerAppsEnvironment() {
+      for (const [name, value] of Object.entries(containerAppsEnvironment)) {
+        vi.stubEnv(name, value);
+      }
+    }
+
+    it("detects Container Apps by default without probing VM metadata", () => {
+      stubContainerAppsEnvironment();
+      vi.stubEnv("OTEL_SERVICE_NAME", "configured-service");
+
+      const config = new InternalConfig();
+
+      expect(config.resource.attributes).toMatchObject({
+        "cloud.provider": "azure",
+        "cloud.platform": "azure.container_apps",
+        "host.name": "checkout.internal.example",
+        "azure.container_app.name": "checkout",
+        "azure.container_app.version": "checkout--0000042",
+        "azure.container_app.instance.id": "checkout--0000042-abcd",
+        "service.name": "configured-service",
+      });
+      expect(azureVmDetector.detect).not.toHaveBeenCalled();
+    });
+
+    it("keeps VM fallback when the Container Apps signature is incomplete", () => {
+      stubContainerAppsEnvironment();
+      vi.stubEnv("CONTAINER_APP_REPLICA_NAME", undefined);
+
+      const config = new InternalConfig();
+
+      expect(config.resource.attributes).not.toHaveProperty("cloud.platform");
+      expect(azureVmDetector.detect).toHaveBeenCalledOnce();
+    });
+
+    it("does not treat customer resource attributes as platform detection", () => {
+      vi.stubEnv("OTEL_RESOURCE_ATTRIBUTES", "cloud.platform=azure.container_apps");
+
+      new InternalConfig();
+
+      expect(azureVmDetector.detect).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      { detector: azureAppServiceDetector, platform: "azure.app_service" },
+      { detector: azureFunctionsDetector, platform: "azure.functions" },
+      { detector: azureAksDetector, platform: "azure.aks" },
+    ])("keeps $platform identity instead of probing the VM", ({ detector, platform }) => {
+      vi.spyOn(detector, "detect").mockReturnValue({
+        attributes: { "cloud.platform": platform },
+      });
+
+      const config = new InternalConfig();
+
+      expect(config.resource.attributes["cloud.platform"]).toBe(platform);
+      expect(azureVmDetector.detect).not.toHaveBeenCalled();
+    });
+
+    it("supports selecting the Container Apps detector explicitly and through all", () => {
+      vi.stubEnv("OTEL_NODE_RESOURCE_DETECTORS", "azure_container_apps");
+      expect(parseResourceDetectorsFromEnvVar()).toEqual([azureContainerAppsDetector]);
+
+      vi.stubEnv("OTEL_NODE_RESOURCE_DETECTORS", "all");
+      expect(parseResourceDetectorsFromEnvVar()).toContain(azureContainerAppsDetector);
+
+      vi.stubEnv("OTEL_NODE_RESOURCE_DETECTORS", "none");
+      expect(parseResourceDetectorsFromEnvVar()).toEqual([]);
+    });
+  });
+
   it("should allow custom resource to be configured", () => {
     const customAttributes: any = {};
     customAttributes[SemanticResourceAttributes.SERVICE_NAME] = "testServiceName";
