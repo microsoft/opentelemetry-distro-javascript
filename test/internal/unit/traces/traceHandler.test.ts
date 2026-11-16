@@ -6,6 +6,7 @@ import { MetricHandler } from "../../../../src/azureMonitor/metrics/index.js";
 import { InternalConfig } from "../../../../src/shared/index.js";
 import { ApplicationInsightsSampler } from "../../../../src/azureMonitor/traces/sampler.js";
 import { createSampler, createInstrumentations } from "../../../../src/distro/instrumentations.js";
+import { ignoreOutgoingRequestHook } from "../../../../src/azureMonitor/utils/common.js";
 import {
   HttpInstrumentation,
   type HttpInstrumentationConfig,
@@ -417,10 +418,57 @@ describe("Library/TraceHandler", () => {
       ).toBe(true);
       expect(userHook).not.toHaveBeenCalled();
 
+      expect(
+        hook({
+          hostname: "169.254.169.254",
+          method: "GET",
+          port: "",
+          path: "/metadata/instance/compute?api-version=2017-12-01&format=json",
+        }),
+      ).toBe(true);
+      expect(userHook).not.toHaveBeenCalled();
+
       const actual = countingRequest();
       expect(hook(actual.request)).toBe(false);
       expect(userHook).toHaveBeenCalledTimes(1);
       expect(actual.reads()).toBe(baseline.reads());
     });
+  });
+});
+
+describe("SDK stats metadata request filtering", () => {
+  const metadataRequest: Http.RequestOptions = {
+    hostname: "169.254.169.254",
+    method: "GET",
+    port: "",
+    path: "/metadata/instance/compute?api-version=2017-12-01&format=json",
+  };
+
+  it("filters SDK stats metadata with either hostname or host and reordered query parameters", () => {
+    expect(ignoreOutgoingRequestHook(metadataRequest)).toBe(true);
+    expect(ignoreOutgoingRequestHook({ ...metadataRequest, port: undefined })).toBe(true);
+    expect(
+      ignoreOutgoingRequestHook({
+        ...metadataRequest,
+        hostname: undefined,
+        host: "169.254.169.254",
+        port: 80,
+        path: "/metadata/instance/compute?format=json&api-version=2017-12-01",
+      }),
+    ).toBe(true);
+  });
+
+  it.each<Http.RequestOptions>([
+    { hostname: "example.com" },
+    { hostname: "169.254.169.254.example.com" },
+    { method: "POST" },
+    { protocol: "https:" },
+    { port: 8080 },
+    { path: "/metadata/identity/oauth2/token?api-version=2017-12-01&format=json" },
+    { path: "/metadata/instance/compute?api-version=2021-12-13&format=json" },
+    { path: "/metadata/instance/compute?api-version=2017-12-01&format=text" },
+    { path: undefined },
+  ])("does not filter other application requests: %j", (overrides) => {
+    expect(ignoreOutgoingRequestHook({ ...metadataRequest, ...overrides })).toBe(false);
   });
 });
